@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  /* Main brand colours */
+  --color-primary: #41625f;
+  --color-primary-container: #597b78;
+
+  --color-secondary: #506073;
+  --color-secondary-container: #d3e4fc;
+
+  --color-tertiary: #3c635e;
+
+  /* App backgrounds */
+  --color-surface: #f7fafb;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f1f4f5;
+  --color-surface-container: #ebeeef;
+  --color-surface-container-high: #e5e9ea;
+  --color-surface-container-highest: #e0e3e4;
+
+  /* Text */
+  --color-on-surface: #181c1d;
+  --color-on-surface-variant: #414753;
+  --color-on-primary: #ffffff;
+
+  /* Borders / misc */
+  --color-outline: #717785;
+  --color-outline-variant: #c1c6d5;
+  --color-error: #ba1a1a;
+
+  /* Our shared navy sidebar */
+  --color-sidebar: #0b1c2d;
+  --color-sidebar-text: #eef1f2;
+}
+
+:root {
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  color: #181c1d;
+  background: #f7fafb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background: #f7fafb;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
