@@ -69,6 +69,31 @@ useEffect(() => {
   loadCustomer();
 }, [customerId]);
 
+if (loading) {
+  return (
+    <div className="p-12 text-on-surface-variant">
+      Loading customer...
+    </div>
+  );
+}
+
+if (error || !customer) {
+  return (
+    <div className="p-12">
+      <p className="text-error">
+        {error || "Customer not found."}
+      </p>
+
+      <button
+        type="button"
+        onClick={() => navigate("/customers")}
+        className="mt-4 text-primary"
+      >
+        ← Back to Customers
+      </button>
+    </div>
+  );
+}
 
   return (
     <div className="flex w-full flex-col gap-8 bg-surface p-8 lg:p-12">
@@ -90,14 +115,14 @@ useEffect(() => {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-4">
             <h1 className="text-4xl font-bold tracking-tight text-on-surface lg:text-5xl">
-              John Smith
+              {customer.name || "Unnamed customer"}
             </h1>
 
             <div className="flex items-center gap-2 rounded-full bg-tertiary/10 px-3 py-1 text-tertiary">
               <span className="h-1.5 w-1.5 rounded-full bg-tertiary" />
 
               <span className="text-xs font-bold uppercase tracking-wider">
-                Active
+                {customer.status.replace("_", " ")}
               </span>
             </div>
           </div>
@@ -107,7 +132,7 @@ useEffect(() => {
               fingerprint
             </span>
 
-            {customerId ?? "CUST-10234"}
+            {customer.customer_id}
           </div>
         </div>
 
@@ -206,21 +231,19 @@ useEffect(() => {
             </div>
 
             <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
-              <InfoItem label="Full Name" value="John Smith" />
+              <InfoItem label="Full Name" value={customer.name || "Unnamed customer"} />
 
               <InfoItem
-                label="Customer ID"
-                value={customerId ?? "CUST-10234"}
-              />
+                label="Customer ID" value={String(customer.customer_id)}/>
 
               <InfoItem
                 label="Phone Number"
-                value="(876) 555-0142"
+                value={customer.telephone || "—"}
               />
 
               <InfoItem
                 label="Email Address"
-                value="john.smith@example.com"
+                value={customer.email || "—"}
               />
 
               <div className="sm:col-span-2">
@@ -236,9 +259,7 @@ useEffect(() => {
                   </div>
 
                   <p className="font-medium leading-relaxed">
-                    24 Harbour View Drive
-                    <br />
-                    Montego Bay, St. James
+                   {customer.address || "—"}
                     <br />
                     Jamaica
                   </p>
@@ -261,8 +282,12 @@ useEffect(() => {
               </div>
 
               <div className="flex flex-col gap-4">
-                <DetailRow label="Pole Box" value="PB-104" />
-                <DetailRow label="Port" value="08" />
+                <DetailRow
+                 label="Pole Box"
+                 value={customer.pole_box_number || "—"} />
+
+                <DetailRow label="Port" value={customer.port_number || "—"} />
+
                 <DetailRow
                   label="Service Area"
                   value="Montego Bay"
@@ -282,11 +307,8 @@ useEffect(() => {
               </div>
 
               <div className="flex flex-col gap-4">
-                <DetailRow label="Status" value="Active" />
-                <DetailRow
-                  label="Date Joined"
-                  value="March 14, 2021"
-                />
+                <DetailRow label="Status" value={customer.status.replace("_", " ")} />
+                <DetailRow label="Date Joined" value={formatDate(customer.activation_date)} />
                 <DetailRow
                   label="Tenure"
                   value="5 years"
@@ -316,7 +338,7 @@ useEffect(() => {
               </p>
 
               <p className="mt-2 text-2xl font-bold">
-                Premium Cable
+               {customer.package_name || "No package"}
               </p>
             </div>
 
@@ -335,12 +357,12 @@ useEffect(() => {
 
             <div className="mb-4 rounded-xl bg-black/10 p-4">
               <p className="text-xs opacity-70">
-                Next Billing Date
-              </p>
+  Next Billing Date
+</p>
 
-              <p className="mt-1 text-sm font-bold">
-                September 14, 2026
-              </p>
+<p className="mt-1 text-sm font-bold">
+  Not yet calculated
+</p>
             </div>
 
             <button
@@ -442,5 +464,18 @@ function DetailRow({ label, value }: DetailRowProps) {
     </div>
   );
 }
+
+function formatDate(date: string | null) {
+  if (!date) {
+    return "—";
+  }
+
+  return new Date(date).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 
 export default CustomerProfilePage;
