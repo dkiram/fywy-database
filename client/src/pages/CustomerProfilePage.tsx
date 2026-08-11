@@ -1,13 +1,74 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+
+type Customer = {
+  customer_id: number;
+  name: string | null;
+  address: string | null;
+  telephone: string | null;
+  email: string | null;
+
+  package_id: number | null;
+  package_name: string | null;
+  monthly_fee: string | null;
+
+  application_date: string | null;
+  activation_date: string | null;
+  deactivation_date: string | null;
+  reactivation_date: string | null;
+
+  status: string;
+  adult_channel: boolean;
+
+  pole_box_number: string | null;
+  port_number: string | null;
+
+  installation_fee: string | null;
+  default_monthly_charge: string | null;
+  reconnection_fee: string | null;
+};
+
 import PaymentHistory from "../components/PaymentHistory";
+
 
 function CustomerProfilePage() {
   const navigate = useNavigate();
   const { customerId } = useParams();
+  const [customer, setCustomer] = useState<Customer | null>(null);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState("");
     const [activeTab, setActiveTab] = useState<"overview" | "payments">(
   "overview"
 );
+
+useEffect(() => {
+  const loadCustomer = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch(
+        `http://localhost:3000/api/customers/${customerId}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Customer request failed");
+      }
+
+      const data: Customer = await response.json();
+
+      setCustomer(data);
+    } catch (error) {
+      console.error(error);
+      setError("Could not load customer.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  loadCustomer();
+}, [customerId]);
+
 
   return (
     <div className="flex w-full flex-col gap-8 bg-surface p-8 lg:p-12">
