@@ -2,3 +2,8 @@
 node_modules/
 dist/
 .DS_Store
+
+# Real company data - NEVER COMMIT
+database/imports/*.csv
+database/imports/*.xlsx
+database/imports/*.xls
