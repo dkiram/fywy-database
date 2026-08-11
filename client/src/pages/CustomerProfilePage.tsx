@@ -14,7 +14,7 @@ function CustomerProfilePage() {
       {/* Back */}
       <button
         type="button"
-        onClick={() => navigate("/")}
+        onClick={() => navigate("/customers")}
         className="flex w-fit items-center gap-2 text-sm font-medium uppercase tracking-wide text-primary transition hover:opacity-70"
       >
         <span className="material-symbols-outlined text-sm">
