@@ -165,6 +165,76 @@ app.get("/api/customers/:customerId", async (req, res) => {
   }
 });
 
+app.get("/api/customers/:customerId/payments", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+
+    const page =
+      typeof req.query.page === "string"
+        ? Math.max(Number(req.query.page) || 1, 1)
+        : 1;
+
+    const limit = 5;
+    const offset = (page - 1) * limit;
+
+    if (!/^\d+$/.test(customerId)) {
+      return res.status(400).json({
+        error: "Invalid customer ID",
+      });
+    }
+
+    const paymentsResult = await pool.query(
+      `
+      SELECT
+        payment_id,
+        legacy_payment_id,
+        payment_type,
+        legacy_payment_type,
+        amount_paid,
+        month_paid,
+        payment_date,
+        location,
+        cashier_name
+      FROM public.payments
+      WHERE customer_id = $1
+      ORDER BY payment_date DESC NULLS LAST,
+               payment_id DESC
+      LIMIT $2
+      OFFSET $3;
+      `,
+      [Number(customerId), limit, offset]
+    );
+
+    const countResult = await pool.query(
+      `
+      SELECT COUNT(*)::INTEGER AS total
+      FROM public.payments
+      WHERE customer_id = $1;
+      `,
+      [Number(customerId)]
+    );
+
+    const total = countResult.rows[0].total;
+    const totalPages = Math.ceil(total / limit);
+
+    res.json({
+      payments: paymentsResult.rows,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    });
+  } catch (error) {
+    console.error("Could not load payments:", error);
+
+    res.status(500).json({
+      error: "Could not load payments",
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`SPCL API running on http://localhost:${PORT}`);
 });

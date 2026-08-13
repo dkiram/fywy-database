@@ -308,11 +308,16 @@ if (error || !customer) {
 
               <div className="flex flex-col gap-4">
                 <DetailRow label="Status" value={customer.status.replace("_", " ")} />
-                <DetailRow label="Date Joined" value={formatDate(customer.activation_date)} />
-                <DetailRow
-                  label="Tenure"
-                  value="5 years"
-                />
+              
+<DetailRow
+  label="Date Joined"
+  value={formatDate(customer.activation_date)}
+/>
+
+<DetailRow
+  label="Tenure"
+  value={calculateTenure(customer.activation_date)}
+/>
               </div>
             </section>
           </div>
@@ -465,17 +470,102 @@ function DetailRow({ label, value }: DetailRowProps) {
   );
 }
 
-function formatDate(date: string | null) {
+
+function parseDateOnly(date: string | null) {
   if (!date) {
+    return null;
+  }
+
+  // Handles both:
+  // "2020-07-31"
+  // "2020-07-31T00:00:00.000Z"
+  const datePart = date.slice(0, 10);
+
+  const [year, month, day] = datePart
+    .split("-")
+    .map(Number);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const parsed = new Date(year, month - 1, day);
+
+  // Make sure JS didn't silently turn an invalid date
+  // like Feb 30 into March 2.
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function formatDate(date: string | null) {
+  const parsed = parseDateOnly(date);
+
+  if (!parsed) {
     return "—";
   }
 
-  return new Date(date).toLocaleDateString("en-US", {
+  return parsed.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 }
 
+function calculateTenure(activationDate: string | null) {
+  const start = parseDateOnly(activationDate);
+
+  if (!start) {
+    return "—";
+  }
+
+  const now = new Date();
+
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+
+  if (start > today) {
+    return "Invalid activation date";
+  }
+
+  let years = today.getFullYear() - start.getFullYear();
+  let months = today.getMonth() - start.getMonth();
+
+  // Current month isn't complete until we reach
+  // the activation day of the month.
+  if (today.getDate() < start.getDate()) {
+    months--;
+  }
+
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  const yearText =
+    years === 1 ? "1 yr" : `${years} yrs`;
+
+  const monthText =
+    months === 1 ? "1 mo" : `${months} mos`;
+
+  if (years === 0) {
+    return monthText;
+  }
+
+  if (months === 0) {
+    return yearText;
+  }
+
+  return `${yearText}, ${monthText}`;
+}
 
 export default CustomerProfilePage;
