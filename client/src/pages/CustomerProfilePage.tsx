@@ -347,20 +347,49 @@ if (error || !customer) {
               </p>
             </div>
 
-            <div className="mb-6">
-              <p className="text-xs uppercase tracking-wider opacity-70">
-                Monthly Rate
-              </p>
+           <div>
+  <p className="text-xs font-semibold uppercase tracking-wide opacity-70">
+    Customer Monthly Rate
+  </p>
 
-              <div className="mt-1 flex items-baseline gap-1">
-                <span className="text-xl">J$</span>
-                <span className="text-4xl font-bold">
-                  3,500
-                </span>
-              </div>
-            </div>
+  <div className="mt-1 flex items-baseline gap-1">
+    {customer.monthly_fee ? (
+      <>
+        <span className="text-xl">J$</span>
 
-            <div className="mb-4 rounded-xl bg-black/10 p-4">
+        <span className="text-4xl font-bold">
+          {Number(customer.monthly_fee).toLocaleString()}
+        </span>
+      </>
+    ) : (
+      <span className="text-4xl font-bold">—</span>
+    )}
+  </div>
+
+  <p className="mt-2 text-xs opacity-70">
+    This customer&apos;s current billed monthly rate
+  </p>
+</div>
+
+      <div className="mt-5 border-t border-white/20 pt-4">
+  <p className="text-xs opacity-70">
+    Package Base Rate
+  </p>
+
+  <p className="mt-1 font-semibold">
+    {customer.default_monthly_charge
+      ? `J$${Number(
+          customer.default_monthly_charge
+        ).toLocaleString()}`
+      : "—"}
+  </p>
+
+  <p className="mt-1 text-xs opacity-70">
+    Reference/base rate only. Customer rates may differ.
+  </p>
+</div>
+
+            <div className="mt-5 rounded-xl bg-black/10 p-4">
               <p className="text-xs opacity-70">
   Next Billing Date
 </p>

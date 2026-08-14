@@ -2,15 +2,61 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 
 function LoginPage() {
-  const navigate = useNavigate();
-  const [showPassword, setShowPassword] = useState(false);
+const navigate = useNavigate();
 
-  function handleLogin(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+const [username, setUsername] = useState("");
+const [password, setPassword] = useState("");
+const [showPassword, setShowPassword] = useState(false);
 
-    // Fake login for now.
+const [loading, setLoading] = useState(false);
+const [error, setError] = useState("");
+
+const handleLogin = async (
+  event: React.FormEvent<HTMLFormElement>
+) => {
+  event.preventDefault();
+
+  try {
+    setLoading(true);
+    setError("");
+
+    const response = await fetch(
+      "http://localhost:3000/api/auth/login",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        credentials: "include",
+
+        body: JSON.stringify({
+          username,
+          password,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Could not log in."
+      );
+    }
+
     navigate("/customers");
+  } catch (error) {
+    if (error instanceof Error) {
+      setError(error.message);
+    } else {
+      setError("Could not log in.");
+    }
+  } finally {
+    setLoading(false);
   }
+};
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-surface p-6 text-on-surface">
@@ -60,11 +106,13 @@ function LoginPage() {
                 </span>
 
                 <input
-                  id="email"
-                  type="email"
-                  placeholder="name@company.com"
-                  className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm outline-none transition placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-primary/20"
-                />
+  type="text"
+  value={username}
+  onChange={(event) =>
+    setUsername(event.target.value)
+  }
+  autoComplete="username"
+/>
               </div>
             </div>
 
@@ -82,12 +130,20 @@ function LoginPage() {
                   lock
                 </span>
 
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-11 text-sm outline-none transition placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-primary/20"
-                />
+              <input
+  type={showPassword ? "text" : "password"}
+  value={password}
+  onChange={(event) =>
+    setPassword(event.target.value)
+  }
+  autoComplete="current-password"
+/>
+
+{error && (
+  <div className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error">
+    {error}
+  </div>
+)}
 
                 <button
                   type="button"
@@ -129,9 +185,10 @@ function LoginPage() {
             {/* Fake sign in */}
             <button
               type="submit"
+  disabled={loading}
               className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-medium text-on-primary shadow-sm transition hover:bg-tertiary active:scale-[0.98]"
             >
-              Sign In
+               {loading ? "Signing in..." : "Sign In"}
 
               <span className="material-symbols-outlined text-lg">
                 arrow_forward

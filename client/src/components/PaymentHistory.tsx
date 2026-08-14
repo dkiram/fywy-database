@@ -45,6 +45,13 @@ function PaymentHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [searchInput, setSearchInput] = useState("");
+const [search, setSearch] = useState("");
+
+const [paymentType, setPaymentType] = useState("");
+const [fromDate, setFromDate] = useState("");
+const [toDate, setToDate] = useState("");
+
   useEffect(() => {
     setPage(1);
   }, [customerId]);
@@ -59,10 +66,29 @@ function PaymentHistory() {
         setLoading(true);
         setError("");
 
-        const response = await fetch(
-          `http://localhost:3000/api/customers/${customerId}/payments?page=${page}`
-        );
+        const params = new URLSearchParams();
 
+params.set("page", String(page));
+
+if (search) {
+  params.set("search", search);
+}
+
+if (paymentType) {
+  params.set("type", paymentType);
+}
+
+if (fromDate) {
+  params.set("from", fromDate);
+}
+
+if (toDate) {
+  params.set("to", toDate);
+}
+
+const response = await fetch(
+  `http://localhost:3000/api/customers/${customerId}/payments?${params.toString()}`
+);
         if (!response.ok) {
           throw new Error("Payment request failed");
         }
@@ -80,7 +106,14 @@ function PaymentHistory() {
     };
 
     loadPayments();
-  }, [customerId, page]);
+  }, [
+  customerId,
+  page,
+  search,
+  paymentType,
+  fromDate,
+  toDate,
+]);
 
   return (
     <div className="space-y-6">
@@ -96,30 +129,108 @@ function PaymentHistory() {
         </p>
       </div>
 
-      {/* Future controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          disabled
-          className="rounded-lg bg-surface-container px-4 py-2 text-sm font-medium text-on-surface-variant opacity-60"
-        >
-          <span className="material-symbols-outlined mr-2 align-middle text-lg">
-            filter_alt
-          </span>
-          Filter
-        </button>
+<form
+  onSubmit={(event) => {
+    event.preventDefault();
 
-        <button
-          type="button"
-          disabled
-          className="rounded-lg bg-surface-container px-4 py-2 text-sm font-medium text-on-surface-variant opacity-60"
-        >
-          <span className="material-symbols-outlined mr-2 align-middle text-lg">
-            download
-          </span>
-          Download
-        </button>
-      </div>
+    setPage(1);
+    setSearch(searchInput.trim());
+  }}
+  className="flex flex-wrap items-end gap-3"
+>
+  <div className="min-w-64 flex-1">
+    <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
+      Search Payments
+    </label>
+
+    <input
+      type="text"
+      value={searchInput}
+      onChange={(event) => {
+        setSearchInput(event.target.value);
+      }}
+      placeholder="Type, amount, location, cashier..."
+      className="w-full rounded-lg bg-surface-container-low px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+    />
+  </div>
+
+  <div>
+    <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
+      Payment Type
+    </label>
+
+    <select
+      value={paymentType}
+      onChange={(event) => {
+        setPaymentType(event.target.value);
+        setPage(1);
+      }}
+      className="rounded-lg bg-surface-container-low px-4 py-2.5 text-sm outline-none"
+    >
+      <option value="">All Types</option>
+      <option value="Monthly Fee">Monthly Fee</option>
+      <option value="Reconnection Fee">Reconnection Fee</option>
+      <option value="Installation Fee">Installation Fee</option>
+      <option value="Hurricane Discount">
+        Hurricane Discount
+      </option>
+    </select>
+  </div>
+
+  <div>
+    <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
+      From
+    </label>
+
+    <input
+      type="date"
+      value={fromDate}
+      onChange={(event) => {
+        setFromDate(event.target.value);
+        setPage(1);
+      }}
+      className="rounded-lg bg-surface-container-low px-3 py-2.5 text-sm outline-none"
+    />
+  </div>
+
+  <div>
+    <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
+      To
+    </label>
+
+    <input
+      type="date"
+      value={toDate}
+      onChange={(event) => {
+        setToDate(event.target.value);
+        setPage(1);
+      }}
+      className="rounded-lg bg-surface-container-low px-3 py-2.5 text-sm outline-none"
+    />
+  </div>
+
+  <button
+    type="submit"
+    className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary"
+  >
+    Search
+  </button>
+
+  <button
+    type="button"
+    onClick={() => {
+      setSearchInput("");
+      setSearch("");
+      setPaymentType("");
+      setFromDate("");
+      setToDate("");
+      setPage(1);
+    }}
+    className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface"
+  >
+    Clear
+  </button>
+</form>
 
       {/* Error */}
       {error && (
@@ -221,7 +332,9 @@ function PaymentHistory() {
             </p>
 
             <p className="mt-1 text-sm text-on-surface-variant">
-              This customer does not have any linked payment history.
+             {search || paymentType || fromDate || toDate
+  ? "No payments match the selected filters."
+  : "This customer does not have any linked payment history."}
             </p>
           </div>
         )}

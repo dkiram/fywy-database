@@ -1,17 +1,7 @@
 function Header() {
   return (
-    <header className="fixed left-72 right-0 top-0 z-40 flex h-20 items-center justify-between bg-surface/90 px-8 shadow-sm backdrop-blur-xl">
-      <div className="relative w-96">
-        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">
-          search
-        </span>
+<header className="fixed left-72 right-0 top-0 z-40 flex h-20 items-center justify-end bg-surface/90 px-8 shadow-sm backdrop-blur-xl">
 
-        <input
-          type="text"
-          placeholder="Search records..."
-          className="w-full rounded-xl bg-surface-container-low py-2.5 pl-12 pr-4 text-sm text-on-surface outline-none transition focus:ring-2 focus:ring-primary/20"
-        />
-      </div>
 
       <div className="flex items-center gap-6">
         <button
