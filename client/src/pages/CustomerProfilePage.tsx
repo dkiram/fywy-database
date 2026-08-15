@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { useAuth } from "../auth/AuthContext";
+import { apiFetch } from "../lib/api";
 
 type Customer = {
   customer_id: number;
@@ -34,6 +36,12 @@ import PaymentHistory from "../components/PaymentHistory";
 function CustomerProfilePage() {
   const navigate = useNavigate();
   const { customerId } = useParams();
+  const { employee } = useAuth();
+
+
+const canChangeMonthlyRate =
+  employee?.role === "admin" ||
+  employee?.role === "head_office";
   const [customer, setCustomer] = useState<Customer | null>(null);
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState("");
@@ -41,15 +49,22 @@ const [error, setError] = useState("");
   "overview"
 );
 
+const [editingRate, setEditingRate] = useState(false);
+const [newMonthlyFee, setNewMonthlyFee] = useState("");
+const [rateChangeReason, setRateChangeReason] = useState("");
+const [savingRate, setSavingRate] = useState(false);
+const [rateError, setRateError] = useState("");
+
+
 useEffect(() => {
   const loadCustomer = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        `http://localhost:3000/api/customers/${customerId}`
-      );
+      const response = await apiFetch(
+  `/api/customers/${customerId}`
+);
 
       if (!response.ok) {
         throw new Error("Customer request failed");
@@ -369,6 +384,134 @@ if (error || !customer) {
   <p className="mt-2 text-xs opacity-70">
     This customer&apos;s current billed monthly rate
   </p>
+
+  {canChangeMonthlyRate && !editingRate && (
+  <button
+    type="button"
+    onClick={() => {
+      setNewMonthlyFee(customer.monthly_fee ?? "");
+      setEditingRate(true);
+    }}
+    className="mt-3 text-sm font-semibold underline"
+  >
+    Change Rate
+  </button>
+)}
+
+{editingRate && (
+  <div className="mt-4 flex flex-col gap-3 rounded-xl bg-black/10 p-4">
+    <div>
+      <label className="mb-1 block text-xs font-semibold">
+        New Monthly Rate
+      </label>
+
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        value={newMonthlyFee}
+        onChange={(event) => {
+          setNewMonthlyFee(event.target.value);
+        }}
+        className="w-full rounded-lg bg-white px-3 py-2 text-sm text-on-surface outline-none"
+      />
+    </div>
+
+    <div>
+      <label className="mb-1 block text-xs font-semibold">
+        Reason for Change
+      </label>
+
+      <textarea
+        value={rateChangeReason}
+        onChange={(event) => {
+          setRateChangeReason(event.target.value);
+        }}
+        placeholder="Explain why this rate is changing..."
+        rows={3}
+        className="w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-on-surface outline-none"
+      />
+    </div>
+
+    {rateError && (
+      <p className="text-sm text-error">
+        {rateError}
+      </p>
+    )}
+
+    <div className="flex gap-2">
+      <button
+        type="button"
+        disabled={savingRate}
+        onClick={async () => {
+          try {
+            setSavingRate(true);
+            setRateError("");
+
+            const response = await apiFetch(
+              `/api/customers/${customer.customer_id}/monthly-fee`,
+              {
+                method: "PATCH",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  monthlyFee: newMonthlyFee,
+                  reason: rateChangeReason,
+                }),
+              }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(
+                data.error || "Could not update monthly rate."
+              );
+            }
+
+            setCustomer((current) =>
+              current
+                ? {
+                    ...current,
+                    monthly_fee: data.monthlyFee,
+                  }
+                : current
+            );
+
+            setEditingRate(false);
+            setRateChangeReason("");
+          } catch (error) {
+            setRateError(
+              error instanceof Error
+                ? error.message
+                : "Could not update monthly rate."
+            );
+          } finally {
+            setSavingRate(false);
+          }
+        }}
+        className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-primary disabled:opacity-60"
+      >
+        {savingRate ? "Saving..." : "Save Rate"}
+      </button>
+
+      <button
+        type="button"
+        disabled={savingRate}
+        onClick={() => {
+          setEditingRate(false);
+          setRateError("");
+          setRateChangeReason("");
+        }}
+        className="rounded-lg bg-black/20 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+)}
+
 </div>
 
       <div className="mt-5 border-t border-white/20 pt-4">

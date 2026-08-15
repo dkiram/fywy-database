@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { apiFetch } from "../lib/api";
 
 type Customer = {
   customer_id: number;
@@ -26,11 +27,11 @@ function CustomerSearchPage() {
         setLoading(true);
         setError("");
 
-        const response = await fetch(
-          `http://localhost:3000/api/customers?search=${encodeURIComponent(
-            search
-          )}`
-        );
+        const response = await apiFetch(
+  `/api/customers?search=${encodeURIComponent(
+    search
+  )}`
+);
 
         if (!response.ok) {
           throw new Error("Customer request failed");

@@ -1,4 +1,5 @@
 import { NavLink } from "react-router";
+import { useAuth } from "../auth/AuthContext";
 
 type NavItemProps = {
   to: string;
@@ -29,6 +30,8 @@ function NavItem({ to, icon, label }: NavItemProps) {
 }
 
 function Sidebar() {
+  const { employee } = useAuth();
+  
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-sidebar text-sidebar-text">
       {/* Brand */}
@@ -93,11 +96,13 @@ function Sidebar() {
         </NavSection>
 
         <NavSection title="Administration">
-          <NavItem
-            to="/admin"
-            icon="admin_panel_settings"
-            label="Admin Controls"
-          />
+          {employee?.role === "admin" && (
+  <NavItem
+    to="/admin"
+    icon="admin_panel_settings"
+    label="Admin Controls"
+  />
+)}
 
           <NavItem
             to="/settings"

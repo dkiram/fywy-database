@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS public.audit_logs
+ADD COLUMN IF NOT EXISTS reason TEXT;

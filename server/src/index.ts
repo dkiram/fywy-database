@@ -5,6 +5,12 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcrypt";
 
+import type {
+  Request,
+  Response,
+  NextFunction,
+} from "express";
+
 const app = express();
 
 const PgSession = connectPgSimple(session);
@@ -46,6 +52,51 @@ app.use(
   })
 );
 
+
+function requireAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.session.employee) {
+    return res.status(401).json({
+      error: "Not authenticated.",
+    });
+  }
+
+  next();
+}
+
+
+function requireRole(
+  ...allowedRoles: Array<
+    "admin" | "head_office" | "branch"
+  >
+) {
+  return (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    const employee = req.session.employee;
+
+    if (!employee) {
+      return res.status(401).json({
+        error: "Not authenticated.",
+      });
+    }
+
+    if (!allowedRoles.includes(employee.role)) {
+      return res.status(403).json({
+        error: "You do not have permission to perform this action.",
+      });
+    }
+
+    next();
+  };
+}
+
+
 app.get("/", (req, res) => {
   res.send("SPCL API is running");
 });
@@ -71,7 +122,7 @@ app.get("/health", async (req, res) => {
   }
 });
 
-app.get("/api/customers", async (req, res) => {
+app.get("/api/customers", requireAuth, async (req, res) => {
   try {
     const search =
       typeof req.query.search === "string"
@@ -132,15 +183,18 @@ app.get("/api/customers", async (req, res) => {
   }
 });
 
-app.get("/api/customers/:customerId", async (req, res) => {
+app.get("/api/customers/:customerId", requireAuth, async (req, res) => {
   try {
     const { customerId } = req.params;
 
-    if (!/^\d+$/.test(customerId)) {
-      return res.status(400).json({
-        error: "Invalid customer ID",
-      });
-    }
+    if (
+  typeof customerId !== "string" ||
+  !/^\d+$/.test(customerId)
+) {
+  return res.status(400).json({
+    error: "Invalid customer ID",
+  });
+}
 
     const result = await pool.query(
       `
@@ -197,16 +251,19 @@ app.get("/api/customers/:customerId", async (req, res) => {
 });
 
 app.get(
-  "/api/customers/:customerId/payments",
+  "/api/customers/:customerId/payments",  requireAuth,
   async (req, res) => {
     try {
       const { customerId } = req.params;
 
-      if (!/^\d+$/.test(customerId)) {
-        return res.status(400).json({
-          error: "Invalid customer ID",
-        });
-      }
+      if (
+  typeof customerId !== "string" ||
+  !/^\d+$/.test(customerId)
+) {
+  return res.status(400).json({
+    error: "Invalid customer ID",
+  });
+}
 
       const page =
         typeof req.query.page === "string"
@@ -335,6 +392,40 @@ app.get(
 );
 
 
+app.get("/api/audit-logs", requireAuth, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        audit_log_id,
+        actor_name,
+        action,
+        entity_type,
+        entity_id,
+        field_name,
+        old_value,
+        new_value,
+        reason,
+        occurred_at
+      FROM public.audit_logs
+      ORDER BY occurred_at DESC, audit_log_id DESC
+      LIMIT 100;
+      `
+    );
+
+    res.json({
+      auditLogs: result.rows,
+    });
+  } catch (error) {
+    console.error("Could not load audit logs:", error);
+
+    res.status(500).json({
+      error: "Could not load activity history.",
+    });
+  }
+});
+
+
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -444,6 +535,57 @@ app.get("/api/auth/me", (req, res) => {
   });
 });
 
+
+
+app.get(
+  "/api/admin/employees",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `
+        SELECT
+          e.employee_id,
+          e.first_name,
+          e.last_name,
+          e.username,
+          e.role,
+          e.is_active,
+          e.last_login_at,
+          e.created_at,
+
+          l.location_id,
+          l.name AS location_name
+
+        FROM public.employees e
+
+        LEFT JOIN public.locations l
+          ON e.location_id = l.location_id
+
+        ORDER BY
+          e.last_name,
+          e.first_name;
+        `
+      );
+
+      res.json({
+        employees: result.rows,
+      });
+    } catch (error) {
+      console.error(
+        "Could not load employees:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Could not load employees.",
+      });
+    }
+  }
+);
+
+
 app.post("/api/auth/logout", (req, res) => {
   req.session.destroy((error) => {
     if (error) {
@@ -461,6 +603,155 @@ app.post("/api/auth/logout", (req, res) => {
     });
   });
 });
+
+
+app.patch(
+  "/api/customers/:customerId/monthly-fee",
+  requireAuth,
+  requireRole("admin", "head_office"),
+  async (req, res) => {
+    const { monthlyFee, reason } = req.body;
+
+    const { customerId } = req.params;
+
+if (
+  typeof customerId !== "string" ||
+  !/^\d+$/.test(customerId)
+) {
+  return res.status(400).json({
+    error: "Invalid customer ID",
+  });
+}
+
+    const feeText = String(monthlyFee ?? "").trim();
+
+    if (!/^\d+(\.\d{1,2})?$/.test(feeText)) {
+      return res.status(400).json({
+        error: "Enter a valid monthly fee.",
+      });
+    }
+
+    if (
+      typeof reason !== "string" ||
+      reason.trim().length < 3
+    ) {
+      return res.status(400).json({
+        error: "A reason for the rate change is required.",
+      });
+    }
+
+    const employee = req.session.employee!;
+
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const customerResult = await client.query(
+        `
+        SELECT
+          customer_id,
+          monthly_fee
+        FROM public.customers
+        WHERE customer_id = $1
+        FOR UPDATE;
+        `,
+        [Number(customerId)]
+      );
+
+      if (customerResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+
+        return res.status(404).json({
+          error: "Customer not found.",
+        });
+      }
+
+      const customer = customerResult.rows[0];
+
+      const oldFee =
+        customer.monthly_fee === null
+          ? null
+          : String(customer.monthly_fee);
+
+      const newFee = Number(feeText).toFixed(2);
+
+      if (oldFee !== null && Number(oldFee) === Number(newFee)) {
+        await client.query("ROLLBACK");
+
+        return res.status(400).json({
+          error: "The monthly fee has not changed.",
+        });
+      }
+
+      await client.query(
+        `
+        UPDATE public.customers
+        SET monthly_fee = $1
+        WHERE customer_id = $2;
+        `,
+        [newFee, Number(customerId)]
+      );
+
+      await client.query(
+        `
+        INSERT INTO public.audit_logs (
+          actor_name,
+          action,
+          entity_type,
+          entity_id,
+          field_name,
+          old_value,
+          new_value,
+          reason,
+          occurred_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          CURRENT_TIMESTAMP
+        );
+        `,
+        [
+          `${employee.firstName} ${employee.lastName}`,
+          "Changed customer monthly rate",
+          "customer",
+          customerId,
+          "monthly_fee",
+          oldFee,
+          newFee,
+          reason.trim(),
+        ]
+      );
+
+      await client.query("COMMIT");
+
+      res.json({
+        customerId: Number(customerId),
+        monthlyFee: newFee,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+
+      console.error(
+        "Could not update monthly fee:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Could not update monthly fee.",
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
 
 app.listen(PORT, () => {
   console.log(`SPCL API running on http://localhost:${PORT}`);

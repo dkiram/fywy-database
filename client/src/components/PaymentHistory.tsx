@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
+import { apiFetch } from "../lib/api";
 
 type Payment = {
   payment_id: number;
@@ -86,8 +87,8 @@ if (toDate) {
   params.set("to", toDate);
 }
 
-const response = await fetch(
-  `http://localhost:3000/api/customers/${customerId}/payments?${params.toString()}`
+const response = await apiFetch(
+  `/api/customers/${customerId}/payments?${params.toString()}`
 );
         if (!response.ok) {
           throw new Error("Payment request failed");

@@ -11,6 +11,7 @@ import ReportsPage from "./pages/ReportsPage";
 import ActivityHistoryPage from "./pages/ActivityHistoryPage";
 import AdminControlsPage from "./pages/AdminControlsPage";
 import SettingsPage from "./pages/SettingsPage";
+import ProtectedRoute from "./auth/ProtectedRoute";
 
 function App() {
   return (
@@ -27,84 +28,104 @@ function App() {
     }
   />
 
-  <Route
-    path="/customers"
-    element={
+<Route
+  path="/customers"
+  element={
+    <ProtectedRoute>
       <AppLayout>
         <CustomerSearchPage />
       </AppLayout>
-    }
-  />
+    </ProtectedRoute>
+  }
+/>
 
-  <Route
-    path="/customers/:customerId"
-    element={
+<Route
+  path="/customers/:customerId"
+  element={
+    <ProtectedRoute>
       <AppLayout>
         <CustomerProfilePage />
       </AppLayout>
-    }
-  />
+    </ProtectedRoute>
+  }
+/>
 
   <Route
     path="/applications"
     element={
+    <ProtectedRoute>
       <AppLayout>
         <ApplicationsPage />
       </AppLayout>
+    </ProtectedRoute>
     }
   />
 
   <Route
     path="/service-requests"
     element={
+    <ProtectedRoute>
       <AppLayout>
         <ServiceRequestsPage />
       </AppLayout>
+    </ProtectedRoute>
     }
   />
 
   <Route
     path="/pole-boxes"
     element={
+    <ProtectedRoute>
       <AppLayout>
         <PoleBoxesPage />
       </AppLayout>
+    </ProtectedRoute>
     }
   />
 
   <Route
     path="/reports"
     element={
+    <ProtectedRoute>
       <AppLayout>
         <ReportsPage />
       </AppLayout>
+    </ProtectedRoute>
     }
   />
 
   <Route
     path="/activity-history"
     element={
+    <ProtectedRoute>
       <AppLayout>
         <ActivityHistoryPage />
       </AppLayout>
+    </ProtectedRoute>
     }
   />
 
-  <Route
-    path="/admin"
-    element={
+<Route
+  path="/admin"
+  element={
+    <ProtectedRoute
+      allowedRoles={["admin"]}
+    >
       <AppLayout>
         <AdminControlsPage />
       </AppLayout>
-    }
-  />
+    </ProtectedRoute>
+  }
+/>
 
   <Route
     path="/settings"
     element={
+    <ProtectedRoute>
       <AppLayout>
         <SettingsPage />
       </AppLayout>
+    </ProtectedRoute>
     }
   />
 </Routes>
