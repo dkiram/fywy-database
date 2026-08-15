@@ -1,3 +1,4 @@
+-- Creates the immutable activity trail and seeds one representative legacy action.
 CREATE TABLE IF NOT EXISTS public.audit_logs (
     audit_log_id BIGSERIAL PRIMARY KEY,
 

@@ -1,3 +1,4 @@
+-- Stores customer export values as text so malformed legacy data is preserved for review.
 CREATE TABLE IF NOT EXISTS staging.customers (
     staging_id BIGSERIAL PRIMARY KEY,
 

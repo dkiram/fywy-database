@@ -1,4 +1,5 @@
 {
+  // Strict browser-side TypeScript settings; Vite performs the actual output build.
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "es2023",

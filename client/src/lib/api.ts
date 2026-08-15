@@ -1,3 +1,4 @@
+/** Adds the API origin and session cookie behavior to every client request. */
 export async function apiFetch(
   url: string,
   options: RequestInit = {}

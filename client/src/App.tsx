@@ -1,3 +1,4 @@
+/** Declares every client-side route and wraps protected screens in the shared app shell. */
 import { Route, Routes } from "react-router";
 import AppLayout from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage";
@@ -11,6 +12,8 @@ import ReportsPage from "./pages/ReportsPage";
 import ActivityHistoryPage from "./pages/ActivityHistoryPage";
 import AdminControlsPage from "./pages/AdminControlsPage";
 import SettingsPage from "./pages/SettingsPage";
+import PaymentsPage from "./pages/PaymentsPage";
+import AccountOperationsPage from "./pages/AccountOperationsPage";
 import ProtectedRoute from "./auth/ProtectedRoute";
 
 function App() {
@@ -22,9 +25,22 @@ function App() {
   <Route
     path="/dashboard"
     element={
-      <AppLayout>
-        <DashboardPage />
-      </AppLayout>
+      <ProtectedRoute>
+        <AppLayout>
+          <DashboardPage />
+        </AppLayout>
+      </ProtectedRoute>
+    }
+  />
+
+  <Route
+    path="/payments"
+    element={
+      <ProtectedRoute>
+        <AppLayout>
+          <PaymentsPage />
+        </AppLayout>
+      </ProtectedRoute>
     }
   />
 
@@ -58,6 +74,18 @@ function App() {
         <ApplicationsPage />
       </AppLayout>
     </ProtectedRoute>
+    }
+  />
+
+  {/* MVP 3 account operations is protected and uses the normal app shell. */}
+  <Route
+    path="/account-operations"
+    element={
+      <ProtectedRoute>
+        <AppLayout>
+          <AccountOperationsPage />
+        </AppLayout>
+      </ProtectedRoute>
     }
   />
 

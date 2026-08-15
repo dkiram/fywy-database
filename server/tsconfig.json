@@ -1,4 +1,5 @@
 {
+  // Compiles strict Node ESM sources from src into the deployable dist directory.
   "compilerOptions": {
     "target": "ES2022",
     "module": "NodeNext",

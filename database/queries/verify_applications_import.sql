@@ -1,4 +1,6 @@
+-- Read-only checks for import totals, match outcomes, aging, duplicates, and unsafe links.
 SELECT
+    -- Distribution by source and matching outcome.
     legacy_source,
     status,
     match_method,
@@ -9,6 +11,7 @@ GROUP BY legacy_source, status, match_method
 ORDER BY legacy_source, status, match_method;
 
 SELECT
+    -- Overall reconciliation totals.
     COUNT(*) AS total_legacy_applications,
     COUNT(*) FILTER (
         WHERE legacy_source = 'ApplicationTBL'

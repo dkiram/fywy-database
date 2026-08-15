@@ -1,198 +1,203 @@
+/** Authenticates employees through the branded public entry screen. */
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import loginArtwork from "../assets/login-green-art.jpg";
 import { useAuth } from "../auth/AuthContext";
 
 function LoginPage() {
-const navigate = useNavigate();
-const { login } = useAuth();
+  const navigate = useNavigate();
+  const { login } = useAuth();
 
-const [username, setUsername] = useState("");
-const [password, setPassword] = useState("");
-const [showPassword, setShowPassword] = useState(false);
+  // Form and request state remain local because no other screen needs credentials.
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-const [loading, setLoading] = useState(false);
-const [error, setError] = useState("");
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
 
-const handleLogin = async (
-  event: React.FormEvent<HTMLFormElement>
-) => {
-  event.preventDefault();
-
-  try {
-    setLoading(true);
-    setError("");
-
-    await login(username, password);
-
-    navigate("/customers");
-  } catch (error) {
-    if (error instanceof Error) {
-      setError(error.message);
-    } else {
-      setError("Could not log in.");
+    try {
+      // AuthContext sends the credentials and updates the shared employee session.
+      setLoading(true);
+      setError("");
+      await login(username, password);
+      navigate("/customers");
+    } catch (loginError) {
+      setError(
+        loginError instanceof Error ? loginError.message : "Could not log in."
+      );
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-surface p-6 text-on-surface">
-      {/* App title */}
-      <div className="mb-8 flex flex-col items-center gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-primary">
-          FYWY Management App
-        </h1>
-      </div>
+    <div className="relative min-h-screen overflow-hidden bg-sidebar px-4 py-6 text-on-surface sm:px-6 lg:flex lg:items-center lg:px-10 lg:py-10">
+      <div aria-hidden="true" className="pointer-events-none absolute -left-44 -top-44 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-56 right-0 h-[32rem] w-[32rem] rounded-full bg-[#173d43]/55 blur-3xl" />
 
-      {/* Login card */}
-      <main className="w-full max-w-[440px]">
-        <div className="w-full rounded-xl bg-surface-container-lowest p-8 shadow-xl">
-          {/* Logo / heading */}
-          <div className="mb-6 flex flex-col items-center gap-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary">
-              <span className="material-symbols-outlined text-3xl text-on-primary">
-                account_balance_wallet
-              </span>
-            </div>
+      <main className="relative mx-auto grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white/10 bg-[#102336] p-2 shadow-[0_32px_90px_rgba(0,0,0,0.42)] sm:p-3 lg:grid-cols-[minmax(0,1.18fr)_minmax(390px,0.82fr)]">
+        {/* Brand artwork becomes a compact banner above the form on smaller screens. */}
+        <section className="relative min-h-56 overflow-hidden rounded-[1.45rem] sm:min-h-72 lg:min-h-[680px]">
+          <img
+            src={loginArtwork}
+            alt="Abstract green layered forms"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,18,22,0.08)_20%,rgba(4,18,22,0.84)_100%)]" />
 
-            <h2 className="text-2xl font-semibold tracking-tight">
-              Welcome back
-            </h2>
-
-            <p className="text-center text-sm text-on-surface-variant">
-              Please enter your details to sign in.
-            </p>
-          </div>
-
-          <form
-            onSubmit={handleLogin}
-            className="flex flex-col gap-5"
-          >
-            {/* Email */}
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="email"
-                className="text-sm font-medium"
-              >
-                Email
-              </label>
-
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-xl text-on-surface-variant/50">
-                  mail
+          <div className="relative flex h-full min-h-56 flex-col justify-between p-6 text-white sm:min-h-72 sm:p-8 lg:min-h-[680px] lg:p-10">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 shadow-lg backdrop-blur-md">
+                <span className="material-symbols-outlined text-2xl" aria-hidden="true">
+                  connected_tv
                 </span>
-
-                <input
-  type="text"
-  value={username}
-  onChange={(event) =>
-    setUsername(event.target.value)
-  }
-  autoComplete="username"
-/>
+              </div>
+              <div>
+                <p className="text-lg font-bold tracking-tight">FYWY</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/65">
+                  Management System
+                </p>
               </div>
             </div>
 
-            {/* Password */}
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="password"
-                className="text-sm font-medium"
-              >
-                Password
-              </label>
+            <div className="max-w-md">
+              <p className="mb-4 hidden w-fit rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-white/80 backdrop-blur-md sm:block">
+                Employee workspace
+              </p>
+              <h1 className="max-w-sm text-2xl font-semibold leading-tight tracking-[-0.03em] sm:text-4xl lg:text-[2.7rem]">
+                Every customer connection, all in one place.
+              </h1>
+              <p className="mt-4 hidden max-w-sm text-sm leading-6 text-white/70 sm:block">
+                Securely manage customer accounts, payments, applications, and daily operations.
+              </p>
+            </div>
+          </div>
+        </section>
 
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-xl text-on-surface-variant/50">
-                  lock
+        {/* The white card contains the only interactive controls on the public page. */}
+        <section className="flex items-center justify-center px-3 py-4 sm:px-8 sm:py-8 lg:px-10 lg:py-12">
+          <div className="w-full max-w-[430px] rounded-[1.6rem] bg-white p-6 shadow-[0_24px_65px_rgba(0,0,0,0.28)] sm:p-9 lg:p-10">
+            <div className="mb-8">
+              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <span className="material-symbols-outlined text-2xl" aria-hidden="true">
+                  shield_person
                 </span>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+                Secure employee access
+              </p>
+              <h2 className="mt-2 text-3xl font-bold tracking-[-0.035em] text-on-surface">
+                Welcome back
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-on-surface-variant">
+                Sign in with your employee credentials to continue.
+              </p>
+            </div>
 
-              <input
-  type={showPassword ? "text" : "password"}
-  value={password}
-  onChange={(event) =>
-    setPassword(event.target.value)
-  }
-  autoComplete="current-password"
-/>
-
-{error && (
-  <div className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error">
-    {error}
-  </div>
-)}
-
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 transition hover:text-on-surface"
-                >
-                  <span className="material-symbols-outlined text-xl">
-                    {showPassword
-                      ? "visibility"
-                      : "visibility_off"}
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label htmlFor="username" className="mb-2 block text-sm font-semibold text-on-surface">
+                  Username
+                </label>
+                <div className="group relative">
+                  <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-xl text-outline transition group-focus-within:text-primary" aria-hidden="true">
+                    person
                   </span>
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    autoComplete="username"
+                    required
+                    placeholder="Enter your username"
+                    className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 pl-12 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="password" className="mb-2 block text-sm font-semibold text-on-surface">
+                  Password
+                </label>
+                <div className="group relative">
+                  <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-xl text-outline transition group-focus-within:text-primary" aria-hidden="true">
+                    lock
+                  </span>
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="current-password"
+                    required
+                    placeholder="Enter your password"
+                    className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-12 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    className="absolute right-2.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-surface-container hover:text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/25"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <span className="material-symbols-outlined text-xl" aria-hidden="true">
+                      {showPassword ? "visibility" : "visibility_off"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <label className="flex cursor-pointer items-center gap-2.5 text-sm text-on-surface-variant">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(event) => setRememberMe(event.target.checked)}
+                    className="h-4 w-4 rounded accent-primary"
+                  />
+                  Remember me
+                </label>
+                <button type="button" disabled title="Coming later" className="cursor-not-allowed text-sm font-semibold text-primary opacity-55">
+                  Forgot password?
                 </button>
               </div>
-            </div>
 
-            {/* Remember me / forgot */}
-            <div className="flex items-center justify-between">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-primary"
-                />
-
-                <span className="text-sm text-on-surface-variant">
-                  Remember me
-                </span>
-              </label>
+              {error && (
+                <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-error/15 bg-error/8 px-4 py-3 text-sm text-error">
+                  <span className="material-symbols-outlined mt-0.5 text-lg" aria-hidden="true">
+                    error
+                  </span>
+                  <span>{error}</span>
+                </div>
+              )}
 
               <button
-                type="button"
-                disabled
-                title="Coming later"
-                className="cursor-not-allowed text-sm font-medium text-primary opacity-60"
+                type="submit"
+                disabled={loading}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-on-primary shadow-[0_10px_24px_rgba(65,98,95,0.26)] transition hover:-translate-y-0.5 hover:bg-primary-container hover:shadow-[0_14px_28px_rgba(65,98,95,0.3)] focus:outline-none focus:ring-4 focus:ring-primary/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Forgot password?
+                {loading ? "Signing in..." : "Sign in"}
+                {!loading && (
+                  <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                    arrow_forward
+                  </span>
+                )}
               </button>
-            </div>
+            </form>
 
-            {/* Fake sign in */}
-            <button
-              type="submit"
-  disabled={loading}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-medium text-on-primary shadow-sm transition hover:bg-tertiary active:scale-[0.98]"
-            >
-               {loading ? "Signing in..." : "Sign In"}
-
-              <span className="material-symbols-outlined text-lg">
-                arrow_forward
+            <div className="mt-8 flex items-center justify-center gap-2 border-t border-surface-container pt-5 text-xs text-on-surface-variant">
+              <span className="material-symbols-outlined text-base text-primary" aria-hidden="true">
+                lock
               </span>
-            </button>
-          </form>
-        </div>
+              Authorized employees only
+            </div>
+          </div>
+        </section>
       </main>
-
-      <div className="mt-12 flex gap-6 text-sm text-on-surface-variant">
-        <button
-          type="button"
-          disabled
-          className="cursor-not-allowed opacity-60"
-        >
-          Privacy Policy
-        </button>
-
-        <button
-          type="button"
-          disabled
-          className="cursor-not-allowed opacity-60"
-        >
-          Terms
-        </button>
-      </div>
     </div>
   );
 }

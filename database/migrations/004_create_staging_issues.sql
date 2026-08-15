@@ -1,3 +1,4 @@
+-- Records known validation problems discovered while profiling staged legacy data.
 CREATE TABLE IF NOT EXISTS staging.data_issues (
     issue_id BIGSERIAL PRIMARY KEY,
 

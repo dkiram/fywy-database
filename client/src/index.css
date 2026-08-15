@@ -1,3 +1,4 @@
+/* Global Tailwind theme tokens, browser defaults, animations, and print behavior. */
 @import "tailwindcss";
 
 @theme {
@@ -68,4 +69,94 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+.material-symbols-outlined {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+@keyframes application-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes application-drawer-backdrop-in {
+  from {
+    background-color: rgb(0 0 0 / 0%);
+  }
+
+  to {
+    background-color: rgb(0 0 0 / 45%);
+  }
+}
+
+.application-drawer {
+  animation: application-drawer-in 220ms ease-out;
+}
+
+.application-drawer-backdrop {
+  animation: application-drawer-backdrop-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .application-drawer,
+  .application-drawer-backdrop {
+    animation: none;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .payment-receipt-print,
+  .payment-receipt-print * {
+    visibility: visible;
+  }
+
+  .payment-receipt-print {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 24px;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+/* Print only the active report table instead of the full app navigation. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .report-print-area,
+  .report-print-area * {
+    visibility: visible;
+  }
+
+  .report-print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .report-print-area button,
+  .report-print-area input,
+  .report-print-area label {
+    display: none !important;
+  }
 }

@@ -1,3 +1,4 @@
+-- Creates the normalized package catalog referenced by customers and applications.
 CREATE TABLE IF NOT EXISTS public.packages (
     package_id SMALLINT PRIMARY KEY,
 

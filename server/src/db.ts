@@ -1,3 +1,4 @@
+/** Creates the shared PostgreSQL connection pool used by every API route and script. */
 import { Pool } from "pg";
 import "dotenv/config";
 

@@ -1,4 +1,5 @@
 {
+  // Solution config delegates browser and Vite configuration checks to separate projects.
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },

@@ -1,3 +1,4 @@
+/** Displays the latest auditable employee and system changes in readable form. */
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { apiFetch } from "../lib/api";
@@ -25,6 +26,7 @@ function ActivityHistoryPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // The server returns a bounded newest-first audit feed; this screen only formats it.
     const loadAuditLogs = async () => {
       try {
         setLoading(true);
@@ -89,6 +91,7 @@ function ActivityHistoryPage() {
       )}
 
       {!loading && auditLogs.length > 0 && (
+        /* Keep every audit record self-contained so historical changes remain readable. */
         <div className="flex flex-col gap-4">
           {auditLogs.map((log) => (
             <article
@@ -211,6 +214,7 @@ function formatAuditValue(
     return "—";
   }
 
+  // Monetary audit values are stored as text but should read like currency in the UI.
   if (fieldName === "monthly_fee") {
     const amount = Number(value);
 

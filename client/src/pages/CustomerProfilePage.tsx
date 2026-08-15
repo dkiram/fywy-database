@@ -1,7 +1,15 @@
+/** Combines customer identity, billing, service history, and account actions in one screen. */
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
+import PaymentReceiptModal, { type PaymentReceipt } from "../components/PaymentReceiptModal";
+import RecordPaymentDrawer from "../components/RecordPaymentDrawer";
+import AccountOperationsPanel, {
+  type AccountStatus,
+  type AccountStatusUpdate,
+} from "../components/AccountOperationsPanel";
+import CustomerServiceHistory from "../components/CustomerServiceHistory";
 
 type Customer = {
   customer_id: number;
@@ -19,7 +27,7 @@ type Customer = {
   deactivation_date: string | null;
   reactivation_date: string | null;
 
-  status: string;
+  status: AccountStatus;
   adult_channel: boolean;
 
   pole_box_number: string | null;
@@ -45,7 +53,7 @@ const canChangeMonthlyRate =
   const [customer, setCustomer] = useState<Customer | null>(null);
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState("");
-    const [activeTab, setActiveTab] = useState<"overview" | "payments">(
+    const [activeTab, setActiveTab] = useState<"overview" | "payments" | "support">(
   "overview"
 );
 
@@ -54,6 +62,9 @@ const [newMonthlyFee, setNewMonthlyFee] = useState("");
 const [rateChangeReason, setRateChangeReason] = useState("");
 const [savingRate, setSavingRate] = useState(false);
 const [rateError, setRateError] = useState("");
+const [showPaymentForm, setShowPaymentForm] = useState(false);
+const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceipt | null>(null);
+const [paymentRefreshKey, setPaymentRefreshKey] = useState(0);
 
 
 useEffect(() => {
@@ -133,8 +144,8 @@ if (error || !customer) {
               {customer.name || "Unnamed customer"}
             </h1>
 
-            <div className="flex items-center gap-2 rounded-full bg-tertiary/10 px-3 py-1 text-tertiary">
-              <span className="h-1.5 w-1.5 rounded-full bg-tertiary" />
+            <div className={`flex items-center gap-2 rounded-full px-3 py-1 ${statusPillClass(customer.status)}`}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
 
               <span className="text-xs font-bold uppercase tracking-wider">
                 {customer.status.replace("_", " ")}
@@ -166,18 +177,26 @@ if (error || !customer) {
 
       Edit Profile
     </button>
-  ) : (
+  ) : activeTab === "payments" ? (
     <button
       type="button"
-      disabled
-      title="Record Payment coming next"
-      className="flex cursor-not-allowed items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-on-primary opacity-80 shadow-md"
+      onClick={() => setShowPaymentForm(true)}
+      className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-on-primary shadow-md transition hover:bg-primary-container"
     >
       <span className="material-symbols-outlined text-lg">
         add
       </span>
 
       Record Payment
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={() => navigate(`/service-requests?customerId=${customer.customer_id}`)}
+      className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-on-primary shadow-md transition hover:bg-primary-container"
+    >
+      <span className="material-symbols-outlined text-lg">add</span>
+      New Service Ticket
     </button>
   )}
 
@@ -221,9 +240,12 @@ if (error || !customer) {
 
   <button
     type="button"
-    disabled
-    title="Coming later"
-    className="cursor-not-allowed px-6 py-3 text-sm font-medium text-on-surface-variant opacity-60"
+    onClick={() => setActiveTab("support")}
+    className={
+      activeTab === "support"
+        ? "border-b-2 border-primary px-6 py-3 text-sm font-bold text-primary"
+        : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
+    }
   >
     Support History
   </button>
@@ -544,62 +566,61 @@ if (error || !customer) {
 
             <button
               type="button"
-              className="w-full rounded-lg bg-white py-3 font-bold text-primary transition hover:opacity-90"
+              disabled
+              title="Package changes will be added separately"
+              className="w-full cursor-not-allowed rounded-lg bg-white py-3 font-bold text-primary opacity-60"
             >
               Manage Subscription
             </button>
           </section>
 
-          {/* Recent activity */}
-          <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
-            <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-sm font-bold">
-                Recent Activity
-              </h3>
-
-              <button
-                type="button"
-                className="text-xs font-medium text-primary"
-              >
-                View All
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-5 border-l-2 border-surface-container pl-5">
-              <div>
-                <p className="text-sm font-medium">
-                  Payment Received
-                </p>
-
-                <p className="text-xs font-bold text-tertiary">
-                  +J$3,500
-                </p>
-
-                <p className="mt-1 text-xs text-on-surface-variant">
-                  August 5, 2026
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium">
-                  Service Call
-                </p>
-
-                <p className="text-xs text-on-surface-variant">
-                  Checked line noise on PB-104
-                </p>
-
-                <p className="mt-1 text-xs text-on-surface-variant">
-                  July 22, 2026
-                </p>
-              </div>
-            </div>
-          </section>
+          {employee && (
+            // MVP 3 replaces the placeholder activity feed with real status
+            // controls and immutable history for this customer.
+            <AccountOperationsPanel
+              customerId={customer.customer_id}
+              status={customer.status}
+              employeeRole={employee.role}
+              onStatusChanged={(update: AccountStatusUpdate) => {
+                // Keep the profile header/status card synchronized with the
+                // transition returned by the account-operations API.
+                setCustomer((current) =>
+                  current
+                    ? {
+                        ...current,
+                        status: update.status,
+                        deactivation_date: update.deactivation_date,
+                        reactivation_date: update.reactivation_date,
+                      }
+                    : current
+                );
+              }}
+            />
+          )}
         </div>
         </div>
-) : (
-  <PaymentHistory />
+) : activeTab === "payments" ? (
+  <PaymentHistory refreshKey={paymentRefreshKey} />
+ ) : (
+  <CustomerServiceHistory customerId={customer.customer_id} />
 )}
+
+      {showPaymentForm && employee && (
+        <RecordPaymentDrawer
+          customer={customer}
+          employee={employee}
+          onClose={() => setShowPaymentForm(false)}
+          onRecorded={(receipt) => {
+            setShowPaymentForm(false);
+            setPaymentReceipt(receipt);
+            setPaymentRefreshKey((current) => current + 1);
+          }}
+        />
+      )}
+
+      {paymentReceipt && (
+        <PaymentReceiptModal payment={paymentReceipt} onClose={() => setPaymentReceipt(null)} />
+      )}
     </div> 
   );
 }
@@ -640,6 +661,17 @@ function DetailRow({ label, value }: DetailRowProps) {
       </span>
     </div>
   );
+}
+
+function statusPillClass(status: AccountStatus) {
+  const styles: Record<AccountStatus, string> = {
+    active: "bg-tertiary/10 text-tertiary",
+    disconnected: "bg-error/10 text-error",
+    pending_reconnection: "bg-amber-100 text-amber-800",
+    closed: "bg-surface-container-high text-on-surface-variant",
+    archived: "bg-surface-container-high text-on-surface-variant",
+  };
+  return styles[status];
 }
 
 

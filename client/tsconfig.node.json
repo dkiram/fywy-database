@@ -1,4 +1,5 @@
 {
+  // Type-checks build-time Node code such as vite.config.ts without emitting files.
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "target": "es2023",

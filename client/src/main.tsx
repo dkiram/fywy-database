@@ -1,3 +1,4 @@
+/** Boots React, routing, and the employee authentication provider. */
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { AuthProvider } from "./auth/AuthContext";

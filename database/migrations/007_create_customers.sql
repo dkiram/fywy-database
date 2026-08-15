@@ -1,3 +1,4 @@
+-- Creates the canonical customer table while retaining fields needed to trace legacy data.
 CREATE TABLE IF NOT EXISTS public.customers (
     customer_id INTEGER PRIMARY KEY,
 

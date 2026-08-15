@@ -1,3 +1,4 @@
+-- Adds a review trail to staged issues and captures a verified correction for customer 1500.
 ALTER TABLE staging.data_issues
 ADD COLUMN IF NOT EXISTS resolution_status TEXT,
 ADD COLUMN IF NOT EXISTS resolved_value TEXT,

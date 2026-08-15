@@ -1,3 +1,4 @@
+-- Defines the earlier minimal payment staging shape used by the base import process.
 CREATE TABLE staging.payments (
     staging_id BIGSERIAL PRIMARY KEY,
 

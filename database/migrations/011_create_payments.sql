@@ -1,3 +1,4 @@
+-- Creates the canonical payment ledger while preserving unrecognized legacy values.
 CREATE TABLE IF NOT EXISTS public.payments (
     payment_id BIGSERIAL PRIMARY KEY,
 

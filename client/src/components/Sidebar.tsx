@@ -1,3 +1,4 @@
+/** Defines the main navigation and hides administrator-only links from other roles. */
 import { NavLink } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 
@@ -63,15 +64,28 @@ function Sidebar() {
 
         <NavSection title="Operations">
           <NavItem
+            to="/payments"
+            icon="payments"
+            label="Daily Payments"
+          />
+
+          <NavItem
             to="/applications"
             icon="description"
             label="Applications"
           />
 
+          {/* Opens the MVP 3 disconnection/reconnection work queue. */}
+          <NavItem
+            to="/account-operations"
+            icon="manage_accounts"
+            label="Account Operations"
+          />
+
           <NavItem
             to="/service-requests"
             icon="build"
-            label="Service Requests"
+            label="Service Tickets"
           />
 
           <NavItem

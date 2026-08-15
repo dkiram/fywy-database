@@ -1,3 +1,4 @@
+-- Stages package and fee values exactly as received from the legacy export.
 CREATE TABLE IF NOT EXISTS staging.packages (
     staging_id BIGSERIAL PRIMARY KEY,
 

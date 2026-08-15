@@ -1,3 +1,4 @@
+-- Normalizes staged payment values and links them to customers when a safe match exists.
 INSERT INTO public.payments (
     legacy_payment_id,
     legacy_customer_id,

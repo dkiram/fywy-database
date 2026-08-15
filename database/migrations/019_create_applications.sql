@@ -1,3 +1,4 @@
+-- Creates the canonical application queue and its lifecycle, matching, and audit fields.
 CREATE TABLE IF NOT EXISTS public.applications (
     application_id BIGSERIAL PRIMARY KEY,
 

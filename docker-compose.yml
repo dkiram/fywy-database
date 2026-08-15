@@ -1,3 +1,4 @@
+# Local PostgreSQL service; credentials are supplied through environment variables.
 services:
   db:
     image: postgres:17-alpine
@@ -11,6 +12,7 @@ services:
     ports:
       - "5432:5432"
 
+    # Named storage keeps database data when the container is recreated.
     volumes:
       - spcl_postgres_data:/var/lib/postgresql/data
 

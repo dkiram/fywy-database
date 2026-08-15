@@ -1,3 +1,4 @@
+/** Keeps the signed-in employee available across the app and owns login/logout requests. */
 import {
   createContext,
   useContext,
@@ -45,12 +46,14 @@ type AuthProviderProps = {
 export function AuthProvider({
   children,
 }: AuthProviderProps) {
+  // `loading` prevents protected routes from redirecting before session restore finishes.
   const [employee, setEmployee] =
     useState<Employee | null>(null);
 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Ask the server whether its HTTP-only session cookie still identifies an employee.
     const checkSession = async () => {
       try {
         const response = await apiFetch("/api/auth/me");
@@ -82,6 +85,7 @@ export function AuthProvider({
     username: string,
     password: string
   ) => {
+    // Only the server verifies passwords; the client stores the returned safe profile.
     const response = await apiFetch(
       "/api/auth/login",
       {
@@ -110,6 +114,7 @@ export function AuthProvider({
   };
 
   const logout = async () => {
+    // Destroy the server session before clearing local authentication state.
     await apiFetch("/api/auth/logout", {
       method: "POST",
     });
@@ -134,6 +139,7 @@ export function AuthProvider({
 export function useAuth() {
   const context = useContext(AuthContext);
 
+  // Catch accidental use outside AuthProvider during development.
   if (!context) {
     throw new Error(
       "useAuth must be used inside AuthProvider"

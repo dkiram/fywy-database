@@ -1,3 +1,4 @@
+/** Displays session actions, notifications affordance, and signed-in employee identity. */
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router";
 

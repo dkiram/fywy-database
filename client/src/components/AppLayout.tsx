@@ -1,3 +1,4 @@
+/** Provides the persistent sidebar/header frame used by every authenticated page. */
 import type { ReactNode } from "react";
 import Sidebar from "./Sidebar";
 import Header from "./Header";

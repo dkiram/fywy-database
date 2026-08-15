@@ -1,3 +1,4 @@
+/** Gives administrators a read-only overview of employee access and assignments. */
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 
@@ -21,6 +22,7 @@ function AdminControlsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // Authorization is enforced again by the admin-only server endpoint.
     const loadEmployees = async () => {
       try {
         setLoading(true);
@@ -83,6 +85,7 @@ function AdminControlsPage() {
           </div>
         )}
 
+        {/* This overview is intentionally read-only; account edits require a future workflow. */}
         {!loading && !error && (
           <div className="mt-4 overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm">
             <div className="overflow-x-auto">

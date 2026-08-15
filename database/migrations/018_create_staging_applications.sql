@@ -1,3 +1,4 @@
+-- Stages both legacy application-table variants without coercing their raw values.
 CREATE SCHEMA IF NOT EXISTS staging;
 
 CREATE TABLE IF NOT EXISTS staging.applications_current (

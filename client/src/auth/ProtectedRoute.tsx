@@ -1,3 +1,4 @@
+/** Guards private routes and optionally limits a screen to specific employee roles. */
 import { Navigate } from "react-router";
 
 import {

@@ -1,3 +1,4 @@
+/** Creates predictable development employee accounts with securely hashed passwords. */
 import bcrypt from "bcrypt";
 import { pool } from "../db.js";
 
@@ -40,6 +41,7 @@ const employees: DevEmployee[] = [
 async function seedDevEmployees() {
   try {
     for (const employee of employees) {
+      // Hash even development passwords so seeded accounts exercise production login behavior.
       const passwordHash = await bcrypt.hash(
         employee.password,
         12
@@ -64,6 +66,7 @@ async function seedDevEmployees() {
       const locationId =
         locationResult.rows[0].location_id;
 
+      // ON CONFLICT makes rerunning the developer setup safe.
       await pool.query(
         `
         INSERT INTO public.employees (

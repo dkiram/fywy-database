@@ -1,3 +1,4 @@
+/** Imports both legacy application CSV shapes into staging and runs reconciliation SQL. */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +9,7 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(scriptDirectory, "../../..");
 const databaseDirectory = path.join(projectDirectory, "database");
 
+// Optional CLI arguments override the two expected CSV files in the repository root.
 const currentCsvPath = path.resolve(
   process.argv[2] ?? path.join(projectDirectory, "appl.csv")
 );
@@ -62,6 +64,7 @@ const expectedCurrentHeaders = [
 const expectedCopiedHeaders = expectedCurrentHeaders.slice(0, 16);
 
 function parseCsv(csvText: string): string[][] {
+  // Small RFC-4180-style parser preserves commas/newlines inside quoted Access exports.
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -118,6 +121,7 @@ async function readCsv(
   csvPath: string,
   expectedHeaders: string[]
 ): Promise<string[][]> {
+  // Refuse unexpected headers or row widths instead of shifting values into wrong columns.
   const csvText = await readFile(csvPath, "utf8");
   const rows = parseCsv(csvText.replace(/^\uFEFF/, ""));
   const headers = rows.shift();
@@ -140,6 +144,7 @@ async function readCsv(
 }
 
 async function runSqlFile(client: PoolClient, relativePath: string) {
+  // Migration SQL runs on the caller's existing transaction-bound client.
   const sql = await readFile(
     path.join(databaseDirectory, relativePath),
     "utf8"
@@ -157,6 +162,7 @@ async function insertRows(
     throw new Error(`${tableName} has no rows to import.`);
   }
 
+  // Flatten every CSV value into positional parameters; table/column names are internal constants.
   const values: string[] = [];
   const valueGroups = rows.map((row) => {
     const placeholders = row.map((value) => {
@@ -176,6 +182,7 @@ async function insertRows(
 }
 
 async function importApplications() {
+  // Parse and validate both sources before making any database changes.
   const currentRows = await readCsv(
     currentCsvPath,
     expectedCurrentHeaders
@@ -187,6 +194,7 @@ async function importApplications() {
   const client = await pool.connect();
 
   try {
+    // Staging, reconciliation, verification, and final import are one atomic operation.
     await client.query("BEGIN");
 
     const dependencyResult = await client.query<{
@@ -244,7 +252,16 @@ async function importApplications() {
       client,
       "migrations/020_reconcile_legacy_applications.sql"
     );
+    await runSqlFile(
+      client,
+      "migrations/021_prepare_application_workflow.sql"
+    );
+    await runSqlFile(
+      client,
+      "migrations/022_limit_match_review_to_2026.sql"
+    );
 
+    // Recount canonical legacy rows before commit to catch partial or duplicate imports.
     const verificationResult = await client.query<{
       legacy_source: string;
       status: string;

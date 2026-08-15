@@ -1,6 +1,8 @@
+/** Renders the searchable, paginated historical payment ledger. */
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { apiFetch } from "../lib/api";
+import PaymentReceiptModal, { type PaymentReceipt } from "./PaymentReceiptModal";
 
 type Payment = {
   payment_id: number;
@@ -16,6 +18,7 @@ type Payment = {
 
   location: string | null;
   cashier_name: string | null;
+  receipt_number: string | null;
 };
 
 type Pagination = {
@@ -30,7 +33,7 @@ type PaymentsResponse = {
   pagination: Pagination;
 };
 
-function PaymentHistory() {
+function PaymentHistory({ refreshKey = 0 }: { refreshKey?: number }) {
   const { customerId } = useParams();
 
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -46,18 +49,23 @@ function PaymentHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Keep typed search separate from applied search so requests wait for form submission.
   const [searchInput, setSearchInput] = useState("");
 const [search, setSearch] = useState("");
 
 const [paymentType, setPaymentType] = useState("");
 const [fromDate, setFromDate] = useState("");
 const [toDate, setToDate] = useState("");
+const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
+const [receiptError, setReceiptError] = useState("");
 
   useEffect(() => {
+    // A newly selected customer always starts at the first payment page.
     setPage(1);
   }, [customerId]);
 
   useEffect(() => {
+    // Any applied filter, page change, or successful new payment refreshes the ledger.
     const loadPayments = async () => {
       if (!customerId) {
         return;
@@ -114,6 +122,7 @@ const response = await apiFetch(
   paymentType,
   fromDate,
   toDate,
+  refreshKey,
 ]);
 
   return (
@@ -300,9 +309,21 @@ const response = await apiFetch(
                     <td className="px-6 py-4 text-right">
                       <button
                         type="button"
-                        disabled
-                        title="Receipt viewing will be added later"
-                        className="rounded-lg px-3 py-2 text-sm font-medium text-primary opacity-50"
+                        disabled={!payment.receipt_number}
+                        title={payment.receipt_number ? "View receipt" : "Receipt unavailable for imported payment"}
+                        onClick={async () => {
+                          // Legacy payments deliberately lack printable new-system receipts.
+                          try {
+                            setReceiptError("");
+                            const response = await apiFetch(`/api/payments/${payment.payment_id}/receipt`);
+                            const data = await response.json();
+                            if (!response.ok) throw new Error(data.error || "Could not load receipt.");
+                            setReceipt(data.payment);
+                          } catch (loadError) {
+                            setReceiptError(loadError instanceof Error ? loadError.message : "Could not load receipt.");
+                          }
+                        }}
+                        className="rounded-lg px-3 py-2 text-sm font-bold text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-35"
                       >
                         View
                       </button>
@@ -406,6 +427,9 @@ const response = await apiFetch(
           </div>
         )}
       </div>
+
+      {receiptError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{receiptError}</p>}
+      {receipt && <PaymentReceiptModal payment={receipt} onClose={() => setReceipt(null)} />}
     </div>
   );
 }

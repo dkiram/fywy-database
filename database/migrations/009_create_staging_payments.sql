@@ -1,3 +1,4 @@
+-- Stages the expanded payment export, including joined legacy customer context.
 CREATE TABLE IF NOT EXISTS staging.payments (
     staging_id BIGSERIAL PRIMARY KEY,
 

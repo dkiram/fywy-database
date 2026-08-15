@@ -1,5 +1,7 @@
+-- Builds normalized comparisons, imports legacy applications, and suggests customer matches.
 CREATE OR REPLACE VIEW staging.application_reconciliation AS
 WITH staged_applications AS (
+    -- Combine the current and copied Access tables while retaining source identity.
     SELECT
         'ApplicationTBL'::TEXT AS legacy_source,
         staging_id AS source_staging_id,
@@ -7,7 +9,8 @@ WITH staged_applications AS (
         name,
         address,
         telephone,
-        id_number
+        id_number,
+        application_date
     FROM staging.applications_current
 
     UNION ALL
@@ -19,10 +22,12 @@ WITH staged_applications AS (
         name,
         address,
         telephone,
-        id_number
+        id_number,
+        application_date
     FROM staging.applications_copy
 ),
 normalized_applications AS (
+    -- Normalize names, phones, and IDs only for comparison; raw values remain untouched.
     SELECT
         *,
         REGEXP_REPLACE(
@@ -50,6 +55,7 @@ normalized_applications AS (
     FROM staged_applications
 ),
 normalized_customers AS (
+    -- Build the same comparison keys for canonical customers.
     SELECT
         customer_id,
         REGEXP_REPLACE(
@@ -77,6 +83,7 @@ normalized_customers AS (
     FROM public.customers
 ),
 candidate_signals AS (
+    -- Emit each exact matching signal between an application and a customer.
     SELECT
         a.legacy_source,
         a.source_staging_id,
@@ -129,6 +136,7 @@ candidate_signals AS (
       AND a.normalized_address <> ''
 ),
 candidate_scores AS (
+    -- Count corroborating signals so a single weak match cannot silently link a customer.
     SELECT
         legacy_source,
         source_staging_id,
@@ -141,6 +149,7 @@ candidate_scores AS (
         customer_id
 ),
 corroborated_summary AS (
+    -- Summarize candidates that meet the trusted multi-signal threshold.
     SELECT
         legacy_source,
         source_staging_id,
@@ -151,6 +160,7 @@ corroborated_summary AS (
     GROUP BY legacy_source, source_staging_id
 ),
 signal_summary AS (
+    -- Track ambiguous single-signal candidates that still need human review.
     SELECT
         legacy_source,
         source_staging_id,
@@ -171,10 +181,12 @@ signal_summary AS (
     GROUP BY legacy_source, source_staging_id
 ),
 classified AS (
+    -- Assign the final match method, suggestion, and workflow status for each legacy row.
     SELECT
         a.legacy_source,
         a.source_staging_id,
         a.application_id,
+        a.application_date,
         CASE
             WHEN COALESCE(cs.corroborated_count, 0) = 1
                 THEN 'corroborated_match'
@@ -226,12 +238,15 @@ SELECT
             AND match_method = 'corroborated_match'
             THEN 'serviced'
         WHEN match_method <> 'no_match'
+            AND TRIM(COALESCE(application_date, ''))
+                ~ '^[0-9]{1,2}/[0-9]{1,2}/2026( |$)'
             THEN 'match_review'
         ELSE 'legacy_unresolved'
     END AS import_status
 FROM classified;
 
 WITH source_rows AS (
+    -- Rebuild the full source record used by the canonical insert below.
     SELECT
         'ApplicationTBL'::TEXT AS legacy_source,
         staging_id AS source_staging_id,
@@ -281,6 +296,7 @@ WITH source_rows AS (
     FROM staging.applications_copy
 )
 INSERT INTO public.applications (
+    -- Preserve imported data and matching evidence; do not overwrite existing imports.
     name,
     alias,
     address,

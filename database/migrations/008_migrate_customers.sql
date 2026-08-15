@@ -1,3 +1,4 @@
+-- Cleans staged customer strings and inserts them into the canonical customer table.
 INSERT INTO public.customers (
     customer_id,
     name,

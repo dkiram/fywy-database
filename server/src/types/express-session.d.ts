@@ -1,3 +1,4 @@
+/** Extends Express sessions with the minimal employee identity used for authorization. */
 import "express-session";
 
 declare module "express-session" {

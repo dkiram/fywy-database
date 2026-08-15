@@ -1,9 +1,17 @@
+/** Configures the Express API, session authentication, core customer routes, and routers. */
 import express from "express";
 import { pool } from "./db.js";
 import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcrypt";
+import applicationsRouter from "./routes/applications.js";
+import paymentsRouter from "./routes/payments.js";
+import accountsRouter from "./routes/accounts.js";
+import serviceTicketsRouter from "./routes/serviceTickets.js";
+import poleBoxesRouter from "./routes/poleBoxes.js";
+import reportsRouter from "./routes/reports.js";
+import dashboardRouter from "./routes/dashboard.js";
 
 import type {
   Request,
@@ -15,7 +23,7 @@ const app = express();
 
 const PgSession = connectPgSimple(session);
 
-
+// Browser requests come from the Vite client and must include the session cookie.
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -30,6 +38,7 @@ app.use(express.json());
 
 app.use(
   session({
+    // Store sessions in PostgreSQL instead of process memory so restarts do not log everyone out.
     store: new PgSession({
       pool,
       tableName: "user_sessions",
@@ -52,7 +61,17 @@ app.use(
   })
 );
 
+app.use("/api", applicationsRouter);
+app.use("/api", paymentsRouter);
+// MVP 3 service-status queue, history, and transition endpoints.
+app.use("/api", accountsRouter);
+// MVP 4 operational workflows and the summaries built from them.
+app.use("/api", serviceTicketsRouter);
+app.use("/api", poleBoxesRouter);
+app.use("/api", reportsRouter);
+app.use("/api", dashboardRouter);
 
+// Shared guards cover the older routes that still live in this entry file.
 function requireAuth(
   req: Request,
   res: Response,
@@ -124,6 +143,7 @@ app.get("/health", async (req, res) => {
 
 app.get("/api/customers", requireAuth, async (req, res) => {
   try {
+    // Empty searches return the latest accounts; actual searches sort alphabetically.
     const search =
       typeof req.query.search === "string"
         ? req.query.search.trim()
@@ -154,6 +174,9 @@ app.get("/api/customers", requireAuth, async (req, res) => {
         c.status,
         c.monthly_fee,
         c.package_id,
+        -- Ticket customer search uses these to prefill infrastructure details.
+        c.pole_box_number,
+        c.port_number,
         p.name AS package_name
       FROM public.customers c
 
@@ -185,6 +208,7 @@ app.get("/api/customers", requireAuth, async (req, res) => {
 
 app.get("/api/customers/:customerId", requireAuth, async (req, res) => {
   try {
+    // The profile query joins package fees so payment forms can prefill configured amounts.
     const { customerId } = req.params;
 
     if (
@@ -344,7 +368,8 @@ app.get(
           month_paid,
           payment_date,
           location,
-          cashier_name
+          cashier_name,
+          receipt_number
         FROM public.payments
 
         ${whereClause}
@@ -394,6 +419,7 @@ app.get(
 
 app.get("/api/audit-logs", requireAuth, async (_req, res) => {
   try {
+    // Bound the activity feed to protect the UI and database from unbounded history reads.
     const result = await pool.query(
       `
       SELECT
@@ -441,6 +467,7 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
+    // Use a case-insensitive username lookup but never expose whether an account exists.
     const result = await pool.query(
       `
       SELECT
@@ -481,6 +508,7 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
+    // bcrypt performs the expensive password verification against the stored hash.
     const passwordMatches = await bcrypt.compare(
       password,
       employee.password_hash
@@ -492,6 +520,7 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
+    // Store only the safe identity fields required by authorization and page headers.
     req.session.employee = {
       employeeId: employee.employee_id,
       firstName: employee.first_name,
@@ -535,6 +564,134 @@ app.get("/api/auth/me", (req, res) => {
   });
 });
 
+app.patch("/api/auth/password", requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (
+    typeof currentPassword !== "string" ||
+    typeof newPassword !== "string" ||
+    !currentPassword ||
+    !newPassword
+  ) {
+    return res.status(400).json({
+      error: "Current and new passwords are required.",
+    });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({
+      error: "The new password must be at least 8 characters.",
+    });
+  }
+
+  if (newPassword.length > 128) {
+    return res.status(400).json({
+      error: "The new password must be 128 characters or fewer.",
+    });
+  }
+
+  const employee = req.session.employee!;
+  const client = await pool.connect();
+
+  try {
+    // Lock the employee row so concurrent password changes cannot overwrite one another.
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `
+      SELECT password_hash, is_active
+      FROM public.employees
+      WHERE employee_id = $1
+      FOR UPDATE;
+      `,
+      [employee.employeeId]
+    );
+
+    const account = result.rows[0];
+
+    if (!account || !account.is_active) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        error: "This employee account is not available.",
+      });
+    }
+
+    const passwordMatches = await bcrypt.compare(
+      currentPassword,
+      account.password_hash
+    );
+
+    if (!passwordMatches) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: "The current password is incorrect.",
+      });
+    }
+
+    const passwordIsUnchanged = await bcrypt.compare(
+      newPassword,
+      account.password_hash
+    );
+
+    if (passwordIsUnchanged) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: "Choose a new password that is different from the current one.",
+      });
+    }
+
+    // Twelve bcrypt rounds matches the development seed policy.
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    // Persist the new hash, then record the event in the same transaction.
+    await client.query(
+      `
+      UPDATE public.employees
+      SET password_hash = $1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE employee_id = $2;
+      `,
+      [passwordHash, employee.employeeId]
+    );
+
+    // Never place old or new password material in the audit log.
+    await client.query(
+      `
+      INSERT INTO public.audit_logs (
+        employee_id,
+        actor_name,
+        action,
+        entity_type,
+        entity_id,
+        field_name,
+        occurred_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);
+      `,
+      [
+        employee.employeeId,
+        `${employee.firstName} ${employee.lastName}`,
+        "Changed own password",
+        "employee",
+        String(employee.employeeId),
+        "password",
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ message: "Password updated." });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Could not change password:", error);
+    res.status(500).json({
+      error: "Could not change password.",
+    });
+  } finally {
+    client.release();
+  }
+});
+
 
 
 app.get(
@@ -543,6 +700,7 @@ app.get(
   requireRole("admin"),
   async (req, res) => {
     try {
+      // Admins can inspect account access here; changes are intentionally handled elsewhere.
       const result = await pool.query(
         `
         SELECT
@@ -587,6 +745,7 @@ app.get(
 
 
 app.post("/api/auth/logout", (req, res) => {
+  // Destroy the server-side record before clearing the browser's session cookie.
   req.session.destroy((error) => {
     if (error) {
       console.error("Logout failed:", error);
@@ -610,6 +769,7 @@ app.patch(
   requireAuth,
   requireRole("admin", "head_office"),
   async (req, res) => {
+    // Monthly-rate changes are manager-only and require a human-readable audit reason.
     const { monthlyFee, reason } = req.body;
 
     const { customerId } = req.params;
@@ -645,6 +805,7 @@ if (
     const client = await pool.connect();
 
     try {
+      // Update the customer snapshot and its audit record atomically.
       await client.query("BEGIN");
 
       const customerResult = await client.query(

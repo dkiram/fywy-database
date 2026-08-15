@@ -1,3 +1,4 @@
+/** Searches the customer directory and links each result to its full profile. */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { apiFetch } from "../lib/api";
@@ -22,6 +23,7 @@ function CustomerSearchPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // Reload whenever the query changes; the API caps broad results at 50 customers.
     const loadCustomers = async () => {
       try {
         setLoading(true);

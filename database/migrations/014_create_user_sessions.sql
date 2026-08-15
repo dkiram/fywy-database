@@ -1,3 +1,4 @@
+-- Persists Express login sessions in PostgreSQL so sessions survive API restarts.
 CREATE TABLE IF NOT EXISTS public.user_sessions (
     sid VARCHAR NOT NULL PRIMARY KEY,
     sess JSON NOT NULL,

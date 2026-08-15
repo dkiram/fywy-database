@@ -1,10 +1,949 @@
+/** Manages the application queue from intake through service, cancellation, or decline. */
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
+import { useAuth } from "../auth/AuthContext";
+import { apiFetch } from "../lib/api";
+
+type ApplicationStatus =
+  | "pending"
+  | "serviced"
+  | "cancelled"
+  | "declined"
+  | "legacy_unresolved"
+  | "match_review";
+
+type ApplicationRecord = {
+  application_id: number;
+  legacy_application_id: number | null;
+  legacy_source: string | null;
+  name: string;
+  alias: string | null;
+  address: string | null;
+  occupation: string | null;
+  telephone: string | null;
+  email: string | null;
+  id_type: string | null;
+  id_number: string | null;
+  package_id: number | null;
+  package_name: string | null;
+  monthly_fee: string | null;
+  application_date: string;
+  activation_date: string | null;
+  adult_channel: boolean;
+  additional_box: number | null;
+  pole_box_number: string | null;
+  port_number: string | null;
+  status: ApplicationStatus;
+  customer_id: number | null;
+  suggested_customer_id: number | null;
+  suggested_customer_name: string | null;
+  match_method: string | null;
+  closure_reason: string | null;
+  is_overdue: boolean;
+};
+
+type Package = {
+  package_id: number;
+  name: string;
+  default_monthly_charge: string | null;
+};
+
+type ApplicationSummary = {
+  active: number;
+  closed: number;
+  overdue: number;
+};
+
+type ApplicationPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+type ApplicationView =
+  | "active"
+  | "review"
+  | "serviced"
+  | "closed"
+  | "unresolved"
+  | "all";
+
+type NewApplicationForm = {
+  name: string;
+  alias: string;
+  address: string;
+  occupation: string;
+  telephone: string;
+  email: string;
+  idType: string;
+  idNumber: string;
+  packageId: string;
+  monthlyFee: string;
+  applicationDate: string;
+  adultChannel: boolean;
+  additionalBox: string;
+};
+
+const emptySummary: ApplicationSummary = {
+  active: 0,
+  closed: 0,
+  overdue: 0,
+};
+
+const emptyPagination: ApplicationPagination = {
+  page: 1,
+  limit: 5,
+  total: 0,
+  totalPages: 1,
+};
+
+function jamaicaToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Jamaica",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function initialNewApplication(): NewApplicationForm {
+  return {
+    name: "",
+    alias: "",
+    address: "",
+    occupation: "",
+    telephone: "",
+    email: "",
+    idType: "",
+    idNumber: "",
+    packageId: "",
+    monthlyFee: "",
+    applicationDate: jamaicaToday(),
+    adultChannel: false,
+    additionalBox: "0",
+  };
+}
+
 function ApplicationsPage() {
+  const navigate = useNavigate();
+  const { employee } = useAuth();
+  const canDecide =
+    employee?.role === "admin" || employee?.role === "head_office";
+
+  const [applications, setApplications] = useState<ApplicationRecord[]>([]);
+  const [summary, setSummary] = useState<ApplicationSummary>(emptySummary);
+  const [packages, setPackages] = useState<Package[]>([]);
+  const [view, setView] = useState<ApplicationView>("active");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] =
+    useState<ApplicationPagination>(emptyPagination);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [noticeCustomerId, setNoticeCustomerId] = useState<number | null>(null);
+
+  const [selected, setSelected] = useState<ApplicationRecord | null>(null);
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newForm, setNewForm] = useState<NewApplicationForm>(
+    initialNewApplication
+  );
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [decision, setDecision] = useState<"service" | "close" | null>(null);
+  const [serviceMode, setServiceMode] = useState<"link" | "create">("create");
+  const [decisionNote, setDecisionNote] = useState("");
+  const [closeStatus, setCloseStatus] = useState<"cancelled" | "declined">(
+    "cancelled"
+  );
+  const [decisionError, setDecisionError] = useState("");
+  // Final installation/account values are confirmed during activation instead
+  // of assuming the values submitted on the original application are final.
+  const [activationPackageId, setActivationPackageId] = useState("");
+  const [activationMonthlyFee, setActivationMonthlyFee] = useState("");
+  const [activationPoleBox, setActivationPoleBox] = useState("");
+  const [activationPort, setActivationPort] = useState("");
+  const [activationDate, setActivationDate] = useState(jamaicaToday());
+
+  const loadApplications = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const response = await apiFetch(
+        `/api/applications?view=${view}&search=${encodeURIComponent(search)}&page=${page}`
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not load applications.");
+      }
+      setApplications(data.applications);
+      setSummary(data.summary);
+      setPagination(data.pagination);
+      if (data.pagination.page !== page) {
+        setPage(data.pagination.page);
+      }
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Could not load applications."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search, view]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(loadApplications, 180);
+    return () => window.clearTimeout(timeout);
+  }, [loadApplications]);
+
+  useEffect(() => {
+    const loadPackages = async () => {
+      const response = await apiFetch("/api/packages");
+      const data = await response.json();
+      if (response.ok) setPackages(data.packages);
+    };
+    loadPackages().catch(() => setPackages([]));
+  }, []);
+
+  const activeApplication = useMemo(
+    () =>
+      applications.find(
+        (item) => item.application_id === selected?.application_id
+      ) ?? selected,
+    [applications, selected]
+  );
+
+  const openServiceDecision = (application: ApplicationRecord) => {
+    setSelected(application);
+    setServiceMode(application.suggested_customer_id ? "link" : "create");
+    setDecisionNote("");
+    setDecisionError("");
+    // Pre-fill the activation form from the application, while allowing staff
+    // to correct package, rate, pole, port, or date before committing.
+    setActivationPackageId(String(application.package_id ?? ""));
+    setActivationMonthlyFee(application.monthly_fee ?? "");
+    setActivationPoleBox(application.pole_box_number ?? "");
+    setActivationPort(application.port_number ?? "");
+    setActivationDate(application.activation_date?.slice(0, 10) ?? jamaicaToday());
+    setDecision("service");
+  };
+
+  const openCloseDecision = (application: ApplicationRecord) => {
+    setSelected(application);
+    setCloseStatus("cancelled");
+    setDecisionNote("");
+    setDecisionError("");
+    setDecision("close");
+  };
+
+  const createApplication = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      setSaving(true);
+      setFormError("");
+      const response = await apiFetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newForm),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not create application.");
+      }
+      setShowNewForm(false);
+      setNewForm(initialNewApplication());
+      setView("active");
+      setPage(1);
+      setNotice(`Application #${data.application.application_id} was created.`);
+      setNoticeCustomerId(null);
+      await loadApplications();
+    } catch (saveError) {
+      setFormError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not create application."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitServiceDecision = async () => {
+    if (!activeApplication) return;
+    try {
+      setSaving(true);
+      setDecisionError("");
+      const response = await apiFetch(
+        `/api/applications/${activeApplication.application_id}/activate`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            // A suggested match links to the existing customer; otherwise the
+            // server creates a new active customer in the same transaction.
+            customerId:
+              serviceMode === "link"
+                ? activeApplication.suggested_customer_id
+                : undefined,
+            createNew: serviceMode === "create",
+            note: decisionNote,
+            packageId: activationPackageId,
+            monthlyFee: activationMonthlyFee,
+            poleBoxNumber: activationPoleBox,
+            portNumber: activationPort,
+            activationDate,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not activate application.");
+      }
+      setDecision(null);
+      setSelected(null);
+      setNotice(
+        data.createdCustomer
+          ? `Application activated. Customer #${data.customerId} was created.`
+          : `Application linked to existing customer #${data.customerId}.`
+      );
+      setNoticeCustomerId(data.customerId);
+      await loadApplications();
+    } catch (saveError) {
+      setDecisionError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not activate application."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitCloseDecision = async () => {
+    if (!activeApplication) return;
+    try {
+      setSaving(true);
+      setDecisionError("");
+      const response = await apiFetch(
+        `/api/applications/${activeApplication.application_id}/close`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: closeStatus, reason: decisionNote }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not close application.");
+      }
+      setDecision(null);
+      setSelected(null);
+      setNotice(`Application marked ${closeStatus}.`);
+      setNoticeCustomerId(null);
+      await loadApplications();
+    } catch (saveError) {
+      setDecisionError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not close application."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-on-surface">Applications</h1>
-      <p className="mt-2 text-on-surface-variant">
-        Application management is coming soon.
-      </p>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0 flex-1 basis-80">
+          <h1 className="text-2xl font-bold tracking-tight text-on-surface">
+            Applications
+          </h1>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Review applicants, activate service, and keep application history.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setNewForm(initialNewApplication());
+            setFormError("");
+            setShowNewForm(true);
+          }}
+          className="flex w-fit shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-on-primary shadow-sm transition hover:bg-primary-container"
+        >
+          <span className="material-symbols-outlined text-lg">add</span>
+          New Application
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SummaryCard label="Active Queue" value={summary.active} icon="pending_actions" />
+        <SummaryCard label="Over 14 Days" value={summary.overdue} icon="schedule" warning />
+      </div>
+
+      {notice && (
+        <div className="flex items-center justify-between gap-4 rounded-xl bg-tertiary/10 px-5 py-4 text-sm text-tertiary">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined">check_circle</span>
+            <span className="font-medium">{notice}</span>
+          </div>
+          {noticeCustomerId && (
+            <button type="button" onClick={() => navigate(`/customers/${noticeCustomerId}`)} className="font-bold underline">
+              View customer
+            </button>
+          )}
+        </div>
+      )}
+
+      <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["active", "Active"],
+                ["review", "Match Review"],
+                ["serviced", "Serviced"],
+                ["closed", "Closed"],
+                ["unresolved", "Unresolved"],
+                ["all", "All"],
+              ] as Array<[ApplicationView, string]>
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setView(value);
+                  setPage(1);
+                }}
+                className={
+                  view === value
+                    ? "rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary"
+                    : "rounded-full bg-surface-container px-4 py-2 text-xs font-bold text-on-surface-variant transition hover:bg-surface-container-high"
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="relative w-full lg:w-80">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</span>
+            <input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Search name, ID, phone, or address..."
+              className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+        </div>
+
+        {error && <div className="m-6 rounded-lg bg-error/10 p-4 text-sm text-error">{error}</div>}
+
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead className="bg-surface-container-low">
+              <tr>
+                <TableHeading>Application</TableHeading>
+                <TableHeading>Applicant</TableHeading>
+                <TableHeading>Package</TableHeading>
+                <TableHeading>Date</TableHeading>
+                <TableHeading>Status</TableHeading>
+                <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-on-surface-variant">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-container">
+              {!loading &&
+                applications.map((application) => (
+                  <tr key={application.application_id} onClick={() => setSelected(application)} className="cursor-pointer transition hover:bg-surface-container-low/70">
+                    <td className="px-6 py-4">
+                      <p className="font-mono text-sm font-bold text-on-surface">#{application.application_id}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-semibold text-on-surface">{application.name}</p>
+                      <p className="mt-1 text-sm text-on-surface-variant">{application.telephone || "No telephone"}</p>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-on-surface-variant">
+                      <p>{application.package_name || "No package"}</p>
+                      <p className="mt-1 text-xs">{formatCurrency(application.monthly_fee)}</p>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-on-surface-variant">
+                      <p>{formatDate(application.application_date)}</p>
+                      {application.is_overdue && <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">Over 14 days</span>}
+                    </td>
+                    <td className="px-6 py-4"><StatusBadge status={application.status} /></td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-end gap-2">
+                        {canDecide && canTakeDecision(application) && (
+                          <>
+                            <IconButton icon="check" label="Activate customer" positive onClick={(event) => { event.stopPropagation(); openServiceDecision(application); }} />
+                            <IconButton icon="close" label="Close application" onClick={(event) => { event.stopPropagation(); openCloseDecision(application); }} />
+                          </>
+                        )}
+                        <button type="button" onClick={(event) => { event.stopPropagation(); setSelected(application); }} className="rounded-lg px-3 py-2 text-sm font-bold text-primary transition hover:bg-primary/10">View</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+
+        {loading && <div className="px-6 py-14 text-center text-sm text-on-surface-variant">Loading applications...</div>}
+        {!loading && !error && applications.length === 0 && (
+          <div className="px-6 py-14 text-center">
+            <span className="material-symbols-outlined text-4xl text-outline">inbox</span>
+            <p className="mt-2 text-sm text-on-surface-variant">No applications found in this view.</p>
+          </div>
+        )}
+        {!loading && applications.length > 0 && (
+          <div className="flex flex-col gap-3 border-t border-surface-container px-6 py-4 text-sm text-on-surface-variant sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              Showing {(pagination.page - 1) * pagination.limit + 1}–
+              {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
+              {pagination.total}
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(current - 1, 1))}
+                disabled={pagination.page <= 1}
+                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="min-w-24 text-center text-xs font-semibold">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setPage((current) =>
+                    Math.min(current + 1, pagination.totalPages)
+                  )
+                }
+                disabled={pagination.page >= pagination.totalPages}
+                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {showNewForm && (
+        <Modal title="New Application" onClose={() => !saving && setShowNewForm(false)} wide>
+          <form onSubmit={createApplication} className="space-y-6">
+            <FormSection title="Applicant information">
+              <Field label="Full name" required><input required value={newForm.name} onChange={(event) => setNewForm({ ...newForm, name: event.target.value })} className={inputClass} /></Field>
+              <Field label="Alias"><input value={newForm.alias} onChange={(event) => setNewForm({ ...newForm, alias: event.target.value })} className={inputClass} /></Field>
+              <Field label="Telephone" required><input required value={newForm.telephone} onChange={(event) => setNewForm({ ...newForm, telephone: event.target.value })} className={inputClass} /></Field>
+              <Field label="Email"><input type="email" value={newForm.email} onChange={(event) => setNewForm({ ...newForm, email: event.target.value })} className={inputClass} /></Field>
+              <div className="sm:col-span-2"><Field label="Service address" required><textarea required rows={2} value={newForm.address} onChange={(event) => setNewForm({ ...newForm, address: event.target.value })} className={inputClass} /></Field></div>
+              <Field label="Occupation"><input value={newForm.occupation} onChange={(event) => setNewForm({ ...newForm, occupation: event.target.value })} className={inputClass} /></Field>
+              <Field label="Application date"><input type="date" value={newForm.applicationDate} onChange={(event) => setNewForm({ ...newForm, applicationDate: event.target.value })} className={inputClass} /></Field>
+            </FormSection>
+
+            <FormSection title="Identification">
+              <Field label="ID type">
+                <select value={newForm.idType} onChange={(event) => setNewForm({ ...newForm, idType: event.target.value })} className={inputClass}>
+                  <option value="">Select type</option>
+                  <option value="Driver's Licence">Driver&apos;s Licence</option>
+                  <option value="Passport">Passport</option>
+                  <option value="National ID">National ID</option>
+                  <option value="TRN">TRN</option>
+                </select>
+              </Field>
+              <Field label="ID number"><input value={newForm.idNumber} onChange={(event) => setNewForm({ ...newForm, idNumber: event.target.value })} className={inputClass} /></Field>
+            </FormSection>
+
+            <FormSection title="Requested service">
+              <Field label="Package" required>
+                <select
+                  required
+                  value={newForm.packageId}
+                  onChange={(event) => {
+                    const packageId = event.target.value;
+                    const selectedPackage = packages.find((item) => String(item.package_id) === packageId);
+                    setNewForm({ ...newForm, packageId, monthlyFee: selectedPackage?.default_monthly_charge ?? newForm.monthlyFee });
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">Select package</option>
+                  {packages.map((item) => <option key={item.package_id} value={item.package_id}>{item.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Monthly fee (J$)" required><input required min="0" step="0.01" type="number" value={newForm.monthlyFee} onChange={(event) => setNewForm({ ...newForm, monthlyFee: event.target.value })} className={inputClass} /></Field>
+              <Field label="Additional boxes"><input min="0" step="1" type="number" value={newForm.additionalBox} onChange={(event) => setNewForm({ ...newForm, additionalBox: event.target.value })} className={inputClass} /></Field>
+              <label className="flex items-center gap-3 self-end rounded-lg bg-surface-container-low px-4 py-3 text-sm font-medium">
+                <input type="checkbox" checked={newForm.adultChannel} onChange={(event) => setNewForm({ ...newForm, adultChannel: event.target.checked })} className="h-4 w-4 accent-primary" />
+                Adult channel requested
+              </label>
+            </FormSection>
+
+            {formError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{formError}</p>}
+            <ModalActions saving={saving} primaryLabel="Create Application" onCancel={() => setShowNewForm(false)} />
+          </form>
+        </Modal>
+      )}
+
+      {activeApplication && !decision && (
+        <ApplicationDrawer
+          application={activeApplication}
+          onClose={() => setSelected(null)}
+          footer={
+            canDecide && canTakeDecision(activeApplication) ? (
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button type="button" onClick={() => openServiceDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-tertiary px-4 py-3 text-sm font-bold text-white transition hover:bg-tertiary/90"><span className="material-symbols-outlined">check</span>Activate Customer</button>
+                <button type="button" onClick={() => openCloseDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-error/10 px-4 py-3 text-sm font-bold text-error transition hover:bg-error/15"><span className="material-symbols-outlined">close</span>Not Serviced</button>
+              </div>
+            ) : undefined
+          }
+        >
+          <div className="space-y-8">
+            <DrawerSection title="Applicant information" icon="person">
+              <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+                <Detail label="Full name" value={activeApplication.name} />
+                <Detail label="Alias" value={activeApplication.alias} />
+                <Detail label="Telephone" value={activeApplication.telephone} />
+                <Detail label="Email" value={activeApplication.email} />
+                <Detail label="Occupation" value={activeApplication.occupation} />
+              </div>
+            </DrawerSection>
+
+            <DrawerSection title="Identification" icon="badge">
+              <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+                <Detail label="ID type" value={activeApplication.id_type} />
+                <Detail label="ID number" value={activeApplication.id_number} />
+              </div>
+            </DrawerSection>
+
+            <DrawerSection title="Requested service" icon="settings_input_antenna">
+              <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+                <div className="sm:col-span-2"><Detail label="Service address" value={activeApplication.address} /></div>
+                <Detail label="Package" value={activeApplication.package_name} />
+                <Detail label="Monthly fee" value={formatCurrency(activeApplication.monthly_fee)} />
+                <Detail label="Application date" value={formatDate(activeApplication.application_date)} />
+                <Detail label="Activation date" value={formatDate(activeApplication.activation_date)} />
+                <Detail label="Adult channel" value={activeApplication.adult_channel ? "Requested" : "Not requested"} />
+                <Detail label="Additional boxes" value={String(activeApplication.additional_box ?? 0)} />
+                <Detail label="Pole box number" value={activeApplication.pole_box_number} />
+                <Detail label="Port number" value={activeApplication.port_number} />
+              </div>
+            </DrawerSection>
+
+            {activeApplication.suggested_customer_id && (
+              <div className="rounded-xl border border-secondary/20 bg-secondary-container/50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-secondary">Possible existing customer</p>
+                <p className="mt-2 font-semibold">{activeApplication.suggested_customer_name || "Existing customer"} · #{activeApplication.suggested_customer_id}</p>
+                <p className="mt-1 text-xs text-on-surface-variant">Match basis: {humanize(activeApplication.match_method || "review required")}</p>
+                <button type="button" onClick={() => navigate(`/customers/${activeApplication.suggested_customer_id}`)} className="mt-3 text-sm font-bold text-primary underline">Open customer profile</button>
+              </div>
+            )}
+
+            {activeApplication.closure_reason && (
+              <DrawerSection title="Closure note" icon="event_busy">
+                <Detail label="Reason" value={activeApplication.closure_reason} />
+              </DrawerSection>
+            )}
+          </div>
+        </ApplicationDrawer>
+      )}
+
+      {activeApplication && decision === "service" && (
+        // Activation collects the operational details required to turn an
+        // application into a live service account.
+        <Modal title="Activate customer" onClose={() => !saving && setDecision(null)}>
+          <div className="space-y-5">
+            <p className="text-sm text-on-surface-variant">Confirm how <strong>{activeApplication.name}</strong> should become an active customer.</p>
+            {activeApplication.suggested_customer_id && (
+              <label className={`block cursor-pointer rounded-xl border p-4 ${serviceMode === "link" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
+                <input type="radio" name="serviceMode" checked={serviceMode === "link"} onChange={() => setServiceMode("link")} className="mr-3 accent-primary" />
+                <span className="font-bold">Link existing customer #{activeApplication.suggested_customer_id}</span>
+                <p className="ml-7 mt-1 text-sm text-on-surface-variant">Use {activeApplication.suggested_customer_name || "the suggested customer"}; do not create a duplicate.</p>
+              </label>
+            )}
+            <label className={`block cursor-pointer rounded-xl border p-4 ${serviceMode === "create" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
+              <input type="radio" name="serviceMode" checked={serviceMode === "create"} onChange={() => setServiceMode("create")} className="mr-3 accent-primary" />
+              <span className="font-bold">Create a new customer</span>
+              <p className="ml-7 mt-1 text-sm text-on-surface-variant">Copy this application&apos;s contact, package, and rate into a new active account.</p>
+            </label>
+            {serviceMode === "create" && (
+              // Imported applications may not contain pole/port information;
+              // newly entered applications must supply both fields.
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Package" required>
+                  <select
+                    required
+                    value={activationPackageId}
+                    onChange={(event) => {
+                      const packageId = event.target.value;
+                      const selectedPackage = packages.find((item) => String(item.package_id) === packageId);
+                      setActivationPackageId(packageId);
+                      if (selectedPackage?.default_monthly_charge) {
+                        setActivationMonthlyFee(selectedPackage.default_monthly_charge);
+                      }
+                    }}
+                    className={inputClass}
+                  >
+                    <option value="">Select package</option>
+                    {packages.map((item) => <option key={item.package_id} value={item.package_id}>{item.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Monthly fee (J$)" required><input required min="0" step="0.01" type="number" value={activationMonthlyFee} onChange={(event) => setActivationMonthlyFee(event.target.value)} className={inputClass} /></Field>
+                <Field label="Pole box" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} value={activationPoleBox} onChange={(event) => setActivationPoleBox(event.target.value)} className={inputClass} placeholder="e.g. PB-104" /></Field>
+                <Field label="Port" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} value={activationPort} onChange={(event) => setActivationPort(event.target.value)} className={inputClass} placeholder="e.g. 6" /></Field>
+                <Field label="Activation date" required><input required type="date" value={activationDate} onChange={(event) => setActivationDate(event.target.value)} className={inputClass} /></Field>
+              </div>
+            )}
+            <Field label="Optional activation note"><textarea rows={3} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="Installation or activation note..." /></Field>
+            {decisionError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{decisionError}</p>}
+            <ModalActions saving={saving} primaryLabel="Activate Customer" onPrimary={submitServiceDecision} onCancel={() => setDecision(null)} />
+          </div>
+        </Modal>
+      )}
+
+      {activeApplication && decision === "close" && (
+        <Modal title="Application not serviced" onClose={() => !saving && setDecision(null)}>
+          <div className="space-y-5">
+            <p className="text-sm text-on-surface-variant">Record why this application should leave the active queue.</p>
+            <Field label="Outcome" required>
+              <select value={closeStatus} onChange={(event) => setCloseStatus(event.target.value as "cancelled" | "declined")} className={inputClass}>
+                <option value="cancelled">Cancelled by applicant</option>
+                <option value="declined">Declined by SPCL</option>
+              </select>
+            </Field>
+            <Field label="Optional note"><textarea rows={4} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="Reason or context..." /></Field>
+            {decisionError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{decisionError}</p>}
+            <ModalActions saving={saving} primaryLabel={`Mark ${humanize(closeStatus)}`} destructive onPrimary={submitCloseDecision} onCancel={() => setDecision(null)} />
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+const inputClass = "mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10";
+
+function isActionable(status: ApplicationStatus) {
+  return ["pending", "legacy_unresolved", "match_review"].includes(status);
+}
+
+function canTakeDecision(application: ApplicationRecord) {
+  if (!isActionable(application.status)) return false;
+  if (!application.legacy_source) return true;
+
+  return (
+    application.status === "match_review" &&
+    application.application_date.startsWith("2026-")
+  );
+}
+
+function humanize(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "—";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return "—";
+
+  const [, year, month, day] = match;
+  const date = new Date(
+    Date.UTC(Number(year), Number(month) - 1, Number(day))
+  );
+
+  return date.toLocaleDateString("en-JM", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function formatCurrency(value: string | null) {
+  if (!value) return "—";
+  return `J$${Number(value).toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function SummaryCard({ label, value, icon, warning = false }: { label: string; value: number; icon: string; warning?: boolean }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-surface-container bg-surface-container-lowest p-4 shadow-sm">
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          aria-hidden="true"
+          className={`material-symbols-outlined flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg text-xl ${warning ? "bg-amber-100 text-amber-700" : "bg-primary/10 text-primary"}`}
+        >
+          {icon}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+            {label}
+          </p>
+
+          <p className={`mt-1 text-2xl font-bold leading-none ${warning ? "text-amber-700" : "text-on-surface"}`}>
+            {value}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: ApplicationStatus }) {
+  const styles: Record<ApplicationStatus, string> = {
+    pending: "bg-primary/10 text-primary",
+    serviced: "bg-tertiary/10 text-tertiary",
+    cancelled: "bg-surface-container-high text-on-surface-variant",
+    declined: "bg-error/10 text-error",
+    legacy_unresolved: "bg-amber-100 text-amber-800",
+    match_review: "bg-secondary-container text-secondary",
+  };
+  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${styles[status]}`}>{humanize(status)}</span>;
+}
+
+function TableHeading({ children }: { children: React.ReactNode }) {
+  return <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">{children}</th>;
+}
+
+function IconButton({ icon, label, onClick, positive = false }: { icon: string; label: string; onClick: React.MouseEventHandler<HTMLButtonElement>; positive?: boolean }) {
+  return (
+    <button type="button" title={label} aria-label={label} onClick={onClick} className={`flex h-9 w-9 items-center justify-center rounded-lg transition ${positive ? "bg-tertiary/10 text-tertiary hover:bg-tertiary/20" : "bg-error/10 text-error hover:bg-error/20"}`}><span className="material-symbols-outlined text-lg">{icon}</span></button>
+  );
+}
+
+function ApplicationDrawer({ application, onClose, children, footer }: { application: ApplicationRecord; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="application-drawer-backdrop fixed inset-0 z-50 flex justify-end bg-black/45"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <aside
+        className="application-drawer relative flex h-dvh w-full flex-col bg-surface-container-lowest shadow-2xl sm:max-w-xl lg:max-w-2xl xl:max-w-3xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-drawer-title"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close application details"
+          className="absolute left-0 top-8 z-20 hidden h-14 w-14 -translate-x-full items-center justify-center bg-error text-white shadow-lg transition hover:bg-error/90 focus:outline-none focus:ring-4 focus:ring-error/20 sm:flex"
+        >
+          <span className="material-symbols-outlined text-3xl">close</span>
+        </button>
+
+        <header className="shrink-0 border-b border-surface-container px-6 py-6 sm:px-8">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
+                Application #{application.application_id}
+              </p>
+              <h2 id="application-drawer-title" className="mt-2 break-words text-2xl font-bold tracking-tight text-on-surface sm:text-3xl">
+                {application.name}
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close application details"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container text-on-surface-variant transition hover:bg-surface-container-high sm:hidden"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <StatusBadge status={application.status} />
+            {application.is_overdue && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Over 14 days</span>}
+            {application.legacy_source && <span className="rounded-full bg-surface-container px-3 py-1 text-xs font-medium text-on-surface-variant">Imported legacy record</span>}
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-7 sm:px-8">
+          {children}
+        </div>
+
+        {footer && (
+          <footer className="shrink-0 border-t border-surface-container bg-surface-container-lowest px-6 py-4 shadow-[0_-8px_24px_rgba(24,28,29,0.06)] sm:px-8">
+            {footer}
+          </footer>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+function DrawerSection({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="mb-5 flex items-center gap-3 border-b border-surface-container pb-3">
+        <span className="material-symbols-outlined flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-lg text-primary">
+          {icon}
+        </span>
+        <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-on-surface">
+          {title}
+        </h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Modal({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-surface-container-lowest shadow-2xl ${wide ? "max-w-4xl" : "max-w-2xl"}`}>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-container bg-surface-container-lowest px-6 py-5"><h2 className="text-xl font-bold text-on-surface">{title}</h2><button type="button" onClick={onClose} className="rounded-full p-2 text-on-surface-variant transition hover:bg-surface-container" aria-label="Close"><span className="material-symbols-outlined">close</span></button></div>
+        <div className="p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section><h3 className="mb-4 border-b border-surface-container pb-2 text-sm font-bold uppercase tracking-wider text-primary">{title}</h3><div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{children}</div></section>;
+}
+
+function Field({ label, children, required = false }: { label: string; children: React.ReactNode; required?: boolean }) {
+  return <label className="block text-sm font-semibold text-on-surface">{label}{required && <span className="ml-1 text-error">*</span>}{children}</label>;
+}
+
+function Detail({ label, value }: { label: string; value: string | null | undefined }) {
+  return <div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">{label}</p><p className="mt-1.5 font-medium text-on-surface">{value || "—"}</p></div>;
+}
+
+function ModalActions({ saving, primaryLabel, onCancel, onPrimary, destructive = false }: { saving: boolean; primaryLabel: string; onCancel: () => void; onPrimary?: () => void; destructive?: boolean }) {
+  return (
+    <div className="flex justify-end gap-3 border-t border-surface-container pt-5">
+      <button type="button" disabled={saving} onClick={onCancel} className="rounded-lg bg-surface-container px-5 py-2.5 text-sm font-bold text-on-surface-variant disabled:opacity-50">Cancel</button>
+      <button type={onPrimary ? "button" : "submit"} disabled={saving} onClick={onPrimary} className={`rounded-lg px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50 ${destructive ? "bg-error" : "bg-primary"}`}>{saving ? "Saving..." : primaryLabel}</button>
     </div>
   );
 }

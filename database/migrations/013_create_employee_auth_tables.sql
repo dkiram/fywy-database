@@ -1,3 +1,4 @@
+-- Creates locations and employee identities used for login, roles, and branch scoping.
 CREATE TABLE IF NOT EXISTS public.locations (
     location_id SMALLSERIAL PRIMARY KEY,
 
