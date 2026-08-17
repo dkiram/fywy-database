@@ -246,11 +246,13 @@ own after a NAS reboot or power cut.
 
 ## What comes next (not in this phase)
 
-1. **Tailscale**, so Newport, Mandeville, May Pen and Hanover reach the NAS
-   privately instead of AnyDesk-ing into a home office computer. This also gives
-   HTTPS, at which point `SESSION_COOKIE_SECURE` flips to `true`.
+1. **Remote access for the branch offices** via Cloudflare Tunnel — see
+   `docs/remote-access-cloudflare.md`. This also gives HTTPS, at which point
+   `SESSION_COOKIE_SECURE` flips to `true`.
 2. **The Electron Windows installer**, so staff get a real desktop application
    instead of a browser tab.
-3. **Final Access import and cutover.**
+3. **External drive backup** via TOS USB Copy, pulling from
+   `/Volume1/SPCL/database-backups`.
+4. **Final Access import and cutover.**
 
 Phase 1 has to be working and backed up before any of those start.

@@ -99,6 +99,36 @@ services:
     networks:
       - spcl
 
+  # Remote access for the branch offices.
+  #
+  # Opt-in, because the LAN-only deployment must keep working without it:
+  #   docker-compose -f docker-compose.prod.yml --env-file .env.production \
+  #     --profile remote up -d
+  #
+  # cloudflared makes an OUTBOUND connection to Cloudflare. Nothing is exposed
+  # on the router, no ports are forwarded, and the NAS stays unreachable from
+  # the internet. Routing and access rules live in the Cloudflare dashboard.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: spcl-cloudflared
+    restart: unless-stopped
+
+    profiles:
+      - remote
+
+    depends_on:
+      - api
+
+    environment:
+      TZ: America/Jamaica
+
+    # The token identifies this tunnel. It is a secret - it lives in
+    # .env.production, never in the repository.
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+
+    networks:
+      - spcl
+
 networks:
   spcl:
     driver: bridge
