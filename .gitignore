@@ -24,3 +24,10 @@ deploy/backups/
 # Describes how to reach the NAS. Holds no passwords, but not worth
 # publishing. deploy/deploy.conf.template is the committed version.
 deploy/deploy.conf
+
+# Real staff lists: names and temp passwords, read by
+# server/src/scripts/createEmployees.ts over stdin. The script is committed,
+# the people are not. deploy/staff.example.json is the committed shape.
+staff.json
+staff*.json
+!deploy/staff.example.json

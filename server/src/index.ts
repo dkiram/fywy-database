@@ -707,6 +707,15 @@ app.post("/api/auth/login", async (req, res) => {
 
       WHERE LOWER(e.username) = LOWER($1)
 
+        -- Technicians are people, not accounts: they have no username and no
+        -- hash, so they can be assigned service tickets and nothing else.
+        -- Excluding them here rather than after the lookup means a row with
+        -- no credentials falls into the same "unknown username" path as any
+        -- other miss - rate limited, and giving nothing away about who
+        -- exists. It also keeps a NULL from ever reaching bcrypt.compare,
+        -- which throws rather than returning false.
+        AND e.password_hash IS NOT NULL
+
       LIMIT 1;
       `,
       [username.trim()]

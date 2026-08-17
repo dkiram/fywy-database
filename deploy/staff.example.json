@@ -1,0 +1,24 @@
+[
+  {
+    "firstName": "Example",
+    "lastName": "Admin",
+    "role": "admin",
+    "locationCode": "HO",
+    "username": "eadmin",
+    "password": "replace-with-a-real-temp-password"
+  },
+  {
+    "firstName": "Example",
+    "lastName": "Cashier",
+    "role": "branch",
+    "locationCode": "NEW",
+    "username": "ecashier",
+    "password": "replace-with-a-real-temp-password"
+  },
+  {
+    "firstName": "Example",
+    "lastName": "Technician",
+    "role": "technician",
+    "locationCode": "HO"
+  }
+]
