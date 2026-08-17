@@ -80,10 +80,10 @@ function SettingsPage() {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
           My account
         </p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-on-surface">
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-on-surface">
           Settings
         </h1>
         <p className="mt-1 text-sm text-on-surface-variant">
@@ -97,11 +97,11 @@ function SettingsPage() {
           <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
             <div className="bg-sidebar px-6 py-7 text-white">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-bold tracking-wide shadow-lg">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-medium tracking-wide shadow-lg">
                   {initials}
                 </div>
                 <div className="min-w-0">
-                  <h2 className="truncate text-xl font-bold">
+                  <h2 className="truncate text-xl font-semibold">
                     {employee
                       ? `${employee.firstName} ${employee.lastName}`
                       : "Employee"}
@@ -138,7 +138,7 @@ function SettingsPage() {
                 </span>
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="font-bold text-on-surface">Sign out</h2>
+                <h2 className="font-semibold text-on-surface">Sign out</h2>
                 <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                   End your session on this device. You will need your credentials to sign in again.
                 </p>
@@ -146,7 +146,7 @@ function SettingsPage() {
                   type="button"
                   onClick={signOut}
                   disabled={signingOut}
-                  className="mt-4 rounded-lg bg-error/10 px-4 py-2.5 text-sm font-bold text-error transition hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-4 rounded-lg bg-error/10 px-4 py-2.5 text-sm font-medium text-error transition hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {signingOut ? "Signing out..." : "Sign out of FYWY"}
                 </button>
@@ -164,7 +164,7 @@ function SettingsPage() {
               </span>
             </div>
             <div>
-              <h2 className="text-lg font-bold text-on-surface">Change password</h2>
+              <h2 className="text-lg font-semibold text-on-surface">Change password</h2>
               <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                 Use a password you do not use for another account.
               </p>
@@ -225,7 +225,7 @@ function SettingsPage() {
               <button
                 type="submit"
                 disabled={saving || !currentPassword || !newPassword || !confirmPassword}
-                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-on-primary shadow-sm transition hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary shadow-sm transition hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">
                   lock_reset
@@ -247,7 +247,7 @@ function ProfileRow({ icon, label, value }: { icon: string; label: string; value
         {icon}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">{label}</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p>
         <p className="mt-1 break-words text-sm font-semibold text-on-surface">{value}</p>
       </div>
     </div>
@@ -284,7 +284,7 @@ function PasswordField({
           autoComplete={autoComplete}
           required
           maxLength={128}
-          className="h-12 w-full rounded-lg border border-outline-variant bg-white px-4 pl-11 text-sm font-normal text-on-surface outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+          className="h-12 w-full rounded-lg border border-outline-variant bg-white px-4 pl-11 text-sm font-normal text-on-surface transition focus:border-primary"
         />
       </div>
     </label>

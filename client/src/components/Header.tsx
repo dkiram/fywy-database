@@ -3,7 +3,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router";
 
 
-function Header() {
+function Header({ notificationCount = 0 }: { notificationCount?: number }) {
 
 const { employee, logout } = useAuth();
 const navigate = useNavigate();
@@ -17,27 +17,23 @@ const employeeInitials = employee
   return (
 <header className="fixed left-72 right-0 top-0 z-40 flex h-20 items-center justify-end bg-surface/90 px-8 shadow-sm backdrop-blur-xl">
 
-<button
-  type="button"
-  onClick={async () => {
-    await logout();
-    navigate("/");
-  }}
-  className="text-sm text-on-surface-variant hover:text-on-surface"
->
-  Logout
-</button>
-
       <div className="flex items-center gap-6">
         <button
           type="button"
+          aria-label={
+            notificationCount > 0
+              ? `Notifications, ${notificationCount} unread`
+              : "Notifications"
+          }
           className="relative rounded-full p-2 transition hover:bg-surface-container-high"
         >
           <span className="material-symbols-outlined text-on-surface-variant">
             notifications
           </span>
 
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
+          {notificationCount > 0 && (
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
+          )}
         </button>
 
         <div className="flex items-center gap-3 border-l border-outline-variant pl-4">
@@ -61,10 +57,21 @@ const employeeInitials = employee
             className="flex h-10 w-10 items-center justify-center rounded-full bg-primary"
             aria-label={employee ? `${employee.firstName} ${employee.lastName}` : "Employee"}
           >
-            <span className="text-sm font-bold tracking-wide text-on-primary">
+            <span className="text-sm font-medium tracking-wide text-on-primary">
               {employeeInitials}
             </span>
           </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              await logout();
+              navigate("/");
+            }}
+            className="ml-1 text-sm text-on-surface-variant hover:text-on-surface"
+          >
+            Logout
+          </button>
         </div>
       </div>
     </header>

@@ -20,12 +20,16 @@ type Customer = {
 
   package_id: number | null;
   package_name: string | null;
+  package_service_type: "cable" | "internet" | "cable_internet" | null;
+  package_plan_tier: string | null;
+  package_speed_mbps: number | null;
   monthly_fee: string | null;
 
   application_date: string | null;
   activation_date: string | null;
   deactivation_date: string | null;
   reactivation_date: string | null;
+  next_billing_date: string | null;
 
   status: AccountStatus;
   adult_channel: boolean;
@@ -38,6 +42,15 @@ type Customer = {
   reconnection_fee: string | null;
 };
 
+type PackageOption = {
+  package_id: number;
+  name: string;
+  default_monthly_charge: string | null;
+  service_type: "cable" | "internet" | "cable_internet";
+  plan_tier: string | null;
+  speed_mbps: number | null;
+};
+
 import PaymentHistory from "../components/PaymentHistory";
 
 
@@ -47,7 +60,7 @@ function CustomerProfilePage() {
   const { employee } = useAuth();
 
 
-const canChangeMonthlyRate =
+const canManageSubscription =
   employee?.role === "admin" ||
   employee?.role === "head_office";
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -57,11 +70,12 @@ const [error, setError] = useState("");
   "overview"
 );
 
-const [editingRate, setEditingRate] = useState(false);
-const [newMonthlyFee, setNewMonthlyFee] = useState("");
-const [rateChangeReason, setRateChangeReason] = useState("");
-const [savingRate, setSavingRate] = useState(false);
-const [rateError, setRateError] = useState("");
+const [packages, setPackages] = useState<PackageOption[]>([]);
+const [editingSubscription, setEditingSubscription] = useState(false);
+const [selectedPackageId, setSelectedPackageId] = useState("");
+const [subscriptionReason, setSubscriptionReason] = useState("");
+const [savingSubscription, setSavingSubscription] = useState(false);
+const [subscriptionError, setSubscriptionError] = useState("");
 const [showPaymentForm, setShowPaymentForm] = useState(false);
 const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceipt | null>(null);
 const [paymentRefreshKey, setPaymentRefreshKey] = useState(0);
@@ -94,6 +108,17 @@ useEffect(() => {
 
   loadCustomer();
 }, [customerId]);
+
+useEffect(() => {
+  if (!canManageSubscription) return;
+  apiFetch("/api/packages")
+    .then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load packages.");
+      setPackages(data.packages);
+    })
+    .catch(() => setPackages([]));
+}, [canManageSubscription]);
 
 if (loading) {
   return (
@@ -140,14 +165,14 @@ if (error || !customer) {
       <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-bold tracking-tight text-on-surface lg:text-5xl">
+            <h1 className="text-4xl font-semibold tracking-tight text-on-surface lg:text-5xl">
               {customer.name || "Unnamed customer"}
             </h1>
 
             <div className={`flex items-center gap-2 rounded-full px-3 py-1 ${statusPillClass(customer.status)}`}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
 
-              <span className="text-xs font-bold uppercase tracking-wider">
+              <span className="text-xs font-semibold uppercase tracking-wider">
                 {customer.status.replace("_", " ")}
               </span>
             </div>
@@ -165,23 +190,24 @@ if (error || !customer) {
         {/* Future actions */}
  <div className="flex items-center gap-4">
   {activeTab === "overview" ? (
-    <button
-      type="button"
-      disabled
-      title="Coming later"
-      className="flex cursor-not-allowed items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-on-primary opacity-80 shadow-md"
-    >
-      <span className="material-symbols-outlined text-lg">
-        edit
-      </span>
+    employee?.role === "admin" || employee?.role === "head_office" ? (
+      <button
+        type="button"
+        onClick={() => navigate(`/customers/${customer.customer_id}/edit`)}
+        className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container"
+      >
+        <span className="material-symbols-outlined text-lg">
+          edit
+        </span>
 
-      Edit Profile
-    </button>
+        Edit Profile
+      </button>
+    ) : null
   ) : activeTab === "payments" ? (
     <button
       type="button"
       onClick={() => setShowPaymentForm(true)}
-      className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-on-primary shadow-md transition hover:bg-primary-container"
+      className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container"
     >
       <span className="material-symbols-outlined text-lg">
         add
@@ -193,7 +219,7 @@ if (error || !customer) {
     <button
       type="button"
       onClick={() => navigate(`/service-requests?customerId=${customer.customer_id}`)}
-      className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-on-primary shadow-md transition hover:bg-primary-container"
+      className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container"
     >
       <span className="material-symbols-outlined text-lg">add</span>
       New Service Ticket
@@ -219,7 +245,7 @@ if (error || !customer) {
     onClick={() => setActiveTab("overview")}
     className={
       activeTab === "overview"
-        ? "border-b-2 border-primary px-6 py-3 text-sm font-bold text-primary"
+        ? "border-b-2 border-primary px-6 py-3 text-sm font-medium text-primary"
         : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
     }
   >
@@ -231,7 +257,7 @@ if (error || !customer) {
     onClick={() => setActiveTab("payments")}
     className={
       activeTab === "payments"
-        ? "border-b-2 border-primary px-6 py-3 text-sm font-bold text-primary"
+        ? "border-b-2 border-primary px-6 py-3 text-sm font-medium text-primary"
         : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
     }
   >
@@ -243,7 +269,7 @@ if (error || !customer) {
     onClick={() => setActiveTab("support")}
     className={
       activeTab === "support"
-        ? "border-b-2 border-primary px-6 py-3 text-sm font-bold text-primary"
+        ? "border-b-2 border-primary px-6 py-3 text-sm font-medium text-primary"
         : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
     }
   >
@@ -262,7 +288,7 @@ if (error || !customer) {
                 contact_mail
               </span>
 
-              <h2 className="text-lg font-bold">
+              <h2 className="text-lg font-semibold">
                 Customer Information
               </h2>
             </div>
@@ -313,7 +339,7 @@ if (error || !customer) {
                   router
                 </span>
 
-                <h2 className="font-bold">
+                <h2 className="font-semibold">
                   Service / Equipment
                 </h2>
               </div>
@@ -324,11 +350,6 @@ if (error || !customer) {
                  value={customer.pole_box_number || "—"} />
 
                 <DetailRow label="Port" value={customer.port_number || "—"} />
-
-                <DetailRow
-                  label="Service Area"
-                  value="Montego Bay"
-                />
               </div>
             </section>
 
@@ -338,7 +359,7 @@ if (error || !customer) {
                   manage_accounts
                 </span>
 
-                <h2 className="font-bold">
+                <h2 className="font-semibold">
                   Account Info
                 </h2>
               </div>
@@ -358,6 +379,28 @@ if (error || !customer) {
               </div>
             </section>
           </div>
+
+          {employee && (
+            // Keep operational controls in the wider profile column so status,
+            // balances, actions, and history can use a horizontal layout.
+            <AccountOperationsPanel
+              customerId={customer.customer_id}
+              status={customer.status}
+              employeeRole={employee.role}
+              onStatusChanged={(update: AccountStatusUpdate) => {
+                setCustomer((current) =>
+                  current
+                    ? {
+                        ...current,
+                        status: update.status,
+                        deactivation_date: update.deactivation_date,
+                        reactivation_date: update.reactivation_date,
+                      }
+                    : current
+                );
+              }}
+            />
+          )}
         </div>
 
         {/* Right column */}
@@ -369,7 +412,7 @@ if (error || !customer) {
                 tv
               </span>
 
-              <h2 className="text-lg font-bold">
+              <h2 className="text-lg font-semibold">
                 Current Package
               </h2>
             </div>
@@ -379,9 +422,14 @@ if (error || !customer) {
                 Subscribed Plan
               </p>
 
-              <p className="mt-2 text-2xl font-bold">
+              <p className="mt-2 text-2xl font-medium">
                {customer.package_name || "No package"}
               </p>
+              {customer.package_speed_mbps && (
+                <p className="mt-1 text-sm font-semibold opacity-80">
+                  {customer.package_speed_mbps} Mbps
+                </p>
+              )}
             </div>
 
            <div>
@@ -394,145 +442,18 @@ if (error || !customer) {
       <>
         <span className="text-xl">J$</span>
 
-        <span className="text-4xl font-bold">
+        <span className="text-4xl font-medium">
           {Number(customer.monthly_fee).toLocaleString()}
         </span>
       </>
     ) : (
-      <span className="text-4xl font-bold">—</span>
+      <span className="text-4xl font-medium">—</span>
     )}
   </div>
 
   <p className="mt-2 text-xs opacity-70">
     This customer&apos;s current billed monthly rate
   </p>
-
-  {canChangeMonthlyRate && !editingRate && (
-  <button
-    type="button"
-    onClick={() => {
-      setNewMonthlyFee(customer.monthly_fee ?? "");
-      setEditingRate(true);
-    }}
-    className="mt-3 text-sm font-semibold underline"
-  >
-    Change Rate
-  </button>
-)}
-
-{editingRate && (
-  <div className="mt-4 flex flex-col gap-3 rounded-xl bg-black/10 p-4">
-    <div>
-      <label className="mb-1 block text-xs font-semibold">
-        New Monthly Rate
-      </label>
-
-      <input
-        type="number"
-        min="0"
-        step="0.01"
-        value={newMonthlyFee}
-        onChange={(event) => {
-          setNewMonthlyFee(event.target.value);
-        }}
-        className="w-full rounded-lg bg-white px-3 py-2 text-sm text-on-surface outline-none"
-      />
-    </div>
-
-    <div>
-      <label className="mb-1 block text-xs font-semibold">
-        Reason for Change
-      </label>
-
-      <textarea
-        value={rateChangeReason}
-        onChange={(event) => {
-          setRateChangeReason(event.target.value);
-        }}
-        placeholder="Explain why this rate is changing..."
-        rows={3}
-        className="w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-on-surface outline-none"
-      />
-    </div>
-
-    {rateError && (
-      <p className="text-sm text-error">
-        {rateError}
-      </p>
-    )}
-
-    <div className="flex gap-2">
-      <button
-        type="button"
-        disabled={savingRate}
-        onClick={async () => {
-          try {
-            setSavingRate(true);
-            setRateError("");
-
-            const response = await apiFetch(
-              `/api/customers/${customer.customer_id}/monthly-fee`,
-              {
-                method: "PATCH",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  monthlyFee: newMonthlyFee,
-                  reason: rateChangeReason,
-                }),
-              }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok) {
-              throw new Error(
-                data.error || "Could not update monthly rate."
-              );
-            }
-
-            setCustomer((current) =>
-              current
-                ? {
-                    ...current,
-                    monthly_fee: data.monthlyFee,
-                  }
-                : current
-            );
-
-            setEditingRate(false);
-            setRateChangeReason("");
-          } catch (error) {
-            setRateError(
-              error instanceof Error
-                ? error.message
-                : "Could not update monthly rate."
-            );
-          } finally {
-            setSavingRate(false);
-          }
-        }}
-        className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-primary disabled:opacity-60"
-      >
-        {savingRate ? "Saving..." : "Save Rate"}
-      </button>
-
-      <button
-        type="button"
-        disabled={savingRate}
-        onClick={() => {
-          setEditingRate(false);
-          setRateError("");
-          setRateChangeReason("");
-        }}
-        className="rounded-lg bg-black/20 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-      >
-        Cancel
-      </button>
-    </div>
-  </div>
-)}
 
 </div>
 
@@ -559,44 +480,138 @@ if (error || !customer) {
   Next Billing Date
 </p>
 
-<p className="mt-1 text-sm font-bold">
-  Not yet calculated
+<p className="mt-1 text-sm font-medium">
+  {customer.next_billing_date
+    ? formatDate(customer.next_billing_date)
+    : customer.status === "active"
+      ? "Activation date required"
+      : "Billing paused"}
 </p>
+{!customer.next_billing_date && customer.status !== "active" && (
+  <p className="mt-1 text-xs opacity-70">
+    Recurring charges resume when the account is active.
+  </p>
+)}
             </div>
 
-            <button
-              type="button"
-              disabled
-              title="Package changes will be added separately"
-              className="w-full cursor-not-allowed rounded-lg bg-white py-3 font-bold text-primary opacity-60"
-            >
-              Manage Subscription
-            </button>
+            {canManageSubscription && !editingSubscription && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPackageId(String(customer.package_id ?? ""));
+                  setSubscriptionReason("");
+                  setSubscriptionError("");
+                  setEditingSubscription(true);
+                }}
+                className="w-full rounded-lg bg-white py-3 font-medium text-primary transition hover:bg-white/90"
+              >
+                Manage Subscription
+              </button>
+            )}
+
+            {editingSubscription && (
+              <div className="mt-4 space-y-3 rounded-xl bg-black/15 p-4">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold">New Package &amp; Speed</label>
+                  <select
+                    value={selectedPackageId}
+                    onChange={(event) => setSelectedPackageId(event.target.value)}
+                    className="w-full rounded-lg bg-white px-3 py-2 text-sm text-on-surface"
+                  >
+                    <option value="">Select package</option>
+                    {packages.map((item) => (
+                      <option key={item.package_id} value={item.package_id}>
+                        {item.name} — {item.default_monthly_charge
+                          ? `J$${Number(item.default_monthly_charge).toLocaleString()}/month`
+                          : "Price unavailable"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold">Reason for Change</label>
+                  <textarea
+                    rows={3}
+                    value={subscriptionReason}
+                    onChange={(event) => setSubscriptionReason(event.target.value)}
+                    placeholder="Upgrade requested by customer..."
+                    className="w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-on-surface"
+                  />
+                </div>
+
+                <p className="text-xs leading-5 opacity-75">
+                  The catalog price applies to future billing anniversaries. Existing ledger charges are not changed.
+                </p>
+                {subscriptionError && <p className="text-sm text-error">{subscriptionError}</p>}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={savingSubscription}
+                    onClick={async () => {
+                      try {
+                        setSavingSubscription(true);
+                        setSubscriptionError("");
+                        const response = await apiFetch(
+                          `/api/customers/${customer.customer_id}/subscription`,
+                          {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              packageId: selectedPackageId,
+                              reason: subscriptionReason,
+                            }),
+                          }
+                        );
+                        const data = await response.json();
+                        if (!response.ok) {
+                          throw new Error(data.error || "Could not update subscription.");
+                        }
+                        const chosen = packages.find(
+                          (item) => item.package_id === Number(data.packageId)
+                        );
+                        setCustomer((current) => current ? {
+                          ...current,
+                          package_id: data.packageId,
+                          package_name: data.packageName,
+                          package_service_type: data.serviceType,
+                          package_plan_tier: data.planTier,
+                          package_speed_mbps: data.speedMbps,
+                          monthly_fee: data.monthlyFee,
+                          default_monthly_charge:
+                            chosen?.default_monthly_charge ?? data.monthlyFee,
+                        } : current);
+                        setEditingSubscription(false);
+                        setSubscriptionReason("");
+                      } catch (error) {
+                        setSubscriptionError(
+                          error instanceof Error ? error.message : "Could not update subscription."
+                        );
+                      } finally {
+                        setSavingSubscription(false);
+                      }
+                    }}
+                    className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-primary disabled:opacity-60"
+                  >
+                    {savingSubscription ? "Saving..." : "Save Package"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingSubscription}
+                    onClick={() => {
+                      setEditingSubscription(false);
+                      setSubscriptionError("");
+                    }}
+                    className="rounded-lg bg-black/20 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
-          {employee && (
-            // MVP 3 replaces the placeholder activity feed with real status
-            // controls and immutable history for this customer.
-            <AccountOperationsPanel
-              customerId={customer.customer_id}
-              status={customer.status}
-              employeeRole={employee.role}
-              onStatusChanged={(update: AccountStatusUpdate) => {
-                // Keep the profile header/status card synchronized with the
-                // transition returned by the account-operations API.
-                setCustomer((current) =>
-                  current
-                    ? {
-                        ...current,
-                        status: update.status,
-                        deactivation_date: update.deactivation_date,
-                        reactivation_date: update.reactivation_date,
-                      }
-                    : current
-                );
-              }}
-            />
-          )}
         </div>
         </div>
 ) : activeTab === "payments" ? (
@@ -619,7 +634,7 @@ if (error || !customer) {
       )}
 
       {paymentReceipt && (
-        <PaymentReceiptModal payment={paymentReceipt} onClose={() => setPaymentReceipt(null)} />
+        <PaymentReceiptModal payment={paymentReceipt} onClose={() => setPaymentReceipt(null)} onVoided={() => setPaymentRefreshKey((current) => current + 1)} onDeleted={() => setPaymentRefreshKey((current) => current + 1)} />
       )}
     </div> 
   );
@@ -667,7 +682,7 @@ function statusPillClass(status: AccountStatus) {
   const styles: Record<AccountStatus, string> = {
     active: "bg-tertiary/10 text-tertiary",
     disconnected: "bg-error/10 text-error",
-    pending_reconnection: "bg-amber-100 text-amber-800",
+    pending_reconnection: "bg-warning-container text-warning",
     closed: "bg-surface-container-high text-on-surface-variant",
     archived: "bg-surface-container-high text-on-surface-variant",
   };

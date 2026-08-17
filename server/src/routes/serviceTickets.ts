@@ -102,6 +102,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
         AND (
           $1 = ''
           OR t.service_ticket_id::TEXT ILIKE $2
+          OR COALESCE(t.legacy_customer_id::TEXT, '') ILIKE $2
           OR c.customer_id::TEXT ILIKE $2
           OR COALESCE(c.name, '') ILIKE $2
           OR COALESCE(c.telephone, '') ILIKE $2
@@ -113,7 +114,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     const countResult = await pool.query(
       `SELECT COUNT(*)::INTEGER AS total
        FROM public.service_tickets t
-       JOIN public.customers c ON c.customer_id = t.customer_id
+       LEFT JOIN public.customers c ON c.customer_id = t.customer_id
        ${whereSql};`,
       params
     );
@@ -128,6 +129,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
         SELECT
           t.service_ticket_id,
           t.customer_id,
+          t.legacy_customer_id,
           c.name AS customer_name,
           c.telephone,
           c.address,
@@ -144,7 +146,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           t.resolution_notes,
           t.updated_at
         FROM public.service_tickets t
-        JOIN public.customers c ON c.customer_id = t.customer_id
+        LEFT JOIN public.customers c ON c.customer_id = t.customer_id
         LEFT JOIN public.employees assignee
           ON assignee.employee_id = t.assigned_employee_id
         ${whereSql}
@@ -195,7 +197,7 @@ serviceTicketsRouter.get(
         SELECT t.*, c.name AS customer_name, c.address, c.telephone,
           CONCAT_WS(' ', assignee.first_name, assignee.last_name) AS assigned_employee_name
         FROM public.service_tickets t
-        JOIN public.customers c ON c.customer_id = t.customer_id
+        LEFT JOIN public.customers c ON c.customer_id = t.customer_id
         LEFT JOIN public.employees assignee ON assignee.employee_id = t.assigned_employee_id
         WHERE t.service_ticket_id = $1;
         `,

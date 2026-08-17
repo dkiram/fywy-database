@@ -4,6 +4,7 @@ import AppLayout from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage";
 import CustomerSearchPage from "./pages/CustomerSearchPage";
 import CustomerProfilePage from "./pages/CustomerProfilePage";
+import EditCustomerProfilePage from "./pages/EditCustomerProfilePage";
 import DashboardPage from "./pages/DashboardPage";
 import ApplicationsPage from "./pages/ApplicationsPage";
 import ServiceRequestsPage from "./pages/ServiceRequestsPage";
@@ -22,10 +23,11 @@ function App() {
       {/* Login does NOT use the app sidebar/header */}
   <Route path="/" element={<LoginPage />} />
 
+  {/* Dashboard data is administrator-only; denied roles return to Customers. */}
   <Route
     path="/dashboard"
     element={
-      <ProtectedRoute>
+      <ProtectedRoute allowedRoles={["admin"]}>
         <AppLayout>
           <DashboardPage />
         </AppLayout>
@@ -33,10 +35,11 @@ function App() {
     }
   />
 
+  {/* Daily collection totals are administrator-only. */}
   <Route
     path="/payments"
     element={
-      <ProtectedRoute>
+      <ProtectedRoute allowedRoles={["admin"]}>
         <AppLayout>
           <PaymentsPage />
         </AppLayout>
@@ -66,6 +69,17 @@ function App() {
   }
 />
 
+<Route
+  path="/customers/:customerId/edit"
+  element={
+    <ProtectedRoute allowedRoles={["admin", "head_office"]}>
+      <AppLayout>
+        <EditCustomerProfilePage />
+      </AppLayout>
+    </ProtectedRoute>
+  }
+/>
+
   <Route
     path="/applications"
     element={
@@ -81,7 +95,7 @@ function App() {
   <Route
     path="/account-operations"
     element={
-      <ProtectedRoute>
+      <ProtectedRoute allowedRoles={["admin", "head_office"]}>
         <AppLayout>
           <AccountOperationsPage />
         </AppLayout>
@@ -103,7 +117,7 @@ function App() {
   <Route
     path="/pole-boxes"
     element={
-    <ProtectedRoute>
+      <ProtectedRoute allowedRoles={["admin", "head_office"]}>
       <AppLayout>
         <PoleBoxesPage />
       </AppLayout>
@@ -114,7 +128,7 @@ function App() {
   <Route
     path="/reports"
     element={
-    <ProtectedRoute>
+      <ProtectedRoute allowedRoles={["admin", "head_office"]}>
       <AppLayout>
         <ReportsPage />
       </AppLayout>

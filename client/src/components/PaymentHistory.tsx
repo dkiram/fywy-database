@@ -19,6 +19,9 @@ type Payment = {
   location: string | null;
   cashier_name: string | null;
   receipt_number: string | null;
+  is_voided: boolean;
+  voided_at: string | null;
+  void_reason: string | null;
 };
 
 type Pagination = {
@@ -58,6 +61,7 @@ const [fromDate, setFromDate] = useState("");
 const [toDate, setToDate] = useState("");
 const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
 const [receiptError, setReceiptError] = useState("");
+const [voidRefreshKey, setVoidRefreshKey] = useState(0);
 
   useEffect(() => {
     // A newly selected customer always starts at the first payment page.
@@ -123,13 +127,14 @@ const response = await apiFetch(
   fromDate,
   toDate,
   refreshKey,
+  voidRefreshKey,
 ]);
 
   return (
     <div className="space-y-6">
       {/* Heading */}
       <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-bold text-on-surface">
+        <h2 className="text-xl font-semibold text-on-surface">
           Payment History
         </h2>
 
@@ -160,7 +165,7 @@ const response = await apiFetch(
         setSearchInput(event.target.value);
       }}
       placeholder="Type, amount, location, cashier..."
-      className="w-full rounded-lg bg-surface-container-low px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+      className="w-full rounded-lg bg-surface-container-low px-4 py-2.5 text-sm"
     />
   </div>
 
@@ -175,7 +180,7 @@ const response = await apiFetch(
         setPaymentType(event.target.value);
         setPage(1);
       }}
-      className="rounded-lg bg-surface-container-low px-4 py-2.5 text-sm outline-none"
+      className="rounded-lg bg-surface-container-low px-4 py-2.5 text-sm"
     >
       <option value="">All Types</option>
       <option value="Monthly Fee">Monthly Fee</option>
@@ -199,7 +204,7 @@ const response = await apiFetch(
         setFromDate(event.target.value);
         setPage(1);
       }}
-      className="rounded-lg bg-surface-container-low px-3 py-2.5 text-sm outline-none"
+      className="rounded-lg bg-surface-container-low px-3 py-2.5 text-sm"
     />
   </div>
 
@@ -215,7 +220,7 @@ const response = await apiFetch(
         setToDate(event.target.value);
         setPage(1);
       }}
-      className="rounded-lg bg-surface-container-low px-3 py-2.5 text-sm outline-none"
+      className="rounded-lg bg-surface-container-low px-3 py-2.5 text-sm"
     />
   </div>
 
@@ -262,7 +267,7 @@ const response = await apiFetch(
                 <TableHeading>Location</TableHeading>
                 <TableHeading>Cashier</TableHeading>
 
-                <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                   Receipt
                 </th>
               </tr>
@@ -288,13 +293,16 @@ const response = await apiFetch(
                         }
                         recognized={payment.payment_type !== null}
                       />
+                      {payment.is_voided && (
+                        <span className="ml-2 inline-flex rounded-full bg-error/10 px-3 py-1 text-xs font-medium text-error">Voided</span>
+                      )}
                     </td>
 
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-on-surface-variant">
                       {formatMonth(payment.month_paid)}
                     </td>
 
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-bold text-on-surface">
+                    <td className={`whitespace-nowrap px-6 py-4 text-sm font-medium ${payment.is_voided ? "text-error line-through" : "text-on-surface"}`}>
                       {formatCurrency(payment.amount_paid)}
                     </td>
 
@@ -323,7 +331,7 @@ const response = await apiFetch(
                             setReceiptError(loadError instanceof Error ? loadError.message : "Could not load receipt.");
                           }
                         }}
-                        className="rounded-lg px-3 py-2 text-sm font-bold text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-35"
+                        className="rounded-lg px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-35"
                       >
                         View
                       </button>
@@ -429,7 +437,7 @@ const response = await apiFetch(
       </div>
 
       {receiptError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{receiptError}</p>}
-      {receipt && <PaymentReceiptModal payment={receipt} onClose={() => setReceipt(null)} />}
+      {receipt && <PaymentReceiptModal payment={receipt} onClose={() => setReceipt(null)} onVoided={() => setVoidRefreshKey((current) => current + 1)} onDeleted={() => setVoidRefreshKey((current) => current + 1)} />}
     </div>
   );
 }
@@ -440,7 +448,7 @@ type TableHeadingProps = {
 
 function TableHeading({ children }: TableHeadingProps) {
   return (
-    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
       {children}
     </th>
   );
@@ -459,8 +467,8 @@ function PaymentTypeBadge({
     <span
       className={
         recognized
-          ? "inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
-          : "inline-flex rounded-full bg-error/10 px-3 py-1 text-xs font-bold text-error"
+          ? "inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+          : "inline-flex rounded-full bg-error/10 px-3 py-1 text-xs font-medium text-error"
       }
     >
       {type}

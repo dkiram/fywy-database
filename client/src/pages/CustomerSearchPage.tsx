@@ -57,7 +57,7 @@ function CustomerSearchPage() {
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-8 py-8">
       {/* Page heading */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-on-surface">
+        <h1 className="text-2xl font-semibold tracking-tight text-on-surface">
           Customer Search
         </h1>
 
@@ -77,7 +77,7 @@ function CustomerSearchPage() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search by name, customer ID, or phone..."
-          className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm outline-none transition focus:ring-2 focus:ring-primary/20"
+          className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm transition"
         />
       </div>
 
@@ -101,7 +101,7 @@ function CustomerSearchPage() {
                 <TableHeading>Status</TableHeading>
                 <TableHeading>Contact</TableHeading>
 
-                <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                   Actions
                 </th>
               </tr>
@@ -118,7 +118,7 @@ function CustomerSearchPage() {
                       {customer.customer_id}
                     </td>
 
-                    <td className="px-6 py-4 text-sm font-bold text-on-surface">
+                    <td className="px-6 py-4 text-sm font-medium text-on-surface">
                       {customer.name || "Unnamed customer"}
                     </td>
 
@@ -187,7 +187,7 @@ type TableHeadingProps = {
 
 function TableHeading({ children }: TableHeadingProps) {
   return (
-    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
       {children}
     </th>
   );
@@ -198,15 +198,21 @@ type StatusBadgeProps = {
 };
 
 function StatusBadge({ status }: StatusBadgeProps) {
-  const isActive = status === "active";
+  // Colour marks an exception. "closed" and "archived" are ordinary record
+  // states, not failures, so they no longer render as red alarms.
+  const styles: Record<string, string> = {
+    active: "bg-tertiary/10 text-tertiary",
+    disconnected: "bg-error/10 text-error",
+    pending_reconnection: "bg-warning-container text-warning",
+    closed: "bg-surface-container-high text-on-surface-variant",
+    archived: "bg-surface-container-high text-on-surface-variant",
+  };
 
   return (
     <span
-      className={
-        isActive
-          ? "rounded-full bg-tertiary/10 px-3 py-1 text-xs font-bold capitalize text-tertiary"
-          : "rounded-full bg-error/10 px-3 py-1 text-xs font-bold capitalize text-error"
-      }
+      className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${
+        styles[status] || "bg-surface-container-high text-on-surface-variant"
+      }`}
     >
       {status.replace("_", " ")}
     </span>

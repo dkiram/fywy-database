@@ -32,7 +32,9 @@ app.use(
 );
 
 
-const PORT = 3000;
+// Allow isolated verification or deployment environments to choose a port,
+// while preserving the existing local-development default.
+const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json());
 
@@ -226,8 +228,11 @@ app.get("/api/customers/:customerId", requireAuth, async (req, res) => {
         c.customer_id,
         c.name,
         c.address,
+        c.occupation,
         c.telephone,
         c.email,
+        c.id_type,
+        c.id_number,
 
         c.package_id,
         c.monthly_fee,
@@ -236,6 +241,37 @@ app.get("/api/customers/:customerId", requireAuth, async (req, res) => {
         c.activation_date,
         c.deactivation_date,
         c.reactivation_date,
+        CASE
+          -- Only active, billable accounts have an upcoming recurring charge.
+          WHEN c.status = 'active'
+            AND c.activation_date IS NOT NULL
+            AND COALESCE(c.monthly_fee, 0) > 0
+          THEN CASE
+            -- A future activation is itself the first billing date.
+            WHEN c.activation_date >
+              (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+            THEN c.activation_date
+            -- If this month's anniversary is still ahead, use it; otherwise
+            -- move to next month. The shared function safely clamps the 29th,
+            -- 30th, and 31st in shorter months.
+            WHEN public.spcl_anniversary_date(
+              c.activation_date,
+              (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+            ) > (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+            THEN public.spcl_anniversary_date(
+              c.activation_date,
+              (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+            )
+            ELSE public.spcl_anniversary_date(
+              c.activation_date,
+              (
+                (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+                + INTERVAL '1 month'
+              )::DATE
+            )
+          END
+          ELSE NULL
+        END AS next_billing_date,
 
         c.status,
         c.adult_channel,
@@ -244,6 +280,9 @@ app.get("/api/customers/:customerId", requireAuth, async (req, res) => {
         c.port_number,
 
         p.name AS package_name,
+        p.service_type AS package_service_type,
+        p.plan_tier AS package_plan_tier,
+        p.speed_mbps AS package_speed_mbps,
         p.installation_fee,
         p.default_monthly_charge,
         p.reconnection_fee
@@ -369,7 +408,10 @@ app.get(
           payment_date,
           location,
           cashier_name,
-          receipt_number
+          receipt_number,
+          (voided_at IS NOT NULL) AS is_voided,
+          voided_at,
+          void_reason
         FROM public.payments
 
         ${whereClause}
@@ -417,30 +459,72 @@ app.get(
 );
 
 
-app.get("/api/audit-logs", requireAuth, async (_req, res) => {
+app.get("/api/audit-logs", requireAuth, async (req, res) => {
   try {
+    const employeeSearch =
+      typeof req.query.employee === "string"
+        ? req.query.employee.trim().slice(0, 100)
+        : "";
+    const employeePattern = `%${employeeSearch}%`;
+
     // Bound the activity feed to protect the UI and database from unbounded history reads.
     const result = await pool.query(
       `
       SELECT
-        audit_log_id,
-        actor_name,
-        action,
-        entity_type,
-        entity_id,
-        field_name,
-        old_value,
-        new_value,
-        reason,
-        occurred_at
-      FROM public.audit_logs
-      ORDER BY occurred_at DESC, audit_log_id DESC
+        audit.audit_log_id,
+        audit.actor_name,
+        audit.action,
+        audit.entity_type,
+        audit.entity_id,
+        audit.field_name,
+        audit.old_value,
+        audit.new_value,
+        audit.reason,
+        audit.occurred_at,
+        CASE
+          WHEN audit.entity_type = 'customer' THEN audit.entity_id
+          WHEN audit.entity_type = 'payment' THEN payment.customer_id::TEXT
+          WHEN audit.entity_type = 'service_ticket' THEN ticket.customer_id::TEXT
+          WHEN audit.entity_type = 'application' THEN application.customer_id::TEXT
+          ELSE NULL
+        END AS related_customer_id
+      FROM public.audit_logs audit
+      LEFT JOIN public.employees employee
+        ON employee.employee_id = audit.employee_id
+      LEFT JOIN public.payments payment
+        ON payment.payment_id = CASE
+          WHEN audit.entity_type = 'payment' AND audit.entity_id ~ '^[0-9]+$'
+          THEN audit.entity_id::BIGINT
+          ELSE NULL
+        END
+      LEFT JOIN public.service_tickets ticket
+        ON ticket.service_ticket_id = CASE
+          WHEN audit.entity_type = 'service_ticket' AND audit.entity_id ~ '^[0-9]+$'
+          THEN audit.entity_id::BIGINT
+          ELSE NULL
+        END
+      LEFT JOIN public.applications application
+        ON application.application_id = CASE
+          WHEN audit.entity_type = 'application' AND audit.entity_id ~ '^[0-9]+$'
+          THEN audit.entity_id::BIGINT
+          ELSE NULL
+        END
+      WHERE
+        $1 = ''
+        OR audit.actor_name ILIKE $2
+        OR employee.first_name ILIKE $2
+        OR employee.last_name ILIKE $2
+        OR CONCAT_WS(' ', employee.first_name, employee.last_name) ILIKE $2
+        OR employee.username ILIKE $2
+      ORDER BY audit.occurred_at DESC, audit.audit_log_id DESC
       LIMIT 100;
-      `
+      `,
+      [employeeSearch, employeePattern]
     );
 
     res.json({
       auditLogs: result.rows,
+      employeeSearch,
     });
   } catch (error) {
     console.error("Could not load audit logs:", error);
@@ -765,149 +849,253 @@ app.post("/api/auth/logout", (req, res) => {
 
 
 app.patch(
-  "/api/customers/:customerId/monthly-fee",
+  "/api/customers/:customerId/profile",
   requireAuth,
   requireRole("admin", "head_office"),
   async (req, res) => {
-    // Monthly-rate changes are manager-only and require a human-readable audit reason.
-    const { monthlyFee, reason } = req.body;
-
+    // Profile corrections are limited to Admin and Head Office. Package, rate, and status
+    // changes remain in their dedicated workflows with their own safeguards.
     const { customerId } = req.params;
-
-if (
-  typeof customerId !== "string" ||
-  !/^\d+$/.test(customerId)
-) {
-  return res.status(400).json({
-    error: "Invalid customer ID",
-  });
-}
-
-    const feeText = String(monthlyFee ?? "").trim();
-
-    if (!/^\d+(\.\d{1,2})?$/.test(feeText)) {
-      return res.status(400).json({
-        error: "Enter a valid monthly fee.",
-      });
+    if (typeof customerId !== "string" || !/^\d+$/.test(customerId)) {
+      return res.status(400).json({ error: "Invalid customer ID" });
     }
 
-    if (
-      typeof reason !== "string" ||
-      reason.trim().length < 3
-    ) {
-      return res.status(400).json({
-        error: "A reason for the rate change is required.",
-      });
+    const requiredName = String(req.body.name ?? "").trim();
+    const optionalText = (value: unknown) => {
+      const cleaned = String(value ?? "").trim();
+      return cleaned === "" ? null : cleaned;
+    };
+    const profile = {
+      name: requiredName,
+      address: optionalText(req.body.address),
+      occupation: optionalText(req.body.occupation),
+      telephone: optionalText(req.body.telephone),
+      email: optionalText(req.body.email),
+      id_type: optionalText(req.body.idType),
+      id_number: optionalText(req.body.idNumber),
+      pole_box_number: optionalText(req.body.poleBoxNumber),
+      port_number: optionalText(req.body.portNumber),
+      adult_channel: req.body.adultChannel,
+    };
+    const reason = String(req.body.reason ?? "").trim();
+
+    if (profile.name.length < 2 || profile.name.length > 160) {
+      return res.status(400).json({ error: "Customer name must be 2–160 characters." });
+    }
+    const lengthLimits: Array<[string, string | null, number]> = [
+      ["Address", profile.address, 500],
+      ["Occupation", profile.occupation, 160],
+      ["Telephone", profile.telephone, 50],
+      ["Email", profile.email, 254],
+      ["ID type", profile.id_type, 80],
+      ["ID number", profile.id_number, 100],
+      ["Pole box", profile.pole_box_number, 80],
+      ["Port", profile.port_number, 80],
+    ];
+    const invalidLength = lengthLimits.find(([, value, max]) => value !== null && value.length > max);
+    if (invalidLength) {
+      return res.status(400).json({ error: `${invalidLength[0]} is too long.` });
+    }
+    if (profile.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) {
+      return res.status(400).json({ error: "Enter a valid email address." });
+    }
+    if (typeof profile.adult_channel !== "boolean") {
+      return res.status(400).json({ error: "Adult channel selection is required." });
+    }
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({ error: "A reason between 3 and 500 characters is required." });
     }
 
     const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const customerResult = await client.query(
+        `SELECT name, address, occupation, telephone, email, id_type, id_number,
+            pole_box_number, port_number, adult_channel
+         FROM public.customers
+         WHERE customer_id = $1
+         FOR UPDATE;`,
+        [Number(customerId)]
+      );
+      if (customerResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Customer not found." });
+      }
 
+      const current = customerResult.rows[0] as Record<string, string | boolean | null>;
+      const changes = Object.entries(profile).filter(([field, value]) => current[field] !== value);
+      if (changes.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "No profile changes were made." });
+      }
+
+      await client.query(
+        `UPDATE public.customers SET
+            name = $1, address = $2, occupation = $3, telephone = $4,
+            email = $5, id_type = $6, id_number = $7,
+            pole_box_number = $8, port_number = $9, adult_channel = $10
+         WHERE customer_id = $11;`,
+        [
+          profile.name, profile.address, profile.occupation, profile.telephone,
+          profile.email, profile.id_type, profile.id_number,
+          profile.pole_box_number, profile.port_number, profile.adult_channel,
+          Number(customerId),
+        ]
+      );
+
+      // One row per changed field keeps the activity feed readable and makes
+      // every correction independently traceable.
+      for (const [field, value] of changes) {
+        await client.query(
+          `INSERT INTO public.audit_logs (
+              employee_id, actor_name, action, entity_type, entity_id,
+              field_name, old_value, new_value, reason, occurred_at
+           ) VALUES ($1, $2, 'Edited customer profile', 'customer', $3,
+              $4, $5, $6, $7, CURRENT_TIMESTAMP);`,
+          [
+            employee.employeeId,
+            `${employee.firstName} ${employee.lastName}`,
+            customerId,
+            field,
+            current[field] === null ? null : String(current[field]),
+            value === null ? null : String(value),
+            reason,
+          ]
+        );
+      }
+
+      await client.query("COMMIT");
+      res.json({ customerId: Number(customerId), ...profile, changedFields: changes.map(([field]) => field) });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not update customer profile:", error);
+      res.status(500).json({ error: "Could not update customer profile." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+app.patch(
+  "/api/customers/:customerId/subscription",
+  requireAuth,
+  requireRole("admin", "head_office"),
+  async (req, res) => {
+    // A subscription change selects a catalog rate; it never edits past
+    // ledger charges. The effective-dated row is used on future anniversaries.
+    const { customerId } = req.params;
+    const packageIdText = String(req.body.packageId ?? "").trim();
+    const reason = String(req.body.reason ?? "").trim();
+
+    if (typeof customerId !== "string" || !/^\d+$/.test(customerId)) {
+      return res.status(400).json({ error: "Invalid customer ID" });
+    }
+    if (!/^\d+$/.test(packageIdText)) {
+      return res.status(400).json({ error: "Select a valid package." });
+    }
+    if (reason.length < 3) {
+      return res.status(400).json({ error: "A reason for the package change is required." });
+    }
+
+    const employee = req.session.employee!;
     const client = await pool.connect();
 
     try {
-      // Update the customer snapshot and its audit record atomically.
       await client.query("BEGIN");
 
       const customerResult = await client.query(
-        `
-        SELECT
-          customer_id,
-          monthly_fee
-        FROM public.customers
-        WHERE customer_id = $1
-        FOR UPDATE;
-        `,
+        `SELECT c.customer_id, c.package_id, c.monthly_fee,
+            old_package.name AS package_name
+         FROM public.customers c
+         LEFT JOIN public.packages old_package ON old_package.package_id = c.package_id
+         WHERE c.customer_id = $1
+         FOR UPDATE OF c;`,
         [Number(customerId)]
       );
-
       if (customerResult.rows.length === 0) {
         await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Customer not found." });
+      }
 
-        return res.status(404).json({
-          error: "Customer not found.",
-        });
+      const packageResult = await client.query(
+        `SELECT package_id, name, default_monthly_charge, service_type,
+            plan_tier, speed_mbps
+         FROM public.packages
+         WHERE package_id = $1 AND is_active = TRUE;`,
+        [Number(packageIdText)]
+      );
+      if (packageResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Selected package is not available." });
       }
 
       const customer = customerResult.rows[0];
-
-      const oldFee =
-        customer.monthly_fee === null
-          ? null
-          : String(customer.monthly_fee);
-
-      const newFee = Number(feeText).toFixed(2);
-
-      if (oldFee !== null && Number(oldFee) === Number(newFee)) {
+      const selectedPackage = packageResult.rows[0];
+      const newFee = Number(selectedPackage.default_monthly_charge).toFixed(2);
+      if (
+        Number(customer.package_id) === Number(selectedPackage.package_id) &&
+        Number(customer.monthly_fee) === Number(newFee)
+      ) {
         await client.query("ROLLBACK");
-
-        return res.status(400).json({
-          error: "The monthly fee has not changed.",
-        });
+        return res.status(400).json({ error: "The customer already has this package and catalog rate." });
       }
 
       await client.query(
-        `
-        UPDATE public.customers
-        SET monthly_fee = $1
-        WHERE customer_id = $2;
-        `,
-        [newFee, Number(customerId)]
+        `UPDATE public.customers
+         SET package_id = $1, monthly_fee = $2
+         WHERE customer_id = $3;`,
+        [selectedPackage.package_id, newFee, Number(customerId)]
       );
 
       await client.query(
-        `
-        INSERT INTO public.audit_logs (
-          actor_name,
-          action,
-          entity_type,
-          entity_id,
-          field_name,
-          old_value,
-          new_value,
-          reason,
-          occurred_at
-        )
-        VALUES (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          $7,
-          $8,
-          CURRENT_TIMESTAMP
-        );
-        `,
+        `INSERT INTO public.customer_rate_history (
+            customer_id, package_id, monthly_fee, effective_date, reason,
+            changed_by_employee_id, is_legacy_estimate
+         ) VALUES (
+            $1, $2, $3,
+            (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+            $4, $5, FALSE
+         );`,
+        [Number(customerId), selectedPackage.package_id, newFee, reason, employee.employeeId]
+      );
+
+      await client.query(
+        `INSERT INTO public.audit_logs (
+            employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason, occurred_at
+         ) VALUES ($1, $2, $3, 'customer', $4, 'subscription', $5, $6, $7, CURRENT_TIMESTAMP);`,
         [
+          employee.employeeId,
           `${employee.firstName} ${employee.lastName}`,
-          "Changed customer monthly rate",
-          "customer",
+          "Changed customer package",
           customerId,
-          "monthly_fee",
-          oldFee,
-          newFee,
-          reason.trim(),
+          `${customer.package_name ?? "No package"} @ J$${Number(customer.monthly_fee ?? 0).toFixed(2)}`,
+          `${selectedPackage.name} @ J$${newFee}`,
+          reason,
         ]
       );
 
       await client.query("COMMIT");
-
       res.json({
         customerId: Number(customerId),
+        packageId: selectedPackage.package_id,
+        packageName: selectedPackage.name,
+        serviceType: selectedPackage.service_type,
+        planTier: selectedPackage.plan_tier,
+        speedMbps: selectedPackage.speed_mbps,
         monthlyFee: newFee,
+        effectiveDate: new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Jamaica",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date()),
       });
     } catch (error) {
       await client.query("ROLLBACK");
-
-      console.error(
-        "Could not update monthly fee:",
-        error
-      );
-
-      res.status(500).json({
-        error: "Could not update monthly fee.",
-      });
+      console.error("Could not update customer subscription:", error);
+      res.status(500).json({ error: "Could not update customer subscription." });
     } finally {
       client.release();
     }

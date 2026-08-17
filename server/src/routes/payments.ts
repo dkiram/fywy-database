@@ -3,6 +3,7 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
+import { insertStatusHistory } from "./accounts.js";
 
 const paymentsRouter = Router();
 
@@ -16,6 +17,28 @@ const recordablePaymentTypes = [
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.employee) {
     return res.status(401).json({ error: "Not authenticated." });
+  }
+  next();
+}
+
+// Voiding changes financial totals, so branch cashiers may view the result but
+// only Admin and Head Office can authorize the reversal.
+function requirePaymentManager(req: Request, res: Response, next: NextFunction) {
+  const employee = req.session.employee;
+  if (!employee) return res.status(401).json({ error: "Not authenticated." });
+  if (!['admin', 'head_office'].includes(employee.role)) {
+    return res.status(403).json({ error: "Only Admin and Head Office can void payments." });
+  }
+  next();
+}
+
+// Permanent deletion is narrower than voiding: only the Admin role receives
+// this destructive escape hatch, never Head Office or branch employees.
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const employee = req.session.employee;
+  if (!employee) return res.status(401).json({ error: "Not authenticated." });
+  if (employee.role !== "admin") {
+    return res.status(403).json({ error: "Only Admin can permanently delete payments." });
   }
   next();
 }
@@ -47,6 +70,10 @@ async function loadReceipt(client: PoolClient, paymentId: number) {
       pay.location,
       pay.cashier_name,
       pay.note,
+      (pay.voided_at IS NOT NULL) AS is_voided,
+      pay.voided_at,
+      pay.void_reason,
+      CONCAT_WS(' ', voider.first_name, voider.last_name) AS voided_by_name,
       c.customer_id,
       c.name AS customer_name,
       c.address AS customer_address,
@@ -54,6 +81,8 @@ async function loadReceipt(client: PoolClient, paymentId: number) {
     FROM public.payments pay
     INNER JOIN public.customers c
       ON pay.customer_id = c.customer_id
+    LEFT JOIN public.employees voider
+      ON voider.employee_id = pay.voided_by_employee_id
     WHERE pay.payment_id = $1
       AND pay.receipt_number IS NOT NULL;
     `,
@@ -182,6 +211,88 @@ paymentsRouter.post(
         [paymentId]
       );
 
+      // Only monthly and reconnection payments affect the account balance.
+      // Installation payments remain valid receipts but are intentionally kept
+      // outside the recurring-service ledger confirmed by SPCL.
+      const ledgerEntryType = paymentType === "Monthly Fee"
+        ? "monthly_payment"
+        : paymentType === "Reconnection Fee"
+          ? "reconnection_payment"
+          : null;
+      if (ledgerEntryType) {
+        await client.query(
+          `
+          INSERT INTO public.account_ledger_entries (
+            customer_id, entry_type, amount, effective_date, description,
+            payment_id, created_by_employee_id, source_key
+          ) VALUES (
+            $1, $2, -ABS($3::NUMERIC),
+            (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+            $4, $5, $6, $7
+          )
+          ON CONFLICT (source_key) DO NOTHING;
+          `,
+          [
+            customerId,
+            ledgerEntryType,
+            amountText,
+            paymentType === "Monthly Fee" ? "Monthly fee payment" : "Reconnection fee payment",
+            paymentId,
+            employee.employeeId,
+            `payment:${paymentId}`,
+          ]
+        );
+      }
+
+      // Generate any anniversary charge due through today before deciding
+      // whether the payment has completely cleared the account.
+      await client.query(
+        `SELECT public.spcl_generate_monthly_charges(
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+        );`
+      );
+
+      let reconnectionPending = false;
+      const billingResult = await client.query(
+        `
+        SELECT c.status, billing.ready_for_reconnection
+        FROM public.customers c
+        JOIN public.customer_billing_status billing USING (customer_id)
+        WHERE c.customer_id = $1
+        FOR UPDATE OF c;
+        `,
+        [customerId]
+      );
+      const billing = billingResult.rows[0];
+
+      // A fully paid disconnected account leaves the disconnected queue
+      // automatically, but it still waits for the manager checkbox approval.
+      if (billing?.status === "disconnected" && billing.ready_for_reconnection) {
+        const queueReason = "Full outstanding balance and reconnection fee paid; awaiting manager approval";
+        await client.query(
+          `UPDATE public.customers SET status = 'pending_reconnection' WHERE customer_id = $1;`,
+          [customerId]
+        );
+        await insertStatusHistory(client, {
+          customerId,
+          fromStatus: "disconnected",
+          toStatus: "pending_reconnection",
+          reason: queueReason,
+          employeeId: employee.employeeId,
+        });
+        await client.query(
+          `
+          INSERT INTO public.audit_logs (
+            employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason, occurred_at
+          ) VALUES ($1, $2, 'Queued paid account for reconnection', 'customer', $3,
+            'status', 'disconnected', 'pending_reconnection', $4, CURRENT_TIMESTAMP);
+          `,
+          [employee.employeeId, `${employee.firstName} ${employee.lastName}`, String(customerId), queueReason]
+        );
+        reconnectionPending = true;
+      }
+
       await client.query(
         `
         INSERT INTO public.audit_logs (
@@ -221,7 +332,7 @@ paymentsRouter.post(
       const receipt = await loadReceipt(client, paymentId);
       await client.query("COMMIT");
 
-      res.status(201).json({ payment: receipt });
+      res.status(201).json({ payment: receipt, reconnectionPending });
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Could not record payment:", error);
@@ -261,7 +372,239 @@ paymentsRouter.get(
   }
 );
 
-paymentsRouter.get("/payments/daily-summary", requireAuth, async (req, res) => {
+paymentsRouter.post(
+  "/payments/:paymentId/void",
+  requireAuth,
+  requirePaymentManager,
+  async (req, res) => {
+    const paymentId = parsePositiveId(req.params.paymentId);
+    if (paymentId === null) {
+      return res.status(400).json({ error: "Invalid payment ID." });
+    }
+    const reason = cleanText(req.body.reason);
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({ error: "A void reason between 3 and 500 characters is required." });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const paymentResult = await client.query(
+        `
+        SELECT pay.payment_id, pay.customer_id, pay.payment_type,
+          pay.amount_paid, pay.receipt_number, pay.recorded_by_employee_id,
+          pay.voided_at, c.status AS customer_status
+        FROM public.payments pay
+        JOIN public.customers c ON c.customer_id = pay.customer_id
+        WHERE pay.payment_id = $1
+        FOR UPDATE OF pay, c;
+        `,
+        [paymentId]
+      );
+      const payment = paymentResult.rows[0];
+      if (!payment) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Payment not found." });
+      }
+      // Access imports are historical source evidence and cannot be voided as
+      // though they were cashier entries created by this application.
+      if (!payment.receipt_number || payment.recorded_by_employee_id === null) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Imported legacy payments cannot be voided here." });
+      }
+      if (payment.voided_at) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "This payment has already been voided." });
+      }
+
+      await client.query(
+        `
+        UPDATE public.payments SET
+          voided_at = CURRENT_TIMESTAMP,
+          voided_by_employee_id = $2,
+          void_reason = $3
+        WHERE payment_id = $1;
+        `,
+        [paymentId, employee.employeeId, reason]
+      );
+
+      // Reverse the original balance credit with a positive ledger entry. The
+      // source key prevents a duplicate reversal even under concurrent retries.
+      await client.query(
+        `
+        INSERT INTO public.account_ledger_entries (
+          customer_id, entry_type, amount, effective_date, description,
+          payment_id, created_by_employee_id, reason, source_key
+        )
+        SELECT original.customer_id, 'payment_void', -original.amount,
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+          'Voided payment reversal', original.payment_id, $2, $3,
+          'payment-void:' || original.payment_id::TEXT
+        FROM public.account_ledger_entries original
+        WHERE original.payment_id = $1
+          AND original.entry_type IN ('monthly_payment', 'reconnection_payment')
+          AND original.amount < 0
+        ORDER BY original.account_ledger_entry_id
+        LIMIT 1
+        ON CONFLICT (source_key) DO NOTHING;
+        `,
+        [paymentId, employee.employeeId, reason]
+      );
+
+      let customerStatus = payment.customer_status as string;
+      let statusHistory = null;
+      const billingResult = await client.query(
+        `SELECT outstanding_balance FROM public.customer_billing_status WHERE customer_id = $1;`,
+        [payment.customer_id]
+      );
+      const outstandingBalance = Number(billingResult.rows[0]?.outstanding_balance ?? 0);
+
+      // If the reversed payment had qualified the account for approval, return
+      // it to disconnected as soon as the balance becomes unpaid again.
+      if (customerStatus === "pending_reconnection" && outstandingBalance > 0) {
+        await client.query(
+          `UPDATE public.customers SET status = 'disconnected' WHERE customer_id = $1;`,
+          [payment.customer_id]
+        );
+        statusHistory = await insertStatusHistory(client, {
+          customerId: Number(payment.customer_id),
+          fromStatus: "pending_reconnection",
+          toStatus: "disconnected",
+          reason: `Payment ${payment.receipt_number} voided; account balance is unpaid again`,
+          employeeId: employee.employeeId,
+        });
+        await client.query(
+          `
+          INSERT INTO public.audit_logs (
+            employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason, occurred_at
+          ) VALUES ($1, $2, 'Returned account to disconnected after payment void',
+            'customer', $3, 'status', 'pending_reconnection', 'disconnected',
+            $4, CURRENT_TIMESTAMP);
+          `,
+          [
+            employee.employeeId,
+            `${employee.firstName} ${employee.lastName}`,
+            String(payment.customer_id),
+            `Payment ${payment.receipt_number} was voided and the account is unpaid again`,
+          ]
+        );
+        customerStatus = "disconnected";
+      }
+
+      await client.query(
+        `
+        INSERT INTO public.audit_logs (
+          employee_id, actor_name, action, entity_type, entity_id,
+          field_name, old_value, new_value, reason, occurred_at
+        ) VALUES ($1, $2, 'Voided payment', 'payment', $3,
+          'payment_status', 'active', 'voided', $4, CURRENT_TIMESTAMP);
+        `,
+        [employee.employeeId, `${employee.firstName} ${employee.lastName}`, String(paymentId), reason]
+      );
+
+      const receipt = await loadReceipt(client, paymentId);
+      await client.query("COMMIT");
+      res.json({ payment: receipt, customerStatus, outstandingBalance, statusHistory });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not void payment:", error);
+      res.status(500).json({ error: "Could not void payment." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+paymentsRouter.delete(
+  "/payments/:paymentId",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const paymentId = parsePositiveId(req.params.paymentId);
+    if (paymentId === null) {
+      return res.status(400).json({ error: "Invalid payment ID." });
+    }
+    const reason = cleanText(req.body.reason);
+    const confirmation = cleanText(req.body.confirmation);
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({ error: "A deletion reason between 3 and 500 characters is required." });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const paymentResult = await client.query(
+        `
+        SELECT payment_id, customer_id, receipt_number, voided_at
+        FROM public.payments
+        WHERE payment_id = $1
+        FOR UPDATE;
+        `,
+        [paymentId]
+      );
+      const payment = paymentResult.rows[0];
+      if (!payment) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Payment not found." });
+      }
+      if (!payment.voided_at) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Void the payment before permanently deleting it." });
+      }
+      if (!payment.receipt_number || confirmation !== payment.receipt_number) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Type the exact receipt number to confirm permanent deletion." });
+      }
+
+      // Removing both the original credit and its void reversal leaves the
+      // customer's net balance unchanged. The payment FK intentionally blocks
+      // deletion unless these paired ledger rows are handled in this transaction.
+      await client.query(
+        `DELETE FROM public.account_ledger_entries WHERE payment_id = $1;`,
+        [paymentId]
+      );
+      await client.query(
+        `DELETE FROM public.audit_logs WHERE entity_type = 'payment' AND entity_id = $1;`,
+        [String(paymentId)]
+      );
+      await client.query(`DELETE FROM public.payments WHERE payment_id = $1;`, [paymentId]);
+
+      // Keep one compact marker proving which admin used the destructive path.
+      // The customer ID remains so Activity History can still open the profile.
+      await client.query(
+        `
+        INSERT INTO public.audit_logs (
+          employee_id, actor_name, action, entity_type, entity_id,
+          field_name, old_value, new_value, reason, occurred_at
+        ) VALUES ($1, $2, 'Permanently deleted voided payment',
+          'customer', $3, 'deleted_payment', $4, 'deleted', $5,
+          CURRENT_TIMESTAMP);
+        `,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(payment.customer_id),
+          `Payment #${paymentId}; receipt ${payment.receipt_number}`,
+          reason,
+        ]
+      );
+
+      await client.query("COMMIT");
+      res.json({ deleted: true, paymentId, receiptNumber: payment.receipt_number });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not permanently delete payment:", error);
+      res.status(500).json({ error: "Could not permanently delete payment." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+paymentsRouter.get("/payments/daily-summary", requireAuth, requireAdmin, async (req, res) => {
   // Branch employees see only their location; head-office/admin employees see all locations.
   const requestedDate = cleanText(req.query.date);
   if (requestedDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
@@ -299,6 +642,7 @@ paymentsRouter.get("/payments/daily-summary", requireAuth, async (req, res) => {
     // Reuse one scope predicate so cards, breakdowns, and ledger rows cannot disagree.
     const whereClause = `
       WHERE pay.payment_date = $1
+        AND pay.voided_at IS NULL
         AND (
           $2::SMALLINT IS NULL
           OR pay.location_id = $2

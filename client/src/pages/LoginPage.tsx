@@ -57,7 +57,7 @@ function LoginPage() {
                 </span>
               </div>
               <div>
-                <p className="text-lg font-bold tracking-tight">FYWY</p>
+                <p className="text-lg font-medium tracking-tight">FYWY</p>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/65">
                   Management System
                 </p>
@@ -65,7 +65,7 @@ function LoginPage() {
             </div>
 
             <div className="max-w-md">
-              <p className="mb-4 hidden w-fit rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-white/80 backdrop-blur-md sm:block">
+              <p className="mb-4 hidden w-fit rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur-md sm:block">
                 Employee workspace
               </p>
               <h1 className="max-w-sm text-2xl font-semibold leading-tight tracking-[-0.03em] sm:text-4xl lg:text-[2.7rem]">
@@ -87,10 +87,10 @@ function LoginPage() {
                   shield_person
                 </span>
               </div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
                 Secure employee access
               </p>
-              <h2 className="mt-2 text-3xl font-bold tracking-[-0.035em] text-on-surface">
+              <h2 className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-on-surface">
                 Welcome back
               </h2>
               <p className="mt-2 text-sm leading-6 text-on-surface-variant">
@@ -115,7 +115,7 @@ function LoginPage() {
                     autoComplete="username"
                     required
                     placeholder="Enter your username"
-                    className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 pl-12 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                    className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 pl-12 text-sm text-on-surface transition placeholder:text-outline focus:border-primary focus:bg-white"
                   />
                 </div>
               </div>
@@ -136,12 +136,12 @@ function LoginPage() {
                     autoComplete="current-password"
                     required
                     placeholder="Enter your password"
-                    className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-12 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                    className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-12 text-sm text-on-surface transition placeholder:text-outline focus:border-primary focus:bg-white"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((visible) => !visible)}
-                    className="absolute right-2.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-surface-container hover:text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/25"
+                    className="absolute right-2.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-on-surface-variant transition hover:bg-surface-container hover:text-on-surface"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     <span className="material-symbols-outlined text-xl" aria-hidden="true">
@@ -178,7 +178,7 @@ function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-on-primary shadow-[0_10px_24px_rgba(65,98,95,0.26)] transition hover:-translate-y-0.5 hover:bg-primary-container hover:shadow-[0_14px_28px_rgba(65,98,95,0.3)] focus:outline-none focus:ring-4 focus:ring-primary/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-on-primary shadow-[0_10px_24px_rgba(65,98,95,0.26)] transition hover:-translate-y-0.5 hover:bg-primary-container hover:shadow-[0_14px_28px_rgba(65,98,95,0.3)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? "Signing in..." : "Sign in"}
                 {!loading && (

@@ -83,9 +83,13 @@ applicationsRouter.get("/packages", requireAuth, async (_req, res) => {
       SELECT
         package_id,
         name,
-        default_monthly_charge
+        default_monthly_charge,
+        service_type,
+        plan_tier,
+        speed_mbps
       FROM public.packages
-      ORDER BY package_id;
+      WHERE is_active = TRUE
+      ORDER BY display_order, package_id;
     `);
     res.json({ packages: result.rows });
   } catch (error) {

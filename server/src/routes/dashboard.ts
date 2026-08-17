@@ -12,15 +12,34 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-dashboardRouter.get("/dashboard", requireAuth, async (_req, res) => {
+// Dashboard aggregates are restricted to administrators even if another role
+// manually requests the API instead of using the hidden navigation.
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const employee = req.session.employee;
+  if (!employee) return res.status(401).json({ error: "Not authenticated." });
+  if (employee.role !== "admin") {
+    return res.status(403).json({ error: "Only Admin can view the management dashboard." });
+  }
+  next();
+}
+
+dashboardRouter.get("/dashboard", requireAuth, requireAdmin, async (_req, res) => {
   try {
+    // Dashboard counts include every anniversary charge due through today.
+    await pool.query(
+      `SELECT public.spcl_generate_monthly_charges(
+        (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+      );`
+    );
     const [summaryResult, trendResult, ticketsResult, activityResult] = await Promise.all([
       pool.query(`
         SELECT
           (SELECT COUNT(*)::INTEGER FROM public.payments
-            WHERE payment_date = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE) AS payments_today,
+            WHERE payment_date = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+              AND voided_at IS NULL) AS payments_today,
           (SELECT COALESCE(SUM(amount_paid), 0)::NUMERIC(14,2) FROM public.payments
-            WHERE payment_date = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE) AS payment_total_today,
+            WHERE payment_date = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+              AND voided_at IS NULL) AS payment_total_today,
           (SELECT COUNT(*)::INTEGER FROM public.applications
             WHERE status IN ('pending', 'match_review')) AS pending_applications,
           (SELECT COUNT(*)::INTEGER FROM public.service_tickets
@@ -30,7 +49,11 @@ dashboardRouter.get("/dashboard", requireAuth, async (_req, res) => {
           (SELECT COUNT(*)::INTEGER FROM public.customers WHERE status = 'pending_reconnection') AS pending_reconnections,
           (SELECT COUNT(*)::INTEGER FROM public.pole_boxes) AS pole_boxes,
           (SELECT COUNT(*)::INTEGER FROM public.pole_box_usage
-            WHERE duplicate_assignments > 0 OR over_capacity) AS pole_box_alerts;
+            WHERE duplicate_assignments > 0 OR over_capacity) AS pole_box_alerts,
+          (SELECT COUNT(*)::INTEGER FROM public.customer_billing_status
+            WHERE is_delinquent) AS delinquent_customers,
+          (SELECT COUNT(*)::INTEGER FROM public.customer_billing_status
+            WHERE eligible_for_disconnection) AS eligible_for_disconnection;
       `),
       pool.query(`
         WITH dates AS (
@@ -44,6 +67,7 @@ dashboardRouter.get("/dashboard", requireAuth, async (_req, res) => {
           COALESCE(SUM(p.amount_paid), 0)::NUMERIC(14,2) AS total_amount
         FROM dates d
         LEFT JOIN public.payments p ON p.payment_date = d.payment_date
+          AND p.voided_at IS NULL
         GROUP BY d.payment_date
         ORDER BY d.payment_date;
       `),
@@ -68,10 +92,8 @@ dashboardRouter.get("/dashboard", requireAuth, async (_req, res) => {
     res.json({
       summary: {
         ...summaryResult.rows[0],
-        // The legacy delinquency formula has not been confirmed. Returning an
-        // explicit null prevents the UI from presenting an invented balance.
-        delinquent_customers: null,
-        delinquency_available: false,
+        // The confirmed anniversary/grace rule now powers this live count.
+        delinquency_available: true,
       },
       paymentTrend: trendResult.rows,
       urgentTickets: ticketsResult.rows,

@@ -14,6 +14,7 @@ type AuditLog = {
   new_value: string | null;
   reason: string | null;
   occurred_at: string;
+  related_customer_id: string | null;
 };
 
 type AuditLogsResponse = {
@@ -24,15 +25,20 @@ function ActivityHistoryPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [employeeSearch, setEmployeeSearch] = useState("");
 
   useEffect(() => {
-    // The server returns a bounded newest-first audit feed; this screen only formats it.
+    // Debounce name searches so typing a full employee name does not issue one
+    // database request for every keystroke.
+    let cancelled = false;
     const loadAuditLogs = async () => {
       try {
         setLoading(true);
         setError("");
 
-        const response = await apiFetch("/api/audit-logs");
+        const response = await apiFetch(
+          `/api/audit-logs?employee=${encodeURIComponent(employeeSearch.trim())}`
+        );
         const data = await response.json();
 
         if (!response.ok) {
@@ -41,28 +47,72 @@ function ActivityHistoryPage() {
           );
         }
 
-        const auditData = data as AuditLogsResponse;
-        setAuditLogs(auditData.auditLogs);
+        if (!cancelled) {
+          const auditData = data as AuditLogsResponse;
+          setAuditLogs(auditData.auditLogs);
+        }
       } catch (error) {
         console.error(error);
-        setError("Could not load activity history.");
+        if (!cancelled) setError("Could not load activity history.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    loadAuditLogs();
-  }, []);
+    const timeout = window.setTimeout(loadAuditLogs, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [employeeSearch]);
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-8 lg:p-12">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-on-surface">
+        <h1 className="text-3xl font-semibold tracking-tight text-on-surface">
           Activity History
         </h1>
 
         <p className="mt-2 text-sm text-on-surface-variant">
           A permanent record of important employee actions.
+        </p>
+      </div>
+
+      <div className="rounded-2xl bg-surface-container-lowest p-5 shadow-sm">
+        <label htmlFor="audit-employee-search" className="mb-2 block text-sm font-medium text-on-surface">
+          Search by employee
+        </label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <span className="material-symbols-outlined pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xl text-outline">
+              search
+            </span>
+            <input
+              id="audit-employee-search"
+              type="search"
+              value={employeeSearch}
+              onChange={(event) => setEmployeeSearch(event.target.value)}
+              placeholder="Name or username..."
+              className="h-11 w-full rounded-xl border border-outline-variant bg-surface pl-11 pr-4 text-sm text-on-surface transition focus:border-primary"
+            />
+          </div>
+          {employeeSearch && (
+            <button
+              type="button"
+              onClick={() => setEmployeeSearch("")}
+              className="h-11 rounded-xl bg-surface-container px-4 text-sm font-medium text-primary transition hover:bg-surface-container-high"
+            >
+              Clear
+            </button>
+          )}
+          {!loading && (
+            <p className="shrink-0 text-sm text-on-surface-variant">
+              {auditLogs.length} {auditLogs.length === 1 ? "record" : "records"}
+            </p>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-on-surface-variant">
+          Matches employee names, full names, usernames, and the name saved on older audit records.
         </p>
       </div>
 
@@ -85,7 +135,9 @@ function ActivityHistoryPage() {
           </span>
 
           <p className="mt-2 font-medium text-on-surface">
-            No activity recorded yet
+            {employeeSearch.trim()
+              ? `No audit records found for “${employeeSearch.trim()}”`
+              : "No activity recorded yet"}
           </p>
         </div>
       )}
@@ -126,15 +178,15 @@ function ActivityHistoryPage() {
                   </dt>
 
                   <dd className="mt-1 font-medium text-on-surface">
-                    {log.entity_type === "customer" ? (
+                    {log.related_customer_id ? (
                       <Link
-                        to={`/customers/${log.entity_id}`}
+                        to={`/customers/${log.related_customer_id}`}
                         className="text-primary hover:underline"
                       >
-                        {log.entity_id}
+                        {log.related_customer_id}
                       </Link>
                     ) : (
-                      log.entity_id
+                      "—"
                     )}
                   </dd>
                 </div>
@@ -196,7 +248,7 @@ function AuditDetail({
       <dd
         className={
           emphasized
-            ? "mt-1 break-words font-bold text-primary"
+            ? "mt-1 break-words font-medium text-primary"
             : "mt-1 whitespace-pre-wrap break-words font-medium text-on-surface"
         }
       >

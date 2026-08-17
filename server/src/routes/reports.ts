@@ -35,6 +35,12 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
   const requestedPage = Math.max(Number.parseInt(cleanText(req.query.page), 10) || 1, 1);
   const limit = 25;
 
+  // Daily cross-company collection totals are administrator-only. Hiding the
+  // report card in the client is not sufficient because URLs can be typed.
+  if (reportKey === "payments-by-date" && req.session.employee?.role !== "admin") {
+    return res.status(403).json({ error: "Only Admin can view Payments by Date." });
+  }
+
   if (!validDate(from) || !validDate(to)) {
     return res.status(400).json({ error: "Choose valid report dates." });
   }
@@ -43,6 +49,13 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
   }
 
   try {
+    // Materialize any anniversary charges due through today before a balance
+    // report is read; the operation is idempotent for repeated report loads.
+    await pool.query(
+      `SELECT public.spcl_generate_monthly_charges(
+        (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+      );`
+    );
     // Each key maps to static SQL so query parameters can never inject table or
     // column names. Counts are fetched before rows to clamp the requested page.
     let countSql = "";
@@ -59,6 +72,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             SELECT payment_date FROM public.payments
             WHERE ($1 = '' OR payment_date >= $1::DATE)
               AND ($2 = '' OR payment_date <= $2::DATE)
+              AND voided_at IS NULL
             GROUP BY payment_date
           ) grouped;`;
         rowsSql = `
@@ -67,6 +81,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           FROM public.payments
           WHERE ($1 = '' OR payment_date >= $1::DATE)
             AND ($2 = '' OR payment_date <= $2::DATE)
+            AND voided_at IS NULL
           GROUP BY payment_date
           ORDER BY payment_date DESC NULLS LAST
           LIMIT $3 OFFSET $4;`;
@@ -75,7 +90,8 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             COALESCE(SUM(amount_paid), 0)::NUMERIC(14,2) AS total_amount
           FROM public.payments
           WHERE ($1 = '' OR payment_date >= $1::DATE)
-            AND ($2 = '' OR payment_date <= $2::DATE);`;
+            AND ($2 = '' OR payment_date <= $2::DATE)
+            AND voided_at IS NULL;`;
         break;
 
       case "payments-by-location":
@@ -85,6 +101,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             FROM public.payments
             WHERE ($3 = '' OR payment_date >= $3::DATE)
               AND ($4 = '' OR payment_date <= $4::DATE)
+              AND voided_at IS NULL
               AND ($1 = '' OR COALESCE(location, '') ILIKE $2)
             GROUP BY 1
           ) grouped;`;
@@ -95,6 +112,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           FROM public.payments
           WHERE ($3 = '' OR payment_date >= $3::DATE)
             AND ($4 = '' OR payment_date <= $4::DATE)
+            AND voided_at IS NULL
             AND ($1 = '' OR COALESCE(location, '') ILIKE $2)
           GROUP BY 1
           ORDER BY total_amount DESC, location
@@ -105,6 +123,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           FROM public.payments
           WHERE ($3 = '' OR payment_date >= $3::DATE)
             AND ($4 = '' OR payment_date <= $4::DATE)
+            AND voided_at IS NULL
             AND ($1 = '' OR COALESCE(location, '') ILIKE $2);`;
         break;
 
@@ -148,11 +167,54 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             COALESCE(SUM(p.amount_paid), 0)::NUMERIC(14,2) AS lifetime_payments
           FROM public.customers c
           LEFT JOIN public.payments p ON p.customer_id = c.customer_id
+            AND p.voided_at IS NULL
           WHERE c.status IN ('disconnected', 'pending_reconnection')
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2 OR COALESCE(c.telephone, '') ILIKE $2)
           GROUP BY c.customer_id
           ORDER BY c.deactivation_date DESC NULLS LAST, c.customer_id DESC
           LIMIT $3 OFFSET $4;`;
+        break;
+
+      case "delinquent-customers":
+        // Delinquency is based on the oldest unpaid anniversary charge after
+        // its ten-day grace period; active holds are shown but remain in debt.
+        values = [search, searchPattern];
+        countSql = `
+          SELECT COUNT(*)::INTEGER AS total
+          FROM public.customer_billing_status billing
+          JOIN public.customers c USING (customer_id)
+          WHERE billing.is_delinquent
+            AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
+              OR COALESCE(c.telephone, '') ILIKE $2);`;
+        rowsSql = `
+          SELECT c.customer_id, c.name AS customer_name, c.telephone, c.status,
+            billing.outstanding_balance, billing.oldest_unpaid_due_date,
+            billing.grace_end_date, billing.scheduled_disconnection_date,
+            billing.eligible_for_disconnection, billing.is_on_hold,
+            billing.hold_expires_on, billing.unverified_entries,
+            MAX(p.payment_date) AS last_payment_date
+          FROM public.customer_billing_status billing
+          JOIN public.customers c USING (customer_id)
+          LEFT JOIN public.payments p ON p.customer_id = c.customer_id
+            AND p.voided_at IS NULL
+          WHERE billing.is_delinquent
+            AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
+              OR COALESCE(c.telephone, '') ILIKE $2)
+          GROUP BY c.customer_id, billing.customer_id, billing.outstanding_balance,
+            billing.oldest_unpaid_due_date, billing.grace_end_date,
+            billing.scheduled_disconnection_date, billing.eligible_for_disconnection,
+            billing.is_on_hold, billing.hold_expires_on, billing.unverified_entries
+          ORDER BY billing.eligible_for_disconnection DESC,
+            billing.scheduled_disconnection_date, billing.outstanding_balance DESC
+          LIMIT $3 OFFSET $4;`;
+        totalsSql = `
+          SELECT COUNT(*)::INTEGER AS delinquent_count,
+            COALESCE(SUM(billing.outstanding_balance), 0)::NUMERIC(14,2) AS outstanding_total
+          FROM public.customer_billing_status billing
+          JOIN public.customers c USING (customer_id)
+          WHERE billing.is_delinquent
+            AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
+              OR COALESCE(c.telephone, '') ILIKE $2);`;
         break;
 
       case "applications":

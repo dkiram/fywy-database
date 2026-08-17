@@ -32,6 +32,9 @@ function NavItem({ to, icon, label }: NavItemProps) {
 
 function Sidebar() {
   const { employee } = useAuth();
+  // Branch staff have a deliberately small workspace; broader operations stay with managers.
+  const isBranchStaff = employee?.role === "branch";
+  const isAdmin = employee?.role === "admin";
   
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-sidebar text-sidebar-text">
@@ -41,7 +44,7 @@ function Sidebar() {
           FYWY
         </p>
 
-        <h1 className="mt-1 text-lg font-bold">
+        <h1 className="mt-1 text-lg font-semibold">
           Management
         </h1>
       </div>
@@ -49,11 +52,13 @@ function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-4 pb-6">
         <NavSection title="Main">
-          <NavItem
-            to="/dashboard"
-            icon="dashboard"
-            label="Dashboard"
-          />
+          {isAdmin && (
+            <NavItem
+              to="/dashboard"
+              icon="dashboard"
+              label="Dashboard"
+            />
+          )}
 
           <NavItem
             to="/customers"
@@ -63,11 +68,13 @@ function Sidebar() {
         </NavSection>
 
         <NavSection title="Operations">
-          <NavItem
-            to="/payments"
-            icon="payments"
-            label="Daily Payments"
-          />
+          {isAdmin && (
+            <NavItem
+              to="/payments"
+              icon="payments"
+              label="Daily Payments"
+            />
+          )}
 
           <NavItem
             to="/applications"
@@ -75,12 +82,13 @@ function Sidebar() {
             label="Applications"
           />
 
-          {/* Opens the MVP 3 disconnection/reconnection work queue. */}
-          <NavItem
-            to="/account-operations"
-            icon="manage_accounts"
-            label="Account Operations"
-          />
+          {!isBranchStaff && (
+            <NavItem
+              to="/account-operations"
+              icon="manage_accounts"
+              label="Account Operations"
+            />
+          )}
 
           <NavItem
             to="/service-requests"
@@ -88,19 +96,23 @@ function Sidebar() {
             label="Service Tickets"
           />
 
-          <NavItem
-            to="/pole-boxes"
-            icon="dns"
-            label="Pole Boxes"
-          />
+          {!isBranchStaff && (
+            <NavItem
+              to="/pole-boxes"
+              icon="dns"
+              label="Pole Boxes"
+            />
+          )}
         </NavSection>
 
         <NavSection title="Reporting">
-          <NavItem
-            to="/reports"
-            icon="analytics"
-            label="Reports & Analytics"
-          />
+          {!isBranchStaff && (
+            <NavItem
+              to="/reports"
+              icon="analytics"
+              label="Reports & Analytics"
+            />
+          )}
 
           <NavItem
             to="/activity-history"
@@ -140,7 +152,7 @@ function NavSection({
 }: NavSectionProps) {
   return (
     <div className="mb-7">
-      <p className="mb-2 px-4 text-[11px] font-bold uppercase tracking-widest text-sidebar-text/40">
+      <p className="mb-2 px-4 text-[11px] font-semibold uppercase tracking-widest text-sidebar-text/40">
         {title}
       </p>
 

@@ -58,7 +58,7 @@ function AdminControlsPage() {
   return (
     <div className="p-8">
       <div>
-        <h1 className="text-2xl font-bold text-on-surface">
+        <h1 className="text-2xl font-semibold text-on-surface">
           Admin Controls
         </h1>
 
@@ -69,7 +69,7 @@ function AdminControlsPage() {
       </div>
 
       <div className="mt-8">
-        <h2 className="text-lg font-bold text-on-surface">
+        <h2 className="text-lg font-semibold text-on-surface">
           Employees
         </h2>
 
@@ -144,8 +144,8 @@ function AdminControlsPage() {
                         <span
                           className={
                             employee.is_active
-                              ? "rounded-full bg-tertiary/10 px-3 py-1 text-xs font-bold text-tertiary"
-                              : "rounded-full bg-error/10 px-3 py-1 text-xs font-bold text-error"
+                              ? "rounded-full bg-tertiary/10 px-3 py-1 text-xs font-medium text-tertiary"
+                              : "rounded-full bg-error/10 px-3 py-1 text-xs font-medium text-error"
                           }
                         >
                           {employee.is_active
@@ -171,7 +171,7 @@ function TableHeading({
   children: React.ReactNode;
 }) {
   return (
-    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
       {children}
     </th>
   );

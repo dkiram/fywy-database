@@ -1,6 +1,7 @@
 /** Lists customer account states and opens the status-operation panel for a selected account. */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
 
 // MVP 3 queue page for finding accounts that need a service-status decision.
@@ -26,12 +27,41 @@ type AccountRecord = {
   reactivation_date: string | null;
   latest_status_reason: string | null;
   latest_status_date: string | null;
+  outstanding_balance: string;
+  ready_for_reconnection: boolean;
 };
 
 type AccountSummary = {
-  active: number;
+  active?: number;
   disconnected: number;
   pending_reconnection: number;
+};
+
+type WaiverApprovalRequest = {
+  waiver_request_id: number;
+  customer_id: number;
+  customer_name: string | null;
+  telephone: string | null;
+  amount: string;
+  reason: string;
+  status: "pending";
+  requested_at: string;
+  requested_by_name: string | null;
+  outstanding_balance: string;
+};
+
+type ReconnectionApprovalRequest = {
+  reconnection_request_id: number;
+  customer_id: number;
+  customer_name: string | null;
+  telephone: string | null;
+  customer_status: AccountStatus;
+  outstanding_balance_snapshot: string;
+  outstanding_balance: string;
+  reason: string;
+  status: "pending";
+  requested_at: string;
+  requested_by_name: string | null;
 };
 
 type Pagination = {
@@ -63,17 +93,29 @@ const emptyPagination: Pagination = {
 
 function AccountOperationsPage() {
   const navigate = useNavigate();
+  const { employee } = useAuth();
+  const isAdmin = employee?.role === "admin";
   const [searchParams] = useSearchParams();
   const [accounts, setAccounts] = useState<AccountRecord[]>([]);
   const [summary, setSummary] = useState<AccountSummary>(emptySummary);
   const [pagination, setPagination] = useState<Pagination>(emptyPagination);
+  const requestedView = (searchParams.get("view") as AccountView) || "attention";
   const [view, setView] = useState<AccountView>(
-    (searchParams.get("view") as AccountView) || "attention"
+    !isAdmin && ["active", "all"].includes(requestedView)
+      ? "attention"
+      : requestedView
   );
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [approvingCustomerId, setApprovingCustomerId] = useState<number | null>(null);
+  const [cancellingCustomerId, setCancellingCustomerId] = useState<number | null>(null);
+  const [waiverRequests, setWaiverRequests] = useState<WaiverApprovalRequest[]>([]);
+  const [reviewingWaiverId, setReviewingWaiverId] = useState<number | null>(null);
+  const [reconnectionRequests, setReconnectionRequests] = useState<ReconnectionApprovalRequest[]>([]);
+  const [reviewingReconnectionId, setReviewingReconnectionId] = useState<number | null>(null);
+  const canApprove = employee?.role === "admin" || employee?.role === "head_office";
 
   // The server owns filtering and pagination because the customer table is too
   // large to load into the browser as one list.
@@ -104,6 +146,148 @@ function AccountOperationsPage() {
     }
   }, [page, search, view]);
 
+  const loadWaiverRequests = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const response = await apiFetch("/api/waiver-requests");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load discount approvals.");
+      setWaiverRequests(data.waiverRequests);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load discount approvals.");
+    }
+  }, [isAdmin]);
+
+  const loadReconnectionRequests = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const response = await apiFetch("/api/reconnection-requests");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load reconnection approvals.");
+      setReconnectionRequests(data.reconnectionRequests);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load reconnection approvals.");
+    }
+  }, [isAdmin]);
+
+  const reviewWaiverRequest = async (
+    waiverRequestId: number,
+    decision: "approve" | "reject"
+  ) => {
+    let reviewNote = "";
+    if (decision === "reject") {
+      const enteredReason = window.prompt("Why is this discount request being rejected?");
+      if (enteredReason === null) return;
+      reviewNote = enteredReason.trim();
+      if (reviewNote.length < 3) {
+        setError("Enter a rejection reason of at least 3 characters.");
+        return;
+      }
+    } else if (!window.confirm("Approve and immediately apply this balance discount?")) {
+      return;
+    }
+
+    try {
+      setReviewingWaiverId(waiverRequestId);
+      setError("");
+      const response = await apiFetch(`/api/waiver-requests/${waiverRequestId}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, reviewNote }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not review discount request.");
+      await Promise.all([loadWaiverRequests(), loadAccounts()]);
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : "Could not review discount request.");
+    } finally {
+      setReviewingWaiverId(null);
+    }
+  };
+
+  const reviewReconnectionRequest = async (
+    reconnectionRequestId: number,
+    decision: "approve" | "reject"
+  ) => {
+    let reviewNote = "";
+    if (decision === "reject") {
+      const enteredReason = window.prompt("Why should this account remain disconnected?");
+      if (enteredReason === null) return;
+      reviewNote = enteredReason.trim();
+      if (reviewNote.length < 3) {
+        setError("Enter a rejection reason of at least 3 characters.");
+        return;
+      }
+    } else if (!window.confirm("Approve placing this unpaid account into Pending Reconnection? This will not activate service.")) {
+      return;
+    }
+
+    try {
+      setReviewingReconnectionId(reconnectionRequestId);
+      setError("");
+      const response = await apiFetch(`/api/reconnection-requests/${reconnectionRequestId}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, reviewNote }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not review reconnection request.");
+      await Promise.all([loadReconnectionRequests(), loadAccounts()]);
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : "Could not review reconnection request.");
+    } finally {
+      setReviewingReconnectionId(null);
+    }
+  };
+
+  const cancelPendingReconnection = async (customerId: number) => {
+    const reason = window.prompt("Why should this account remain disconnected?");
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      setError("Enter a cancellation reason of at least 3 characters.");
+      return;
+    }
+    try {
+      setCancellingCustomerId(customerId);
+      setError("");
+      const response = await apiFetch(`/api/customers/${customerId}/cancel-reconnection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not cancel pending reconnection.");
+      await loadAccounts();
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : "Could not cancel pending reconnection.");
+    } finally {
+      setCancellingCustomerId(null);
+    }
+  };
+
+  // The checkbox is the manager's explicit approval step. Payment only places
+  // a fully cleared account into this queue; it never activates service itself.
+  const approveReconnection = async (customerId: number) => {
+    try {
+      setApprovingCustomerId(customerId);
+      setError("");
+      const response = await apiFetch(`/api/customers/${customerId}/reconnect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: "Manager checkbox approval after full balance and reconnection fee verification",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not approve reconnection.");
+      await loadAccounts();
+    } catch (approvalError) {
+      setError(approvalError instanceof Error ? approvalError.message : "Could not approve reconnection.");
+    } finally {
+      setApprovingCustomerId(null);
+    }
+  };
+
   // Small debounce keeps typing in the search field from firing a request for
   // every individual keystroke.
   useEffect(() => {
@@ -111,10 +295,18 @@ function AccountOperationsPage() {
     return () => window.clearTimeout(timeout);
   }, [loadAccounts]);
 
+  useEffect(() => {
+    loadWaiverRequests();
+  }, [loadWaiverRequests]);
+
+  useEffect(() => {
+    loadReconnectionRequests();
+  }, [loadReconnectionRequests]);
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-on-surface">
+        <h1 className="text-2xl font-semibold tracking-tight text-on-surface">
           Account Operations
         </h1>
         <p className="mt-1 text-sm text-on-surface-variant">
@@ -122,8 +314,130 @@ function AccountOperationsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Active" value={summary.active} icon="check_circle" tone="positive" />
+      {isAdmin && (
+        <section className="overflow-hidden rounded-2xl border border-primary/15 bg-surface-container-lowest shadow-sm">
+          <div className="flex items-center justify-between border-b border-surface-container px-5 py-4">
+            <div>
+              <h2 className="font-semibold text-on-surface">Pending Discount Approvals</h2>
+              <p className="mt-1 text-xs text-on-surface-variant">Review the customer, amount, and employee reason before applying a waiver.</p>
+            </div>
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              {waiverRequests.length} pending
+            </span>
+          </div>
+
+          {waiverRequests.length === 0 ? (
+            <div className="px-5 py-7 text-center text-sm text-on-surface-variant">No discount requests are waiting.</div>
+          ) : (
+            <div className="divide-y divide-surface-container">
+              {waiverRequests.map((request) => (
+                <div key={request.waiver_request_id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1.2fr_0.7fr_1.5fr_auto] lg:items-center">
+                  <div>
+                    <button type="button" onClick={() => navigate(`/customers/${request.customer_id}`)} className="font-semibold text-primary hover:underline">
+                      {request.customer_name || `Customer #${request.customer_id}`}
+                    </button>
+                    <p className="mt-1 text-xs text-on-surface-variant">#{request.customer_id} · {request.telephone || "No telephone"}</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-on-surface">{formatCurrency(request.amount)}</p>
+                    <p className="text-xs text-on-surface-variant">Outstanding {formatCurrency(request.outstanding_balance)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-on-surface">{request.reason}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      Requested by {request.requested_by_name || "Unknown employee"} · {formatDateTime(request.requested_at)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
+                    <button
+                      type="button"
+                      disabled={reviewingWaiverId !== null}
+                      onClick={() => reviewWaiverRequest(request.waiver_request_id, "approve")}
+                      className="flex items-center gap-1 rounded-lg bg-tertiary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-base">check</span>
+                      {reviewingWaiverId === request.waiver_request_id ? "Applying..." : "Approve & Apply"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reviewingWaiverId !== null}
+                      onClick={() => reviewWaiverRequest(request.waiver_request_id, "reject")}
+                      className="rounded-lg bg-error/10 px-3 py-2 text-xs font-semibold text-error disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {isAdmin && (
+        <section className="overflow-hidden rounded-2xl border border-amber-200 bg-surface-container-lowest shadow-sm">
+          <div className="flex items-center justify-between border-b border-surface-container px-5 py-4">
+            <div>
+              <h2 className="font-semibold text-on-surface">Unpaid Reconnection Requests</h2>
+              <p className="mt-1 text-xs text-on-surface-variant">Approval adds the account to Pending Reconnection but does not activate service or bypass the final balance check.</p>
+            </div>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+              {reconnectionRequests.length} pending
+            </span>
+          </div>
+
+          {reconnectionRequests.length === 0 ? (
+            <div className="px-5 py-7 text-center text-sm text-on-surface-variant">No unpaid reconnection requests are waiting.</div>
+          ) : (
+            <div className="divide-y divide-surface-container">
+              {reconnectionRequests.map((request) => (
+                <div key={request.reconnection_request_id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1.2fr_0.8fr_1.5fr_auto] lg:items-center">
+                  <div>
+                    <button type="button" onClick={() => navigate(`/customers/${request.customer_id}`)} className="font-semibold text-primary hover:underline">
+                      {request.customer_name || `Customer #${request.customer_id}`}
+                    </button>
+                    <p className="mt-1 text-xs text-on-surface-variant">#{request.customer_id} · {request.telephone || "No telephone"}</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-error">{formatCurrency(request.outstanding_balance)}</p>
+                    <p className="text-xs text-on-surface-variant">At request: {formatCurrency(request.outstanding_balance_snapshot)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-on-surface">{request.reason}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      Requested by {request.requested_by_name || "Unknown employee"} · {formatDateTime(request.requested_at)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
+                    <button
+                      type="button"
+                      disabled={reviewingReconnectionId !== null}
+                      onClick={() => reviewReconnectionRequest(request.reconnection_request_id, "approve")}
+                      className="flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-base">playlist_add_check</span>
+                      {reviewingReconnectionId === request.reconnection_request_id ? "Approving..." : "Approve Queue Entry"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reviewingReconnectionId !== null}
+                      onClick={() => reviewReconnectionRequest(request.reconnection_request_id, "reject")}
+                      className="rounded-lg bg-error/10 px-3 py-2 text-xs font-semibold text-error disabled:opacity-50"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      <div className={`grid grid-cols-1 gap-4 ${isAdmin ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+        {isAdmin && (
+          <SummaryCard label="Active" value={summary.active ?? 0} icon="check_circle" tone="positive" />
+        )}
         <SummaryCard label="Disconnected" value={summary.disconnected} icon="link_off" tone="negative" />
         <SummaryCard label="Pending Reconnection" value={summary.pending_reconnection} icon="sync" tone="warning" />
       </div>
@@ -137,8 +451,12 @@ function AccountOperationsPage() {
                 ["attention", "Needs Attention"],
                 ["pending_reconnection", "Reconnection Queue"],
                 ["disconnected", "Disconnected"],
-                ["active", "Active"],
-                ["all", "All"],
+                ...(isAdmin
+                  ? ([
+                      ["active", "Active"],
+                      ["all", "All"],
+                    ] as Array<[AccountView, string]>)
+                  : []),
               ] as Array<[AccountView, string]>
             ).map(([value, label]) => (
               <button
@@ -150,8 +468,8 @@ function AccountOperationsPage() {
                 }}
                 className={
                   view === value
-                    ? "rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary"
-                    : "rounded-full bg-surface-container px-4 py-2 text-xs font-bold text-on-surface-variant transition hover:bg-surface-container-high"
+                    ? "rounded-full bg-primary px-4 py-2 text-xs font-medium text-on-primary"
+                    : "rounded-full bg-surface-container px-4 py-2 text-xs font-medium text-on-surface-variant transition hover:bg-surface-container-high"
                 }
               >
                 {label}
@@ -170,7 +488,7 @@ function AccountOperationsPage() {
                 setPage(1);
               }}
               placeholder="Search customer, ID, phone, address..."
-              className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm"
             />
           </div>
         </div>
@@ -190,7 +508,8 @@ function AccountOperationsPage() {
                 <TableHeading>Status</TableHeading>
                 <TableHeading>Status Date</TableHeading>
                 <TableHeading>Latest Note</TableHeading>
-                <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                <TableHeading>Manager Approval</TableHeading>
+                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                   Account
                 </th>
               </tr>
@@ -226,6 +545,39 @@ function AccountOperationsPage() {
                     <td className="max-w-xs px-6 py-4 text-sm text-on-surface-variant">
                       <p className="line-clamp-2">{account.latest_status_reason || "—"}</p>
                     </td>
+                    <td className="px-6 py-4" onClick={(event) => event.stopPropagation()}>
+                      {account.status === "pending_reconnection" && canApprove ? (
+                        <div className="flex min-w-40 flex-col items-start gap-2">
+                          <label
+                            className={`inline-flex items-center gap-2 text-xs font-medium ${account.ready_for_reconnection ? "cursor-pointer text-primary" : "cursor-not-allowed text-on-surface-variant"}`}
+                            title={account.ready_for_reconnection ? "Approve reconnection" : "Outstanding balance must be cleared first"}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={false}
+                              disabled={!account.ready_for_reconnection || approvingCustomerId !== null || cancellingCustomerId !== null}
+                              onChange={() => approveReconnection(account.customer_id)}
+                              className="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary"
+                            />
+                            {approvingCustomerId === account.customer_id
+                              ? "Approving..."
+                              : account.ready_for_reconnection
+                                ? "Confirm Reconnection"
+                                : "Balance Outstanding"}
+                          </label>
+                          <button
+                            type="button"
+                            disabled={approvingCustomerId !== null || cancellingCustomerId !== null}
+                            onClick={() => cancelPendingReconnection(account.customer_id)}
+                            className="text-xs font-semibold text-error hover:underline disabled:opacity-50"
+                          >
+                            {cancellingCustomerId === account.customer_id ? "Cancelling..." : "Cancel Pending"}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-on-surface-variant">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <button
                         type="button"
@@ -233,7 +585,7 @@ function AccountOperationsPage() {
                           event.stopPropagation();
                           navigate(`/customers/${account.customer_id}`);
                         }}
-                        className="rounded-lg px-3 py-2 text-sm font-bold text-primary transition hover:bg-primary/10"
+                        className="rounded-lg px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10"
                       >
                         Open
                       </button>
@@ -270,7 +622,7 @@ function AccountOperationsPage() {
                 type="button"
                 onClick={() => setPage((current) => Math.max(current - 1, 1))}
                 disabled={pagination.page <= 1}
-                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Previous
               </button>
@@ -281,7 +633,7 @@ function AccountOperationsPage() {
                 type="button"
                 onClick={() => setPage((current) => Math.min(current + 1, pagination.totalPages))}
                 disabled={pagination.page >= pagination.totalPages}
-                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Next
               </button>
@@ -298,14 +650,14 @@ function SummaryCard({ label, value, icon, tone }: { label: string; value: numbe
   const tones = {
     positive: "bg-tertiary/10 text-tertiary",
     negative: "bg-error/10 text-error",
-    warning: "bg-amber-100 text-amber-800",
+    warning: "bg-warning-container text-warning",
   };
   return (
     <div className="rounded-xl bg-surface-container-lowest p-5 shadow-sm">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-on-surface">{value.toLocaleString()}</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p>
+          <p className="mt-2 text-3xl font-medium text-on-surface">{value.toLocaleString()}</p>
         </div>
         <span className={`material-symbols-outlined flex h-11 w-11 items-center justify-center rounded-lg ${tones[tone]}`}>
           {icon}
@@ -320,19 +672,19 @@ function StatusBadge({ status }: { status: AccountStatus }) {
   const styles: Record<AccountStatus, string> = {
     active: "bg-tertiary/10 text-tertiary",
     disconnected: "bg-error/10 text-error",
-    pending_reconnection: "bg-amber-100 text-amber-800",
+    pending_reconnection: "bg-warning-container text-warning",
     closed: "bg-surface-container-high text-on-surface-variant",
     archived: "bg-surface-container-high text-on-surface-variant",
   };
   return (
-    <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${styles[status]}`}>
+    <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}>
       {humanize(status)}
     </span>
   );
 }
 
 function TableHeading({ children }: { children: React.ReactNode }) {
-  return <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">{children}</th>;
+  return <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{children}</th>;
 }
 
 function humanize(value: string) {
@@ -347,6 +699,17 @@ function formatDate(value: string | null) {
     day: "numeric",
     month: "short",
     year: "numeric",
+  });
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("en-JM", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/Jamaica",
   });
 }
 

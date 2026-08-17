@@ -121,10 +121,10 @@ function PaymentsPage() {
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-on-surface">Daily Payments</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-on-surface">Daily Payments</h1>
           <p className="mt-1 text-sm text-on-surface-variant">Daily totals and ledger entries from imported records and the new system.</p>
         </div>
-        <button type="button" onClick={() => navigate("/customers")} className="flex w-fit items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-on-primary shadow-sm transition hover:bg-primary-container">
+        <button type="button" onClick={() => navigate("/customers")} className="flex w-fit items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary shadow-sm transition hover:bg-primary-container">
           <span className="material-symbols-outlined text-lg">person_search</span>
           Find Customer to Record Payment
         </button>
@@ -132,7 +132,7 @@ function PaymentsPage() {
 
       <div className="flex flex-col gap-3 rounded-xl bg-surface-container-lowest p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Business date</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Business date</label>
           <input
             type="date"
             value={date}
@@ -140,11 +140,11 @@ function PaymentsPage() {
               setDate(event.target.value);
               setPage(1);
             }}
-            className="mt-1.5 block rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+            className="mt-1.5 block rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm focus:border-primary"
           />
         </div>
         <div className="text-sm text-on-surface-variant">
-          Scope: <span className="font-bold text-on-surface">{data?.scope || "Loading..."}</span>
+          Scope: <span className="font-medium text-on-surface">{data?.scope || "Loading..."}</span>
         </div>
       </div>
 
@@ -166,7 +166,7 @@ function PaymentsPage() {
       <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
         <div className="flex items-center justify-between border-b border-surface-container px-6 py-5">
           <div>
-            <h2 className="text-lg font-bold text-on-surface">Payment ledger</h2>
+            <h2 className="text-lg font-semibold text-on-surface">Payment ledger</h2>
             <p className="mt-1 text-sm text-on-surface-variant">All available transactions for {formatDate(date)}.</p>
           </div>
           <button type="button" onClick={loadDailyPayments} className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container text-on-surface-variant transition hover:bg-surface-container-high" aria-label="Refresh daily payments">
@@ -187,8 +187,8 @@ function PaymentsPage() {
                     <TableHeading>Type</TableHeading>
                     <TableHeading>Source</TableHeading>
                     <TableHeading>Cashier / Location</TableHeading>
-                    <TableHeading>Amount</TableHeading>
-                    <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-on-surface-variant">Receipt</th>
+                    <th className="num px-6 py-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Amount</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Receipt</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-container">
@@ -199,13 +199,13 @@ function PaymentsPage() {
                         <p className="font-semibold text-on-surface">{payment.customer_name || "Unmatched legacy customer"}</p>
                         <p className="mt-1 text-xs text-on-surface-variant">{customerReference(payment)}</p>
                       </td>
-                      <td className="px-6 py-4"><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">{payment.payment_type}</span></td>
+                      <td className="px-6 py-4"><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">{payment.payment_type}</span></td>
                       <td className="px-6 py-4"><SourceBadge source={payment.source} /></td>
                       <td className="px-6 py-4 text-sm text-on-surface-variant"><p>{payment.cashier_name || "—"}</p><p className="mt-1 text-xs">{payment.location || "Unassigned location"}</p></td>
-                      <td className="whitespace-nowrap px-6 py-4 font-bold text-on-surface">{formatCurrency(payment.amount_paid)}</td>
+                      <td className="num px-6 py-4 font-semibold text-on-surface">{formatCurrency(payment.amount_paid)}</td>
                       <td className="px-6 py-4 text-right">
                         {payment.receipt_number ? (
-                          <button type="button" onClick={() => openReceipt(payment.payment_id)} className="rounded-lg px-3 py-2 text-sm font-bold text-primary transition hover:bg-primary/10">View</button>
+                          <button type="button" onClick={() => openReceipt(payment.payment_id)} className="rounded-lg px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10">View</button>
                         ) : (
                           <span className="text-sm text-outline">—</span>
                         )}
@@ -226,7 +226,7 @@ function PaymentsPage() {
                   type="button"
                   onClick={() => setPage((current) => Math.max(current - 1, 1))}
                   disabled={pagination.page <= 1}
-                  className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Previous
                 </button>
@@ -237,7 +237,7 @@ function PaymentsPage() {
                   type="button"
                   onClick={() => setPage((current) => Math.min(current + 1, pagination.totalPages))}
                   disabled={pagination.page >= pagination.totalPages}
-                  className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
                 </button>
@@ -249,27 +249,27 @@ function PaymentsPage() {
         )}
       </section>
 
-      {receipt && <PaymentReceiptModal payment={receipt} onClose={() => setReceipt(null)} />}
+      {receipt && <PaymentReceiptModal payment={receipt} onClose={() => setReceipt(null)} onVoided={() => loadDailyPayments()} onDeleted={() => loadDailyPayments()} />}
     </div>
   );
 }
 
 function SummaryCard({ label, value, icon, primary = false }: { label: string; value: string; icon: string; primary?: boolean }) {
-  return <div className={`rounded-xl p-5 shadow-sm ${primary ? "bg-primary text-on-primary" : "bg-surface-container-lowest text-on-surface"}`}><div className="flex items-start justify-between gap-4"><div><p className={`text-xs font-bold uppercase tracking-wider ${primary ? "text-white/70" : "text-on-surface-variant"}`}>{label}</p><p className="mt-3 text-3xl font-bold">{value}</p></div><span className={`material-symbols-outlined flex h-11 w-11 items-center justify-center rounded-lg ${primary ? "bg-white/15" : "bg-primary/10 text-primary"}`}>{icon}</span></div></div>;
+  return <div className={`rounded-xl p-5 shadow-sm ${primary ? "bg-primary text-on-primary" : "bg-surface-container-lowest text-on-surface"}`}><div className="flex items-start justify-between gap-4"><div><p className={`text-xs font-semibold uppercase tracking-wider ${primary ? "text-white/70" : "text-on-surface-variant"}`}>{label}</p><p className="mt-3 text-3xl font-medium">{value}</p></div><span className={`material-symbols-outlined flex h-11 w-11 items-center justify-center rounded-lg ${primary ? "bg-white/15" : "bg-primary/10 text-primary"}`}>{icon}</span></div></div>;
 }
 
 function BreakdownCard({ title, icon, rows, labelKey, empty }: { title: string; icon: string; rows: PaymentBreakdown[]; labelKey: "payment_type" | "location"; empty: string }) {
-  return <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm"><div className="mb-5 flex items-center gap-3 border-b border-surface-container pb-4"><span className="material-symbols-outlined text-primary">{icon}</span><h2 className="font-bold text-on-surface">{title}</h2></div>{rows.length > 0 ? <div className="space-y-4">{rows.map((row) => <div key={row[labelKey] || "Unknown"} className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-on-surface">{row[labelKey] || "Unknown"}</p><p className="mt-1 text-xs text-on-surface-variant">{row.payment_count} payment{row.payment_count === 1 ? "" : "s"}</p></div><p className="font-bold text-on-surface">{formatCurrency(row.total_amount)}</p></div>)}</div> : <p className="text-sm text-on-surface-variant">{empty}</p>}</section>;
+  return <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm"><div className="mb-5 flex items-center gap-3 border-b border-surface-container pb-4"><span className="material-symbols-outlined text-primary">{icon}</span><h2 className="font-semibold text-on-surface">{title}</h2></div>{rows.length > 0 ? <div className="space-y-4">{rows.map((row) => <div key={row[labelKey] || "Unknown"} className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-on-surface">{row[labelKey] || "Unknown"}</p><p className="mt-1 text-xs text-on-surface-variant">{row.payment_count} payment{row.payment_count === 1 ? "" : "s"}</p></div><p className="num font-semibold text-on-surface">{formatCurrency(row.total_amount)}</p></div>)}</div> : <p className="text-sm text-on-surface-variant">{empty}</p>}</section>;
 }
 
 function TableHeading({ children }: { children: React.ReactNode }) {
-  return <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">{children}</th>;
+  return <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{children}</th>;
 }
 
 function SourceBadge({ source }: { source: RecentPayment["source"] }) {
   const imported = source === "imported";
   return (
-    <span className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${imported ? "bg-surface-container text-on-surface-variant" : "bg-tertiary/10 text-tertiary"}`}>
+    <span className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${imported ? "bg-surface-container text-on-surface-variant" : "bg-info/10 text-info"}`}>
       {imported ? "Imported" : "New System"}
     </span>
   );

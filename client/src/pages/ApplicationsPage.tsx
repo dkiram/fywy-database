@@ -46,6 +46,9 @@ type Package = {
   package_id: number;
   name: string;
   default_monthly_charge: string | null;
+  service_type: "cable" | "internet" | "cable_internet";
+  plan_tier: string | null;
+  speed_mbps: number | null;
 };
 
 type ApplicationSummary = {
@@ -105,6 +108,13 @@ function jamaicaToday() {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+}
+
+function packageOptionLabel(item: Package) {
+  const price = item.default_monthly_charge
+    ? `J$${Number(item.default_monthly_charge).toLocaleString()}/month`
+    : "Price unavailable";
+  return `${item.name} — ${price}`;
 }
 
 function initialNewApplication(): NewApplicationForm {
@@ -360,7 +370,7 @@ function ApplicationsPage() {
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0 flex-1 basis-80">
-          <h1 className="text-2xl font-bold tracking-tight text-on-surface">
+          <h1 className="text-2xl font-semibold tracking-tight text-on-surface">
             Applications
           </h1>
           <p className="mt-1 text-sm text-on-surface-variant">
@@ -374,7 +384,7 @@ function ApplicationsPage() {
             setFormError("");
             setShowNewForm(true);
           }}
-          className="flex w-fit shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-on-primary shadow-sm transition hover:bg-primary-container"
+          className="flex w-fit shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary shadow-sm transition hover:bg-primary-container"
         >
           <span className="material-symbols-outlined text-lg">add</span>
           New Application
@@ -393,7 +403,7 @@ function ApplicationsPage() {
             <span className="font-medium">{notice}</span>
           </div>
           {noticeCustomerId && (
-            <button type="button" onClick={() => navigate(`/customers/${noticeCustomerId}`)} className="font-bold underline">
+            <button type="button" onClick={() => navigate(`/customers/${noticeCustomerId}`)} className="font-medium underline">
               View customer
             </button>
           )}
@@ -422,8 +432,8 @@ function ApplicationsPage() {
                 }}
                 className={
                   view === value
-                    ? "rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary"
-                    : "rounded-full bg-surface-container px-4 py-2 text-xs font-bold text-on-surface-variant transition hover:bg-surface-container-high"
+                    ? "rounded-full bg-primary px-4 py-2 text-xs font-medium text-on-primary"
+                    : "rounded-full bg-surface-container px-4 py-2 text-xs font-medium text-on-surface-variant transition hover:bg-surface-container-high"
                 }
               >
                 {label}
@@ -439,7 +449,7 @@ function ApplicationsPage() {
                 setPage(1);
               }}
               placeholder="Search name, ID, phone, or address..."
-              className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm"
             />
           </div>
         </div>
@@ -455,7 +465,7 @@ function ApplicationsPage() {
                 <TableHeading>Package</TableHeading>
                 <TableHeading>Date</TableHeading>
                 <TableHeading>Status</TableHeading>
-                <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-on-surface-variant">Actions</th>
+                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container">
@@ -463,7 +473,7 @@ function ApplicationsPage() {
                 applications.map((application) => (
                   <tr key={application.application_id} onClick={() => setSelected(application)} className="cursor-pointer transition hover:bg-surface-container-low/70">
                     <td className="px-6 py-4">
-                      <p className="font-mono text-sm font-bold text-on-surface">#{application.application_id}</p>
+                      <p className="font-mono text-sm font-medium text-on-surface">#{application.application_id}</p>
                     </td>
                     <td className="px-6 py-4">
                       <p className="font-semibold text-on-surface">{application.name}</p>
@@ -475,7 +485,7 @@ function ApplicationsPage() {
                     </td>
                     <td className="px-6 py-4 text-sm text-on-surface-variant">
                       <p>{formatDate(application.application_date)}</p>
-                      {application.is_overdue && <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">Over 14 days</span>}
+                      {application.is_overdue && <span className="mt-1 inline-flex rounded-full bg-warning-container px-2 py-0.5 text-[11px] font-medium text-warning">Over 14 days</span>}
                     </td>
                     <td className="px-6 py-4"><StatusBadge status={application.status} /></td>
                     <td className="px-6 py-4">
@@ -486,7 +496,7 @@ function ApplicationsPage() {
                             <IconButton icon="close" label="Close application" onClick={(event) => { event.stopPropagation(); openCloseDecision(application); }} />
                           </>
                         )}
-                        <button type="button" onClick={(event) => { event.stopPropagation(); setSelected(application); }} className="rounded-lg px-3 py-2 text-sm font-bold text-primary transition hover:bg-primary/10">View</button>
+                        <button type="button" onClick={(event) => { event.stopPropagation(); setSelected(application); }} className="rounded-lg px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10">View</button>
                       </div>
                     </td>
                   </tr>
@@ -514,7 +524,7 @@ function ApplicationsPage() {
                 type="button"
                 onClick={() => setPage((current) => Math.max(current - 1, 1))}
                 disabled={pagination.page <= 1}
-                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Previous
               </button>
@@ -529,7 +539,7 @@ function ApplicationsPage() {
                   )
                 }
                 disabled={pagination.page >= pagination.totalPages}
-                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Next
               </button>
@@ -577,7 +587,7 @@ function ApplicationsPage() {
                   className={inputClass}
                 >
                   <option value="">Select package</option>
-                  {packages.map((item) => <option key={item.package_id} value={item.package_id}>{item.name}</option>)}
+                  {packages.map((item) => <option key={item.package_id} value={item.package_id}>{packageOptionLabel(item)}</option>)}
                 </select>
               </Field>
               <Field label="Monthly fee (J$)" required><input required min="0" step="0.01" type="number" value={newForm.monthlyFee} onChange={(event) => setNewForm({ ...newForm, monthlyFee: event.target.value })} className={inputClass} /></Field>
@@ -601,8 +611,8 @@ function ApplicationsPage() {
           footer={
             canDecide && canTakeDecision(activeApplication) ? (
               <div className="flex flex-col gap-3 sm:flex-row">
-                <button type="button" onClick={() => openServiceDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-tertiary px-4 py-3 text-sm font-bold text-white transition hover:bg-tertiary/90"><span className="material-symbols-outlined">check</span>Activate Customer</button>
-                <button type="button" onClick={() => openCloseDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-error/10 px-4 py-3 text-sm font-bold text-error transition hover:bg-error/15"><span className="material-symbols-outlined">close</span>Not Serviced</button>
+                <button type="button" onClick={() => openServiceDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-tertiary px-4 py-3 text-sm font-medium text-white transition hover:bg-tertiary/90"><span className="material-symbols-outlined">check</span>Activate Customer</button>
+                <button type="button" onClick={() => openCloseDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error transition hover:bg-error/15"><span className="material-symbols-outlined">close</span>Not Serviced</button>
               </div>
             ) : undefined
           }
@@ -641,10 +651,10 @@ function ApplicationsPage() {
 
             {activeApplication.suggested_customer_id && (
               <div className="rounded-xl border border-secondary/20 bg-secondary-container/50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-secondary">Possible existing customer</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Possible existing customer</p>
                 <p className="mt-2 font-semibold">{activeApplication.suggested_customer_name || "Existing customer"} · #{activeApplication.suggested_customer_id}</p>
                 <p className="mt-1 text-xs text-on-surface-variant">Match basis: {humanize(activeApplication.match_method || "review required")}</p>
-                <button type="button" onClick={() => navigate(`/customers/${activeApplication.suggested_customer_id}`)} className="mt-3 text-sm font-bold text-primary underline">Open customer profile</button>
+                <button type="button" onClick={() => navigate(`/customers/${activeApplication.suggested_customer_id}`)} className="mt-3 text-sm font-medium text-primary underline">Open customer profile</button>
               </div>
             )}
 
@@ -666,13 +676,13 @@ function ApplicationsPage() {
             {activeApplication.suggested_customer_id && (
               <label className={`block cursor-pointer rounded-xl border p-4 ${serviceMode === "link" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
                 <input type="radio" name="serviceMode" checked={serviceMode === "link"} onChange={() => setServiceMode("link")} className="mr-3 accent-primary" />
-                <span className="font-bold">Link existing customer #{activeApplication.suggested_customer_id}</span>
+                <span className="font-medium">Link existing customer #{activeApplication.suggested_customer_id}</span>
                 <p className="ml-7 mt-1 text-sm text-on-surface-variant">Use {activeApplication.suggested_customer_name || "the suggested customer"}; do not create a duplicate.</p>
               </label>
             )}
             <label className={`block cursor-pointer rounded-xl border p-4 ${serviceMode === "create" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
               <input type="radio" name="serviceMode" checked={serviceMode === "create"} onChange={() => setServiceMode("create")} className="mr-3 accent-primary" />
-              <span className="font-bold">Create a new customer</span>
+              <span className="font-medium">Create a new customer</span>
               <p className="ml-7 mt-1 text-sm text-on-surface-variant">Copy this application&apos;s contact, package, and rate into a new active account.</p>
             </label>
             {serviceMode === "create" && (
@@ -694,7 +704,7 @@ function ApplicationsPage() {
                     className={inputClass}
                   >
                     <option value="">Select package</option>
-                    {packages.map((item) => <option key={item.package_id} value={item.package_id}>{item.name}</option>)}
+                    {packages.map((item) => <option key={item.package_id} value={item.package_id}>{packageOptionLabel(item)}</option>)}
                   </select>
                 </Field>
                 <Field label="Monthly fee (J$)" required><input required min="0" step="0.01" type="number" value={activationMonthlyFee} onChange={(event) => setActivationMonthlyFee(event.target.value)} className={inputClass} /></Field>
@@ -730,7 +740,7 @@ function ApplicationsPage() {
   );
 }
 
-const inputClass = "mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10";
+const inputClass = "mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm text-on-surface transition focus:border-primary";
 
 function isActionable(status: ApplicationStatus) {
   return ["pending", "legacy_unresolved", "match_review"].includes(status);
@@ -779,17 +789,17 @@ function SummaryCard({ label, value, icon, warning = false }: { label: string; v
       <div className="flex min-w-0 items-center gap-3">
         <span
           aria-hidden="true"
-          className={`material-symbols-outlined flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg text-xl ${warning ? "bg-amber-100 text-amber-700" : "bg-primary/10 text-primary"}`}
+          className={`material-symbols-outlined flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg text-xl ${warning ? "bg-warning-container text-warning" : "bg-primary/10 text-primary"}`}
         >
           {icon}
         </span>
 
         <div className="min-w-0 flex-1">
-          <p className="break-words text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+          <p className="break-words text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
             {label}
           </p>
 
-          <p className={`mt-1 text-2xl font-bold leading-none ${warning ? "text-amber-700" : "text-on-surface"}`}>
+          <p className={`mt-1 text-2xl font-medium leading-none ${warning ? "text-warning" : "text-on-surface"}`}>
             {value}
           </p>
         </div>
@@ -800,18 +810,18 @@ function SummaryCard({ label, value, icon, warning = false }: { label: string; v
 
 function StatusBadge({ status }: { status: ApplicationStatus }) {
   const styles: Record<ApplicationStatus, string> = {
-    pending: "bg-primary/10 text-primary",
+    pending: "bg-surface-container-high text-on-surface-variant",
     serviced: "bg-tertiary/10 text-tertiary",
     cancelled: "bg-surface-container-high text-on-surface-variant",
     declined: "bg-error/10 text-error",
-    legacy_unresolved: "bg-amber-100 text-amber-800",
-    match_review: "bg-secondary-container text-secondary",
+    legacy_unresolved: "bg-warning-container text-warning",
+    match_review: "bg-info/10 text-info",
   };
-  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${styles[status]}`}>{humanize(status)}</span>;
+  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}>{humanize(status)}</span>;
 }
 
 function TableHeading({ children }: { children: React.ReactNode }) {
-  return <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">{children}</th>;
+  return <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{children}</th>;
 }
 
 function IconButton({ icon, label, onClick, positive = false }: { icon: string; label: string; onClick: React.MouseEventHandler<HTMLButtonElement>; positive?: boolean }) {
@@ -854,7 +864,7 @@ function ApplicationDrawer({ application, onClose, children, footer }: { applica
           type="button"
           onClick={onClose}
           aria-label="Close application details"
-          className="absolute left-0 top-8 z-20 hidden h-14 w-14 -translate-x-full items-center justify-center bg-error text-white shadow-lg transition hover:bg-error/90 focus:outline-none focus:ring-4 focus:ring-error/20 sm:flex"
+          className="absolute left-0 top-8 z-20 hidden h-14 w-14 -translate-x-full items-center justify-center bg-error text-white shadow-lg transition hover:bg-error/90 sm:flex"
         >
           <span className="material-symbols-outlined text-3xl">close</span>
         </button>
@@ -862,10 +872,10 @@ function ApplicationDrawer({ application, onClose, children, footer }: { applica
         <header className="shrink-0 border-b border-surface-container px-6 py-6 sm:px-8">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
                 Application #{application.application_id}
               </p>
-              <h2 id="application-drawer-title" className="mt-2 break-words text-2xl font-bold tracking-tight text-on-surface sm:text-3xl">
+              <h2 id="application-drawer-title" className="mt-2 break-words text-2xl font-semibold tracking-tight text-on-surface sm:text-3xl">
                 {application.name}
               </h2>
             </div>
@@ -881,7 +891,7 @@ function ApplicationDrawer({ application, onClose, children, footer }: { applica
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge status={application.status} />
-            {application.is_overdue && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Over 14 days</span>}
+            {application.is_overdue && <span className="rounded-full bg-warning-container px-3 py-1 text-xs font-medium text-warning">Over 14 days</span>}
             {application.legacy_source && <span className="rounded-full bg-surface-container px-3 py-1 text-xs font-medium text-on-surface-variant">Imported legacy record</span>}
           </div>
         </header>
@@ -907,7 +917,7 @@ function DrawerSection({ title, icon, children }: { title: string; icon: string;
         <span className="material-symbols-outlined flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-lg text-primary">
           {icon}
         </span>
-        <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-on-surface">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-on-surface">
           {title}
         </h3>
       </div>
@@ -920,7 +930,7 @@ function Modal({ title, onClose, children, wide = false }: { title: string; onCl
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-label={title}>
       <div className={`max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-surface-container-lowest shadow-2xl ${wide ? "max-w-4xl" : "max-w-2xl"}`}>
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-container bg-surface-container-lowest px-6 py-5"><h2 className="text-xl font-bold text-on-surface">{title}</h2><button type="button" onClick={onClose} className="rounded-full p-2 text-on-surface-variant transition hover:bg-surface-container" aria-label="Close"><span className="material-symbols-outlined">close</span></button></div>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-container bg-surface-container-lowest px-6 py-5"><h2 className="text-xl font-semibold text-on-surface">{title}</h2><button type="button" onClick={onClose} className="rounded-full p-2 text-on-surface-variant transition hover:bg-surface-container" aria-label="Close"><span className="material-symbols-outlined">close</span></button></div>
         <div className="p-6">{children}</div>
       </div>
     </div>
@@ -928,7 +938,7 @@ function Modal({ title, onClose, children, wide = false }: { title: string; onCl
 }
 
 function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section><h3 className="mb-4 border-b border-surface-container pb-2 text-sm font-bold uppercase tracking-wider text-primary">{title}</h3><div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{children}</div></section>;
+  return <section><h3 className="mb-4 border-b border-surface-container pb-2 text-sm font-semibold uppercase tracking-wider text-primary">{title}</h3><div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{children}</div></section>;
 }
 
 function Field({ label, children, required = false }: { label: string; children: React.ReactNode; required?: boolean }) {
@@ -936,14 +946,14 @@ function Field({ label, children, required = false }: { label: string; children:
 }
 
 function Detail({ label, value }: { label: string; value: string | null | undefined }) {
-  return <div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">{label}</p><p className="mt-1.5 font-medium text-on-surface">{value || "—"}</p></div>;
+  return <div><p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p><p className="mt-1.5 font-medium text-on-surface">{value || "—"}</p></div>;
 }
 
 function ModalActions({ saving, primaryLabel, onCancel, onPrimary, destructive = false }: { saving: boolean; primaryLabel: string; onCancel: () => void; onPrimary?: () => void; destructive?: boolean }) {
   return (
     <div className="flex justify-end gap-3 border-t border-surface-container pt-5">
-      <button type="button" disabled={saving} onClick={onCancel} className="rounded-lg bg-surface-container px-5 py-2.5 text-sm font-bold text-on-surface-variant disabled:opacity-50">Cancel</button>
-      <button type={onPrimary ? "button" : "submit"} disabled={saving} onClick={onPrimary} className={`rounded-lg px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50 ${destructive ? "bg-error" : "bg-primary"}`}>{saving ? "Saving..." : primaryLabel}</button>
+      <button type="button" disabled={saving} onClick={onCancel} className="rounded-lg bg-surface-container px-5 py-2.5 text-sm font-medium text-on-surface-variant disabled:opacity-50">Cancel</button>
+      <button type={onPrimary ? "button" : "submit"} disabled={saving} onClick={onPrimary} className={`rounded-lg px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50 ${destructive ? "bg-error" : "bg-primary"}`}>{saving ? "Saving..." : primaryLabel}</button>
     </div>
   );
 }

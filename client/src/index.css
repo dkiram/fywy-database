@@ -9,7 +9,12 @@
   --color-secondary: #506073;
   --color-secondary-container: #d3e4fc;
 
-  --color-tertiary: #3c635e;
+  /* Was #3c635e — only deltaE 2.5 from --color-primary, which made the
+     "assigned" and "completed" badges render as literally the same colour.
+     Now a true green: deltaE 35 from primary. Every existing bg-tertiary /
+     text-tertiary usage is already "positive/success" semantics, so this one
+     line fixes the collision app-wide without touching those files. */
+  --color-tertiary: #2e6b31;
 
   /* App backgrounds */
   --color-surface: #f7fafb;
@@ -28,6 +33,17 @@
   --color-outline: #717785;
   --color-outline-variant: #c1c6d5;
   --color-error: #ba1a1a;
+
+  /* Status colours. The rule: colour marks an EXCEPTION, not a category.
+     Routine states (open, pending, cancelled) use the neutral surface pair,
+     so a normal queue reads calm and a real problem actually stands out.
+     --color-warning is the amber already in use, just named instead of the
+     raw Tailwind amber-800/amber-100 utilities, so it looks unchanged.
+     All five status colours are >=25 deltaE apart. */
+  --color-success: #2e6b31;
+  --color-warning: #92400e;
+  --color-warning-container: #fef3c7;
+  --color-info: #1f5f8b;
 
   /* Our shared navy sidebar */
   --color-sidebar: #0b1c2d;
@@ -69,6 +85,25 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/* One focus rule for the whole app. The previous focus:ring-primary/10 and /20
+   computed to roughly #ecefef — about 1.05:1 against the input they sat on,
+   i.e. invisible — and buttons had no focus style at all. Only shows for
+   keyboard navigation, so mouse users see no change. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Right-aligned tabular figures for money and other numeric columns, so
+   amounts line up digit-for-digit down a column instead of having to be read
+   row by row. Inter ships tabular numerals; this just switches them on. */
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .material-symbols-outlined {
