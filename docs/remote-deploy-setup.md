@@ -156,28 +156,122 @@ breaks months later.
 
 ---
 
-## 4. Make sure the NAS can pull from GitHub
+## 4. First-time setup on the NAS
 
-Still on the NAS, in the deployment directory:
+This is the step that makes the NAS able to pull the code. Two things have to
+be true: it needs a git, and that git needs credentials for a private
+repository. Neither is true out of the box.
+
+**TOS ships without git.** You can install it from the App Center if it is
+offered, but do not count on it — `deploy.sh` runs git inside an `alpine/git`
+container against the same directory, which works on any TOS version. All the
+commands below use that container.
+
+### 4a. Make a token for the NAS
+
+On GitHub, signed in as the account that owns `dkimaree-bot/fywy-database`:
+
+**Settings → Developer settings → Personal access tokens → Fine-grained
+tokens → Generate new token**
+
+- **Repository access:** Only select repositories → `fywy-database`
+- **Permissions:** Repository permissions → **Contents: Read-only**. Nothing
+  else. The NAS only ever reads.
+- **Expiration:** whatever you will actually remember to rotate. A year is
+  reasonable; when it lapses, deploys fail with a clear message and you write
+  a new token into the same file.
+
+Copy the token. It starts with `github_pat_`. You will not see it again.
+
+### 4b. Put the token on the NAS
+
+SSH into the NAS and write the token into a file of its own — not into
+`.git/config`, and not into the deployment directory:
 
 ```bash
+unset HISTFILE                    # keep the token out of shell history
+
+mkdir -p /Volume1/SPCL/secrets
+chmod 700 /Volume1/SPCL/secrets
+
+cat > /Volume1/SPCL/secrets/git-credentials <<'EOF'
+https://dkimaree-bot:github_pat_PASTE_YOURS_HERE@github.com
+EOF
+
+chmod 600 /Volume1/SPCL/secrets/git-credentials
+```
+
+That directory is mounted into the git container, and `deploy.conf` points at
+the file with `SPCL_GIT_CREDENTIALS`. Keep the directory dedicated to secrets:
+everything in it is visible to that container.
+
+### 4c. Give yourself a git you can type
+
+Still on the NAS. This is the same command `deploy.sh` builds internally, as a
+shell function so the rest of this section reads normally:
+
+```bash
+g() {
+  /Volume1/@apps/DockerEngine/dockerd/bin/docker run --rm \
+    -v /Volume1/SPCL/deployment:/repo -w /repo -e HOME=/tmp \
+    -v /Volume1/SPCL/secrets:/creds \
+    alpine/git \
+      -c safe.directory=/repo \
+      -c "credential.helper=store --file=/creds/git-credentials" "$@"
+}
+```
+
+`safe.directory` is needed because the checkout is owned by a different uid
+than the one inside the container, and modern git refuses to touch a
+repository it thinks belongs to someone else.
+
+Check the credentials work before touching anything:
+
+```bash
+g ls-remote origin 2>&1 | head -3
+```
+
+- A list of refs — good, carry on.
+- `could not read Username` — the credentials file is missing, unreadable, or
+  in the wrong place.
+- `Repository not found` — the token is valid but cannot see this repo. Either
+  the repository name is wrong or the token was scoped to a different one.
+
+### 4d. Turn the deployment directory into a real checkout
+
+The deployment directory already has files in it — `.env.production` above
+all, which exists only on the NAS and must survive. Back it up first, then
+force it onto `origin/main`:
+
+```bash
+tar czf "/Volume1/SPCL/deployment-backup-$(date +%Y%m%d-%H%M).tar.gz" \
+  -C /Volume1/SPCL deployment
+
 cd /Volume1/SPCL/deployment
-git remote -v
-git pull
+
+g init
+g remote remove origin 2>/dev/null
+g remote add origin https://github.com/dkimaree-bot/fywy-database.git
+g fetch origin main
+g checkout -f -B main origin/main
+g log --oneline -3
 ```
 
-If `git` is not installed, you can install it through TOS's App Center, or
-fall back to copying files over SMB — but then `deploy.sh` cannot do its job,
-so it is worth getting git working.
+`checkout -f -B main` does three things at once: creates `main` (the repo was
+left on an empty `master` by `git init`), points it at what GitHub has, and
+replaces anything that was hand-edited on the NAS. That last part is why the
+backup comes first.
 
-If the repository is private, GitHub will ask for credentials. Use a personal
-access token rather than your password: GitHub → **Settings → Developer
-settings → Personal access tokens**, scope `repo`, read-only is enough. Then:
+`.env.production` is gitignored, so it is untracked and stays exactly where it
+is. Confirm before moving on:
 
 ```bash
-git config --global credential.helper store
-git pull      # paste the token when asked for a password, once
+ls -la .env.production
+g status --short
 ```
+
+From here the NAS is a normal checkout and `deploy.sh` drives it. You should
+not need to run `g` by hand again.
 
 ---
 
@@ -261,7 +355,11 @@ Edit `deploy/deploy.conf` and set:
 SPCL_SSH=SPCNAS@100.98.108.77
 SPCL_SSH_PORT=9222
 SPCL_REMOTE_DIR=/Volume1/SPCL/deployment
+SPCL_GIT_CREDENTIALS=/Volume1/SPCL/secrets/git-credentials
 ```
+
+`SPCL_GIT_CREDENTIALS` is a path **on the NAS**, not on your laptop — the file
+you created in step 4b. The token itself never leaves the NAS.
 
 Use the **Tailscale** address, not the 192.168 one. Tailscale works both on
 the office network and off it, so there is nothing to switch between.
@@ -327,6 +425,18 @@ can react.
 the Tailscale admin console. If it has expired, that is the key-expiry setting
 from step 3, and it needs one more UltraViewer session to fix. Disable expiry
 while you are in there.
+
+**`could not read Username for 'https://github.com'`** — The NAS has no working
+credentials for the private repo. Either `/Volume1/SPCL/secrets/git-credentials`
+is missing or unreadable, `SPCL_GIT_CREDENTIALS` in `deploy.conf` points
+somewhere else, or the token expired or was revoked. Write a new token into the
+same file (step 4a–4b); nothing else changes.
+
+**`the NAS has neither git nor docker`** — If you can see docker working when
+you SSH in by hand, this is a PATH problem, not a missing docker: TOS only adds
+docker to PATH for interactive logins, and `deploy.sh` runs non-interactively.
+Find the real path with `ssh -p 9222 SPCNAS@100.98.108.77 'bash -lc "command -v
+docker"'` and set `SPCL_DOCKER` in `deploy.conf` to it.
 
 **`git pull failed on the NAS`** — Someone edited files directly on the NAS and
 the pull refuses to overwrite them. SSH in and run `git status` to see what.

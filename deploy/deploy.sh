@@ -94,6 +94,19 @@ SPCL_COMPOSE_FILE="${SPCL_COMPOSE_FILE:-docker-compose.prod.yml}"
 SPCL_ENV_FILE="${SPCL_ENV_FILE:-.env.production}"
 SPCL_COMPOSE_PROFILES="${SPCL_COMPOSE_PROFILES:-}"
 
+# Absolute path to docker on the NAS. Leave empty to detect automatically.
+SPCL_DOCKER="${SPCL_DOCKER:-}"
+
+# Path ON THE NAS to a git credentials file, so the NAS can read the private
+# repo from GitHub. One line, mode 600:
+#
+#   https://<user>:<token>@github.com
+#
+# Put it in a directory of its own - that whole directory is mounted into
+# the git container. Leave empty only if the repository is public.
+# See deploy.conf.template.
+SPCL_GIT_CREDENTIALS="${SPCL_GIT_CREDENTIALS:-}"
+
 # How long to wait for things to come up, in seconds. Raise these if the NAS
 # is slow or the database has grown large enough that startup recovery takes
 # a while.
@@ -111,17 +124,32 @@ fi
 # Without this, every remote command would prompt for the NAS password
 # separately. ControlMaster opens the connection once and the rest ride along.
 
-SSH_CONTROL_DIR="${TMPDIR:-/tmp}/spcl-deploy-$$"
+# The socket path must stay under about 104 characters or ssh dies with
+# "unix_listener: path too long". macOS's TMPDIR is a ~50-character
+# /var/folders/... path on its own, so anchor at /tmp and use %C - ssh's
+# short hash of the connection - instead of spelling out user@host:port.
+SSH_CONTROL_DIR="/tmp/spcl-deploy-$$"
 mkdir -p "$SSH_CONTROL_DIR"
 chmod 700 "$SSH_CONTROL_DIR"
+
+SSH_CONTROL_PATH="$SSH_CONTROL_DIR/%C"
 
 SSH_OPTS=(
   -p "$SPCL_SSH_PORT"
   -o ControlMaster=auto
-  -o "ControlPath=$SSH_CONTROL_DIR/%r@%h:%p"
+  -o "ControlPath=$SSH_CONTROL_PATH"
   -o ControlPersist=60
   -o ConnectTimeout=10
 )
+
+# %C expands to 40 hex characters. Fail loudly rather than leaving someone
+# to decode "unix_listener: path too long" for themselves.
+CONTROL_PATH_LENGTH=$(( ${#SSH_CONTROL_DIR} + 1 + 40 ))
+
+if [ "$CONTROL_PATH_LENGTH" -gt 100 ]; then
+  fail "the SSH control socket path would be $CONTROL_PATH_LENGTH characters,
+       which is over the limit for a Unix socket."
+fi
 
 cleanup() {
   ssh "${SSH_OPTS[@]}" -O exit "$SPCL_SSH" 2>/dev/null || true
@@ -139,10 +167,152 @@ remote_in_repo() {
   remote "cd '$SPCL_REMOTE_DIR' && $*"
 }
 
+# A non-interactive `ssh host "command"` gets a minimal PATH, and TOS only
+# adds docker to PATH for interactive logins. Everything this script runs is
+# non-interactive, so resolve docker's absolute path once - through a login
+# shell, which does read the profile - and use that everywhere.
+REMOTE_DOCKER="docker"
+
+detect_remote_docker() {
+  local found=""
+
+  # `|| true` matters: under `set -o pipefail` a grep that matches nothing
+  # fails the whole pipeline, and `set -e` would then abort the script with
+  # no message at all rather than reaching the clear error below.
+  found="$(remote 'bash -lc "command -v docker 2>/dev/null"' 2>/dev/null \
+           | tr -d '\r' | grep '^/' | head -1)" || true
+
+  if [ -z "$found" ]; then
+    for candidate in \
+      /usr/local/bin/docker /opt/bin/docker /usr/bin/docker \
+      /usr/sbin/docker /usr/local/sbin/docker
+    do
+      if remote "test -x $candidate" 2>/dev/null; then
+        found="$candidate"
+        break
+      fi
+    done
+  fi
+
+  if [ -z "$found" ]; then
+    fail "docker was not found on the NAS over a non-interactive session.
+
+       It probably works when you log in by hand, because TOS only adds it
+       to PATH for interactive shells. Find it with:
+
+         ssh -p $SPCL_SSH_PORT $SPCL_SSH 'bash -lc \"command -v docker\"'
+
+       then set SPCL_DOCKER to that path in deploy/deploy.conf."
+  fi
+
+  REMOTE_DOCKER="$found"
+  muted "docker: $REMOTE_DOCKER"
+}
+
+# TOS ships without git. Docker is the one thing on this NAS that is
+# reliably present, so when there is no git binary we run one in a container
+# against the same directory. Detected once and reused, because each probe
+# is a round trip over a lossy link.
+#
+# safe.directory is needed because the checkout is owned by a different uid
+# than the one inside the container, which modern git refuses to touch.
+#
+# The repository is private, so the container also needs credentials. They
+# live in a file on the NAS which is mounted into the container, where git's
+# "store" helper reads it. The token is never passed on a command line, so it
+# does not show up in `ps`, and it never lands in .git/config.
+#
+# The file's DIRECTORY is what gets mounted, not the file: after a successful
+# fetch git rewrites the credential file through a lock file and a rename,
+# and renaming onto a bind-mounted file fails. Give it the whole directory
+# and the rename stays inside one mount. Keep that directory dedicated to
+# secrets - everything in it is visible to the container.
+REMOTE_GIT=""
+
+detect_remote_git() {
+  local found=""
+
+  # Same PATH trap as docker: a non-interactive ssh session gets a minimal
+  # PATH, so ask a login shell. `|| true` keeps set -e from killing us when
+  # git genuinely is not there.
+  found="$(remote 'bash -lc "command -v git 2>/dev/null"' 2>/dev/null \
+           | tr -d '\r' | grep '^/' | head -1)" || true
+
+  if [ -n "$found" ]; then
+    REMOTE_GIT="$found"
+    muted "using the NAS's own git: $found"
+    return
+  fi
+
+  # $REMOTE_DOCKER is already an absolute path by this point - do NOT probe
+  # with `command -v docker`, which fails over a non-interactive session even
+  # when docker is installed and working.
+  if [ -z "$REMOTE_DOCKER" ] || ! remote "test -x '$REMOTE_DOCKER'"; then
+    fail "the NAS has neither git nor a usable docker at
+       '$REMOTE_DOCKER', so there is no way to update the code.
+       Install git through the TOS App Center, or set SPCL_DOCKER in
+       deploy/deploy.conf to docker's absolute path."
+  fi
+
+  local cred_mount="" cred_opt=""
+
+  if [ -n "$SPCL_GIT_CREDENTIALS" ]; then
+    case "$SPCL_GIT_CREDENTIALS" in
+      /*/?*) ;;
+      *) fail "SPCL_GIT_CREDENTIALS must be an absolute path to a file on the
+       NAS, inside a directory of its own. Got: '$SPCL_GIT_CREDENTIALS'" ;;
+    esac
+
+    local cred_dir="${SPCL_GIT_CREDENTIALS%/*}"
+    local cred_file="${SPCL_GIT_CREDENTIALS##*/}"
+
+    remote "test -r '$SPCL_GIT_CREDENTIALS'" \
+      || fail "SPCL_GIT_CREDENTIALS points at '$SPCL_GIT_CREDENTIALS',
+       which the NAS cannot read. Create it there with:
+
+         mkdir -p '$cred_dir' && chmod 700 '$cred_dir'
+         printf 'https://USER:TOKEN@github.com\\n' > '$SPCL_GIT_CREDENTIALS'
+         chmod 600 '$SPCL_GIT_CREDENTIALS'
+
+       USER is the GitHub account the token belongs to; TOKEN is a
+       fine-grained personal access token with Contents: Read-only on this
+       repository and nothing else."
+
+    cred_mount="-v '$cred_dir':/creds"
+    cred_opt="-c 'credential.helper=store --file=/creds/$cred_file'"
+  fi
+
+  REMOTE_GIT="$REMOTE_DOCKER run --rm -v '$SPCL_REMOTE_DIR':/repo -w /repo -e HOME=/tmp $cred_mount alpine/git -c safe.directory=/repo $cred_opt"
+  muted "no git on the NAS - running it in a container instead"
+
+  [ -n "$cred_mount" ] || warn "no SPCL_GIT_CREDENTIALS set - fetching a private repo will fail"
+}
+
+# The NAS repository has to be a real checkout before any of this means
+# anything. A half-initialised repo (git init with no commits) would
+# otherwise die inside a command substitution with no message at all.
+check_remote_repo() {
+  remote_in_repo "test -d .git" \
+    || fail "$SPCL_REMOTE_DIR on the NAS is not a git repository yet.
+       See 'First-time setup on the NAS' in docs/remote-deploy-setup.md."
+
+  remote_git "rev-parse --verify HEAD >/dev/null 2>&1" \
+    || fail "the git repository in $SPCL_REMOTE_DIR has no commits - it was
+       initialised but never fetched, usually because the fetch could not
+       authenticate to GitHub.
+
+       See 'First-time setup on the NAS' in docs/remote-deploy-setup.md."
+}
+
+# Runs a git subcommand on the NAS, whichever way git is available.
+remote_git() {
+  remote "cd '$SPCL_REMOTE_DIR' && $REMOTE_GIT $*"
+}
+
 compose_cmd() {
   local profiles=""
   [ -n "$SPCL_COMPOSE_PROFILES" ] && profiles="--profile $SPCL_COMPOSE_PROFILES"
-  echo "docker compose -f '$SPCL_COMPOSE_FILE' --env-file '$SPCL_ENV_FILE' $profiles"
+  echo "$REMOTE_DOCKER compose -f '$SPCL_COMPOSE_FILE' --env-file '$SPCL_ENV_FILE' $profiles"
 }
 
 # --- 1. local repository -----------------------------------------------------
@@ -189,15 +359,50 @@ fi
 
 step "Connecting to the NAS"
 
-remote true 2>/dev/null || fail "cannot reach $SPCL_SSH.
+# The link to the NAS runs over Tailscale to Jamaica and drops packets from
+# time to time, so a single failed attempt means very little. Retry before
+# concluding anything, and keep whatever ssh actually said - a generic
+# "cannot reach" sends you debugging the wrong layer.
+CONNECTED="false"
+CONNECT_ERROR=""
 
-       If you are away from the office network, this is expected until
-       Tailscale is set up - see docs/remote-deploy-setup.md.
+for attempt in 1 2 3; do
+  if CONNECT_ERROR="$(remote true 2>&1)"; then
+    CONNECTED="true"
+    break
+  fi
 
-       If you are on the network, check that SSH is enabled on the NAS
-       (TOS Control Panel -> Terminal & SNMP)."
+  if [ "$attempt" -lt 3 ]; then
+    muted "attempt $attempt did not get through, retrying..."
+    sleep 3
+  fi
+done
+
+if [ "$CONNECTED" != "true" ]; then
+  fail "cannot reach $SPCL_SSH after 3 attempts on port $SPCL_SSH_PORT.
+
+       ssh said: ${CONNECT_ERROR:-(nothing)}
+
+       'Operation timed out' with tailscale ping still working means the
+       NAS firewall rule was lost, usually after a reboot. See the
+       'After a reboot' section of docs/remote-deploy-setup.md.
+
+       'Permission denied' means the password or username is wrong. The
+       user is SPCNAS, not admin or root.
+
+       'Connection refused' means sshd is not on port $SPCL_SSH_PORT."
+fi
 
 ok "connected to $SPCL_SSH"
+
+if [ -n "$SPCL_DOCKER" ]; then
+  REMOTE_DOCKER="$SPCL_DOCKER"
+  muted "docker: $REMOTE_DOCKER (from deploy.conf)"
+else
+  detect_remote_docker
+fi
+
+detect_remote_git
 
 remote_in_repo "test -f '$SPCL_COMPOSE_FILE'" \
   || fail "no $SPCL_COMPOSE_FILE in $SPCL_REMOTE_DIR on the NAS.
@@ -208,19 +413,38 @@ remote_in_repo "test -f '$SPCL_ENV_FILE'" \
        That file holds the database password and session secret and is
        created on the NAS, never copied from a laptop."
 
+check_remote_repo
+
 # --- 4. what is about to change ----------------------------------------------
 
 step "Fetching on the NAS"
 
-remote_in_repo "git fetch origin '$SPCL_BRANCH' 2>&1" | sed 's/^/    /' || true
+# A failed fetch used to be swallowed here, which meant a deploy could look
+# like it worked while the NAS quietly stayed on old code. The most common
+# cause is authentication: "could not read Username for 'https://github.com'"
+# means the credentials file is missing, unreadable or holds a dead token.
+FETCH_OUTPUT="$(remote_git "fetch origin '$SPCL_BRANCH' 2>&1" || echo "__SPCL_FETCH_FAILED__")"
+echo "$FETCH_OUTPUT" | sed 's/^/    /'
 
-REMOTE_HEAD="$(remote_in_repo "git rev-parse HEAD" | tr -d '\r\n')"
+if echo "$FETCH_OUTPUT" | grep -q '__SPCL_FETCH_FAILED__\|could not read Username\|Authentication failed'; then
+  fail "the NAS could not fetch from GitHub.
+
+       'could not read Username' means it has no credentials for the private
+       repository. Check that SPCL_GIT_CREDENTIALS in deploy/deploy.conf
+       points at a readable file on the NAS containing one line:
+
+         https://<user>:<token>@github.com
+
+       and that the token has not expired or been revoked."
+fi
+
+REMOTE_HEAD="$(remote_git "rev-parse HEAD" | tr -d '\r\n')"
 
 if [ "$REMOTE_HEAD" = "$LOCAL_HEAD" ]; then
   muted "the NAS is already on this commit"
 else
   info "incoming commits:"
-  remote_in_repo "git log --oneline HEAD..origin/'$SPCL_BRANCH' 2>/dev/null | head -20" \
+  remote_git "log --oneline HEAD..origin/'$SPCL_BRANCH' 2>/dev/null" | head -20 \
     | sed 's/^/        /' || true
 fi
 
@@ -234,7 +458,7 @@ fi
 
 step "Pulling and rebuilding"
 
-remote_in_repo "git pull --ff-only origin '$SPCL_BRANCH' 2>&1" | sed 's/^/    /' \
+remote_git "pull --ff-only origin '$SPCL_BRANCH' 2>&1" | sed 's/^/    /' \
   || fail "git pull failed on the NAS. If someone edited files there directly,
        the pull will refuse rather than overwrite them."
 
@@ -255,7 +479,7 @@ DB_ATTEMPTS=$(( SPCL_DB_WAIT_SECONDS / 2 ))
 [ "$DB_ATTEMPTS" -lt 1 ] && DB_ATTEMPTS=1
 
 for _ in $(seq 1 "$DB_ATTEMPTS"); do
-  if remote "docker exec spcl-postgres pg_isready -q" 2>/dev/null; then
+  if remote "$REMOTE_DOCKER exec spcl-postgres pg_isready -q" 2>/dev/null; then
     DB_READY="true"
     break
   fi
@@ -274,7 +498,7 @@ if [ "$SKIP_MIGRATIONS" = "true" ]; then
 else
   step "Checking for pending migrations"
 
-  PENDING_OUTPUT="$(remote "docker exec spcl-backup sh /opt/spcl-deploy/migrate.sh --dry-run 2>&1" || true)"
+  PENDING_OUTPUT="$(remote "$REMOTE_DOCKER exec spcl-backup sh /opt/spcl-deploy/migrate.sh --dry-run 2>&1" || true)"
   echo "$PENDING_OUTPUT" | sed 's/^/    /'
 
   if echo "$PENDING_OUTPUT" | grep -q "nothing to apply"; then
@@ -286,7 +510,7 @@ else
     muted "a safety backup is taken automatically before any of it runs"
 
     if confirm "Apply them now?"; then
-      remote "docker exec spcl-backup sh /opt/spcl-deploy/migrate.sh 2>&1" | sed 's/^/    /' \
+      remote "$REMOTE_DOCKER exec spcl-backup sh /opt/spcl-deploy/migrate.sh 2>&1" | sed 's/^/    /' \
         || fail "a migration failed. The database was rolled back to before that
        migration started, and a safety backup was taken before anything ran."
       ok "migrations applied"
@@ -309,7 +533,7 @@ HEALTH_ATTEMPTS=$(( SPCL_HEALTH_WAIT_SECONDS / 3 ))
 [ "$HEALTH_ATTEMPTS" -lt 1 ] && HEALTH_ATTEMPTS=1
 
 for _ in $(seq 1 "$HEALTH_ATTEMPTS"); do
-  HEALTH="$(remote "docker exec spcl-api node -e \"
+  HEALTH="$(remote "$REMOTE_DOCKER exec spcl-api node -e \"
     fetch('http://127.0.0.1:3000/health')
       .then(r => r.text())
       .then(t => { console.log(t); process.exit(0); })
@@ -336,7 +560,7 @@ fi
 
 step "Checking backups"
 
-if remote "docker exec spcl-backup sh /opt/spcl-deploy/backup-check.sh 2>&1" | sed 's/^/    /'; then
+if remote "$REMOTE_DOCKER exec spcl-backup sh /opt/spcl-deploy/backup-check.sh 2>&1" | sed 's/^/    /'; then
   ok "backups look healthy"
 else
   warn "the backup check reported a problem - see above"
@@ -345,7 +569,7 @@ fi
 
 # --- done --------------------------------------------------------------------
 
-DEPLOYED="$(remote_in_repo "git log -1 --format='%h  %s'" | tr -d '\r')"
+DEPLOYED="$(remote_git "log -1 --format='%h  %s'" | tr -d '\r')"
 
 printf "\n%s==>%s %sDeployed%s\n" "$BOLD" "$RESET" "$GREEN" "$RESET"
 info "$DEPLOYED"

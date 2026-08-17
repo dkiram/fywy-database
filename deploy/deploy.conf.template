@@ -32,3 +32,30 @@ SPCL_COMPOSE_PROFILES=
 # Raise these if the NAS is slow or the database has grown large.
 SPCL_DB_WAIT_SECONDS=60
 SPCL_HEALTH_WAIT_SECONDS=60
+
+# Absolute path to docker on the NAS. Leave empty and it is detected
+# automatically via a login shell. Set it only if detection fails --
+# find the value with:
+#   ssh -p 9222 SPCNAS@100.98.108.77 'bash -lc "command -v docker"'
+SPCL_DOCKER=
+
+# Path ON THE NAS to the git credentials file. The repository is private, so
+# the NAS needs a token to read it; the git that runs on the NAS (in a
+# container, since TOS ships without git) reads this file.
+#
+# It is NOT in this repository and NOT on your laptop. Create it once on the
+# NAS itself:
+#
+#   mkdir -p /Volume1/SPCL/secrets && chmod 700 /Volume1/SPCL/secrets
+#   printf 'https://dkimaree-bot:github_pat_XXXX@github.com\n' \
+#     > /Volume1/SPCL/secrets/git-credentials
+#   chmod 600 /Volume1/SPCL/secrets/git-credentials
+#
+# Use a fine-grained personal access token on the dkimaree-bot account,
+# scoped to the fywy-database repository only, with Contents: Read-only.
+# Nothing else. If it ever leaks, revoke it on GitHub and write a new one.
+#
+# Keep it in a directory of its own, outside SPCL_REMOTE_DIR: the whole
+# directory is mounted into the git container, and a stray `git clean` inside
+# the deployment directory must never be able to delete it.
+SPCL_GIT_CREDENTIALS=/Volume1/SPCL/secrets/git-credentials
