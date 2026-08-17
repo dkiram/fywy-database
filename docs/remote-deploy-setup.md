@@ -87,6 +87,21 @@ The NAS already runs Docker, so the most reliable route on TOS is a container
 rather than a TOS app package. Run this on the NAS, with your auth key from
 step 1:
 
+First confirm the NAS has the TUN device, which Tailscale needs in order to
+create a real network interface:
+
+```bash
+ls -l /dev/net/tun
+```
+
+If that reports no such file, load the module and check again:
+
+```bash
+modprobe tun && ls -l /dev/net/tun
+```
+
+Then start it:
+
 ```bash
 docker run -d \
   --name tailscale \
@@ -95,10 +110,12 @@ docker run -d \
   --network host \
   --cap-add NET_ADMIN \
   --cap-add NET_RAW \
+  --device /dev/net/tun \
   -v /Volume1/SPCL/tailscale-state:/var/lib/tailscale \
   -e TS_AUTHKEY=tskey-auth-PASTE-YOURS-HERE \
   -e TS_STATE_DIR=/var/lib/tailscale \
   -e TS_HOSTNAME=spcl-nas \
+  -e TS_USERSPACE=false \
   tailscale/tailscale:latest
 ```
 
@@ -106,11 +123,26 @@ Adjust `/Volume1/SPCL/tailscale-state` to match your real path. That volume is
 what lets the NAS stay logged in across reboots — without it, a power cut
 means re-authenticating, which means another UltraViewer session.
 
+**`TS_USERSPACE=false` and `--device /dev/net/tun` are not optional here.**
+The container defaults to userspace networking, which is fine for a container
+that only makes outbound connections. In that mode the NAS still appears in
+your Tailscale console looking perfectly healthy, but nothing running *on the
+NAS* — SSH included — is reachable at the Tailscale address. Kernel mode
+creates a real `tailscale0` interface on the host, which is what makes
+`ssh admin@100.x.y.z` work from Toronto.
+
 Check it connected:
 
 ```bash
-docker logs tailscale --tail 20
+docker logs tailscale --tail 30
+docker ps --filter name=tailscale
 ```
+
+You are looking for `Authenticated` or a transition to `Running` in the logs,
+and the container still present in `docker ps` a minute later.
+
+If the logs say the key is invalid, the auth key was single-use and the first
+attempt consumed it — generate a new one with **Reusable** turned on.
 
 Then look at your Tailscale admin console in a browser. `spcl-nas` should
 appear in the machine list with an address starting `100.`.
@@ -149,13 +181,67 @@ git pull      # paste the token when asked for a password, once
 
 ---
 
+## 4a. Let Tailscale traffic through the NAS firewall
+
+**Do not skip this.** TOS ships its own firewall — the `INPUT_PROTECT` chain —
+which restricts the SSH port to the local network. Tailscale traffic is
+dropped silently, so SSH from outside just times out with no explanation.
+
+The tell-tale sign is an asymmetry: port 22 answers with a clean
+"Connection refused" while port 9222 times out entirely. A closed port
+refuses; a firewalled port says nothing.
+
+On the NAS:
+
+```bash
+iptables -I INPUT 1 -i tailscale0 -j ACCEPT
+iptables-legacy -I INPUT 1 -i tailscale0 -j ACCEPT 2>/dev/null
+```
+
+Two commands because TOS has both the modern and legacy iptables rule sets
+active at once, and a DROP in either one is enough to kill the packet. The
+second may error harmlessly.
+
+This allows anything arriving over Tailscale, which is a reasonable trust
+boundary — only your own devices are on the tailnet. To undo it, use
+`-D INPUT` in place of `-I INPUT 1`.
+
+### After a reboot, run it again
+
+**These rules do not survive a restart**, and that is a deliberate choice
+rather than an oversight. TOS's own firewall UI does not work here — its
+rules match physical interfaces and never see `tailscale0` — and both a
+watchdog container and a boot script were tried and rejected as more moving
+parts than the problem deserves.
+
+So: if the NAS loses power, remote SSH stops working until the two commands
+above are run again. That means one UltraViewer session into a home-office
+computer, roughly two minutes.
+
+**The symptom, so you recognise it instantly:** `ssh` to the Tailscale address
+hangs and eventually times out, while `tailscale ping spcl-nas` still returns
+pong perfectly. Tailscale is fine; the firewall rule is gone. Scroll up, paste
+the two `iptables` lines, done.
+
+Do not spend an evening debugging this. It is always the same thing.
+
+---
+
 ## 5. Test it from your own laptop
 
 Close UltraViewer. From Toronto:
 
 ```bash
-ssh admin@100.x.y.z          # the Tailscale address
+ssh SPCNAS@100.98.108.77 -p 9222
 ```
+
+Three things that are easy to get wrong here:
+
+- **The username is `SPCNAS`**, not `admin` or `root`. If you are unsure, run
+  `whoami` while logged into the NAS.
+- **The port is 9222.** TOS does not use the usual 22.
+- **The password does not echo as you type it.** No dots, no asterisks,
+  nothing moves. That is normal.
 
 If that lands you on the NAS, you are done with the hard part — permanently.
 
@@ -172,19 +258,20 @@ cp deploy/deploy.conf.template deploy/deploy.conf
 Edit `deploy/deploy.conf` and set:
 
 ```
-SPCL_SSH=admin@100.x.y.z
+SPCL_SSH=SPCNAS@100.98.108.77
+SPCL_SSH_PORT=9222
 SPCL_REMOTE_DIR=/Volume1/SPCL/deployment
 ```
 
 Use the **Tailscale** address, not the 192.168 one. Tailscale works both on
 the office network and off it, so there is nothing to switch between.
 
-Optional but worth the two minutes — set up an SSH key so you are not typing
-the NAS password on every deploy:
+Worth the two minutes — an SSH key, so you are not typing the NAS password on
+every single deploy:
 
 ```bash
-ssh-keygen -t ed25519            # if you do not already have one
-ssh-copy-id admin@100.x.y.z
+ssh-keygen -t ed25519                              # if you do not have one
+ssh-copy-id -p 9222 SPCNAS@100.98.108.77
 ```
 
 Then try it without changing anything:

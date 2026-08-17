@@ -5,17 +5,20 @@
 # deploy.conf is gitignored. It holds no passwords, but it does describe how
 # to reach the NAS, which is not worth publishing.
 
-# How to reach the NAS over SSH.
+# How to reach the NAS over SSH, as user@host.
 #
-# On the office network:   admin@192.168.1.8
-# Over Tailscale:          admin@100.x.y.z    (or admin@spcl-nas)
+# The username is whatever `whoami` reports when you are logged into the NAS.
+# On this system it is SPCNAS, not admin or root.
 #
-# Once Tailscale is set up, use the Tailscale address for both — it works
-# from the office AND from anywhere else, so there is nothing to remember.
-SPCL_SSH=admin@192.168.1.8
+# For the host, use the TAILSCALE address, not 192.168.1.8. The Tailscale
+# address works both on the office network and from anywhere else, so there
+# is nothing to switch between when you travel.
+SPCL_SSH=SPCNAS@100.98.108.77
 
-# Where the repository lives on the NAS. Check the real path in TOS File
-# Manager — on TerraMaster it is usually /Volume1/SPCL/... or /mnt/md0/SPCL/...
+# TerraMaster's TOS runs SSH on 9222, not the usual 22.
+SPCL_SSH_PORT=9222
+
+# Where the repository lives on the NAS.
 SPCL_REMOTE_DIR=/Volume1/SPCL/deployment
 
 # Branch to deploy.
@@ -24,3 +27,8 @@ SPCL_BRANCH=main
 # Set to "remote" if you are also running the Cloudflare tunnel container,
 # otherwise leave empty. Getting this wrong stops the tunnel on every deploy.
 SPCL_COMPOSE_PROFILES=
+
+# How long to wait for PostgreSQL and then the API to come up, in seconds.
+# Raise these if the NAS is slow or the database has grown large.
+SPCL_DB_WAIT_SECONDS=60
+SPCL_HEALTH_WAIT_SECONDS=60
