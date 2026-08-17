@@ -1,0 +1,104 @@
+# SPCL production stack for the TerraMaster NAS.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# PostgreSQL is deliberately not published to the host. Only the API container
+# can reach it, over the private Docker network.
+
+name: spcl-production
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: spcl-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: America/Jamaica
+      PGTZ: America/Jamaica
+
+    volumes:
+      - ${SPCL_DATA_ROOT}/postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    networks:
+      - spcl
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spcl-app:latest
+    container_name: spcl-api
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      TZ: America/Jamaica
+
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+      SESSION_SECRET: ${SESSION_SECRET}
+
+      # Must be false while the stack is reached over plain HTTP on the LAN,
+      # and true once Tailscale HTTPS is in front of it. A secure cookie sent
+      # over HTTP is silently dropped by the browser and nobody can log in.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+
+    ports:
+      - "${SPCL_HTTP_PORT:-8090}:3000"
+
+    networks:
+      - spcl
+
+  backup:
+    image: postgres:17-alpine
+    container_name: spcl-backup
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      TZ: America/Jamaica
+
+      BACKUP_HOUR: ${BACKUP_HOUR:-2}
+      DAILY_RETENTION_DAYS: ${DAILY_RETENTION_DAYS:-30}
+      MONTHLY_RETENTION_MONTHS: ${MONTHLY_RETENTION_MONTHS:-12}
+
+    volumes:
+      - ${SPCL_DATA_ROOT}/database-backups:/backups
+      - ./deploy:/opt/spcl-deploy:ro
+
+    entrypoint: ["/bin/sh", "/opt/spcl-deploy/backup-loop.sh"]
+
+    networks:
+      - spcl
+
+networks:
+  spcl:
+    driver: bridge

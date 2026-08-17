@@ -3,6 +3,11 @@ node_modules/
 dist/
 .DS_Store
 
+# Production secrets: database password, session secret.
+# The template in deploy/env-production.template holds no real values and is
+# the only version that may ever be committed.
+.env.*
+
 # Real company data - NEVER COMMIT
 database/imports/*.csv
 database/imports/*.xlsx
@@ -12,3 +17,6 @@ database/imports/*.xls
 /SPCL 2018 acco.accdb
 /appl.csv
 /copyofappl.csv
+
+# Local backup output
+deploy/backups/

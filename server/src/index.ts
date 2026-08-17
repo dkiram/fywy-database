@@ -1,5 +1,8 @@
 /** Configures the Express API, session authentication, core customer routes, and routers. */
 import express from "express";
+import path from "node:path";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { pool } from "./db.js";
 import cors from "cors";
 import session from "express-session";
@@ -23,18 +26,56 @@ const app = express();
 
 const PgSession = connectPgSimple(session);
 
-// Browser requests come from the Vite client and must include the session cookie.
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    credentials: true,
-  })
-);
-
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 // Allow isolated verification or deployment environments to choose a port,
 // while preserving the existing local-development default.
 const PORT = Number(process.env.PORT || 3000);
+
+// Containers must bind every interface; local development stays on loopback.
+const HOST = process.env.HOST || (IS_PRODUCTION ? "0.0.0.0" : "127.0.0.1");
+
+// The session secret is the only thing standing between a stolen cookie and a
+// staff account, so refuse to start in production without a real one.
+const SESSION_SECRET = process.env.SESSION_SECRET;
+
+if (!SESSION_SECRET) {
+  throw new Error(
+    "SESSION_SECRET is not set. Refusing to start without a session secret."
+  );
+}
+
+if (IS_PRODUCTION && SESSION_SECRET.length < 32) {
+  throw new Error(
+    "SESSION_SECRET is too short for production. Use at least 32 characters."
+  );
+}
+
+/**
+ * Cross-origin requests are only needed when the frontend is served from a
+ * different origin than the API. Production serves both from one origin and
+ * local development proxies through Vite, so CORS stays off unless
+ * CORS_ALLOWED_ORIGINS is deliberately set.
+ */
+const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (corsAllowedOrigins.length > 0) {
+  app.use(
+    cors({
+      origin: corsAllowedOrigins,
+      credentials: true,
+    })
+  );
+}
+
+// Behind the Tailscale/HTTPS front door the real protocol arrives in headers,
+// and express-session needs to trust them before it will set a secure cookie.
+if (IS_PRODUCTION) {
+  app.set("trust proxy", 1);
+}
 
 app.use(express.json());
 
@@ -47,14 +88,24 @@ app.use(
       schemaName: "public",
     }),
 
-    secret: process.env.SESSION_SECRET!,
+    secret: SESSION_SECRET,
 
     resave: false,
     saveUninitialized: false,
 
+    // Do not advertise the framework in the cookie name.
+    name: process.env.SESSION_COOKIE_NAME || "spcl.sid",
+
     cookie: {
       httpOnly: true,
-      secure: false,
+
+      // Only send the cookie over HTTPS in production. Set
+      // SESSION_COOKIE_SECURE=false if the deployment is temporarily on plain
+      // HTTP over the LAN, otherwise nobody will be able to log in.
+      secure: process.env.SESSION_COOKIE_SECURE
+        ? process.env.SESSION_COOKIE_SECURE === "true"
+        : IS_PRODUCTION,
+
       sameSite: "lax",
 
       // 8 hours
@@ -118,9 +169,13 @@ function requireRole(
 }
 
 
-app.get("/", (req, res) => {
-  res.send("SPCL API is running");
-});
+// In production "/" belongs to the built frontend, which is mounted further
+// down. This placeholder only exists for API-only local development.
+if (!IS_PRODUCTION) {
+  app.get("/", (req, res) => {
+    res.send("SPCL API is running");
+  });
+}
 
 app.get("/health", async (req, res) => {
   try {
@@ -1102,6 +1157,71 @@ app.patch(
   }
 );
 
-app.listen(PORT, () => {
-  console.log(`SPCL API running on http://localhost:${PORT}`);
+/**
+ * Serve the built React frontend from the same process as the API.
+ *
+ * One origin means no CORS, and session cookies behave the same way in the
+ * browser, in the Electron client, and over Tailscale HTTPS. The static mount
+ * is registered after every /api route so it can never shadow the API.
+ */
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+
+const CLIENT_DIST_PATH = path.resolve(
+  process.env.CLIENT_DIST_PATH ||
+    path.join(currentDirectory, "..", "client-dist")
+);
+
+const clientBuildExists = existsSync(
+  path.join(CLIENT_DIST_PATH, "index.html")
+);
+
+if (clientBuildExists) {
+  // Hashed asset filenames can be cached hard; index.html must not be, or staff
+  // keep running an old build after a deployment.
+  app.use(
+    express.static(CLIENT_DIST_PATH, {
+      index: false,
+      maxAge: "1y",
+
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith("index.html")) {
+          res.setHeader("Cache-Control", "no-store");
+        }
+      },
+    })
+  );
+
+  // Client-side routing: anything that is not an API call returns the shell.
+  app.get(/^\/(?!api\/|health$).*/, (req, res) => {
+    res.sendFile(path.join(CLIENT_DIST_PATH, "index.html"));
+  });
+} else if (IS_PRODUCTION) {
+  console.warn(
+    `No frontend build found at ${CLIENT_DIST_PATH}. Serving the API only.`
+  );
+}
+
+const server = app.listen(PORT, HOST, () => {
+  console.log(`SPCL API listening on ${HOST}:${PORT}`);
 });
+
+/**
+ * Containers are stopped with SIGTERM. Closing the HTTP server and the database
+ * pool means in-flight requests finish instead of being cut off mid-transaction.
+ */
+function shutdown(signal: string) {
+  console.log(`${signal} received, shutting down.`);
+
+  server.close(() => {
+    pool.end().then(
+      () => process.exit(0),
+      () => process.exit(1)
+    );
+  });
+
+  // Do not hang forever if a connection refuses to close.
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
