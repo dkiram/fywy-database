@@ -84,6 +84,10 @@ if [ -f "$CONFIG_FILE" ]; then
 fi
 
 SPCL_SSH="${SPCL_SSH:-}"
+
+# TerraMaster's TOS runs SSH on 9222 by default, not 22.
+SPCL_SSH_PORT="${SPCL_SSH_PORT:-9222}"
+
 SPCL_REMOTE_DIR="${SPCL_REMOTE_DIR:-}"
 SPCL_BRANCH="${SPCL_BRANCH:-main}"
 SPCL_COMPOSE_FILE="${SPCL_COMPOSE_FILE:-docker-compose.prod.yml}"
@@ -112,6 +116,7 @@ mkdir -p "$SSH_CONTROL_DIR"
 chmod 700 "$SSH_CONTROL_DIR"
 
 SSH_OPTS=(
+  -p "$SPCL_SSH_PORT"
   -o ControlMaster=auto
   -o "ControlPath=$SSH_CONTROL_DIR/%r@%h:%p"
   -o ControlPersist=60
