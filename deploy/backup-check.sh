@@ -110,15 +110,31 @@ else
 fi
 
 echo
-echo "Recent failures in the log"
+echo "Failures since the last good backup"
 
+# The question worth asking is "is the backup broken NOW", not "has it ever
+# failed". A failure followed by a successful dump is resolved history, and a
+# window of the last N lines keeps reporting it for weeks afterwards - which
+# teaches you to scroll past the one time it matters. So: count only the
+# failures recorded after the most recent successful dump.
 if [ -f "$LOG_FILE" ]; then
-  RECENT_FAILURES="$(tail -n 200 "$LOG_FILE" | grep -c 'FAILED' || true)"
+  SINCE_GOOD="$(awk '
+    /\[backup\] wrote /  { n = 0 }
+    /FAILED/             { n = n + 1 }
+    END                  { print n + 0 }
+  ' "$LOG_FILE")"
 
-  if [ "$RECENT_FAILURES" = "0" ]; then
-    ok "none in the last 200 log lines"
+  RESOLVED="$(grep -c 'FAILED' "$LOG_FILE" 2>/dev/null || true)"
+  RESOLVED="$(( ${RESOLVED:-0} - SINCE_GOOD ))"
+
+  if [ "$SINCE_GOOD" = "0" ]; then
+    if [ "$RESOLVED" -gt 0 ]; then
+      ok "none - $RESOLVED earlier failure(s), each followed by a good dump"
+    else
+      ok "none, ever"
+    fi
   else
-    bad "$RECENT_FAILURES failure line(s) - see: tail -50 $LOG_FILE"
+    bad "$SINCE_GOOD failure(s) since the last good dump - see: tail -50 $LOG_FILE"
   fi
 else
   warn "no backup.log yet"
