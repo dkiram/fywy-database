@@ -393,11 +393,31 @@ That is the whole workflow. It will:
 
 1. Warn you about uncommitted work, then push to GitHub
 2. Pull on the NAS and show you which commits arrived
-3. Rebuild and restart the containers
-4. Wait for PostgreSQL
-5. Show any pending migrations and **ask before applying them**
-6. Confirm the API came back healthy
-7. Check that your backups are still in good shape
+3. Show any pending migrations and **ask before applying them**
+4. Rebuild and restart the containers
+5. Wait for PostgreSQL and confirm the API came back healthy
+6. Check that your backups are still in good shape
+
+### Why migrations run before the restart
+
+Step 3 comes before step 4 on purpose. If the containers restarted first, the
+new code would run against the old schema until the migration finished —
+seconds, but seconds in which someone mid-form gets an error about a column
+that does not exist yet.
+
+Migrating first inverts that: the *old* code runs briefly against the *new*
+schema, which is harmless as long as migrations only add things. Old code
+ignores a column it has never heard of.
+
+That is the one rule this depends on: **add in one deploy, drop in a later
+one.** Ship the new column and code that tolerates it being empty, backfill,
+and only remove the old column once nothing references it. A migration that
+drops something the running code still uses breaks the same window from the
+other direction.
+
+It also fails better. If a migration fails, nothing has been rebuilt yet, so
+the app carries on serving the old code against the old schema and you can
+fix the SQL without any pressure.
 
 Useful variations:
 
@@ -454,6 +474,72 @@ anything ran. The database is as it was. Fix the migration and deploy again.
 **The API never reports healthy** — The deploy exits non-zero and tells you
 which log to read. Most often it is a migration that has not been applied yet,
 so the new code is asking for a column that does not exist.
+
+---
+
+## Browsing the database from your laptop
+
+You can point TablePlus or DBeaver at production and browse it like a
+spreadsheet. It is a **live connection**, not a copy — every query runs
+against the database in Jamaica, and what you see is what staff are looking
+at that second. Nothing is downloaded or imported, and there is nothing to
+refresh or re-import after a deploy.
+
+PostgreSQL is published on the NAS's loopback address only
+(`127.0.0.1:5432`), so it is reachable by something already logged into the
+NAS and by nothing else. No office machine can connect to it, and neither can
+the internet. Your client gets there by tunnelling over the same SSH
+connection the deploy uses.
+
+### One-time: give the read-only role a password
+
+Migration `033_add_readonly_role.sql` creates `spcl_readonly`, which can
+`SELECT` and nothing else. It has no password — a password in a migration
+file would be a password in git — so grant it one on the NAS:
+
+```bash
+docker exec -it spcl-postgres psql -U spcl_user -d spcl_db \
+  -c "ALTER ROLE spcl_readonly WITH LOGIN PASSWORD 'pick-something-long';"
+```
+
+Use the real `POSTGRES_USER` and `POSTGRES_DB` from `.env.production` if they
+differ. To cut access off later, `ALTER ROLE spcl_readonly WITH NOLOGIN;` —
+the grants stay intact for when you want it back.
+
+### In TablePlus
+
+Create a PostgreSQL connection and turn **Over SSH** on:
+
+| | |
+|---|---|
+| SSH host | `100.98.108.77` |
+| SSH port | `9222` |
+| SSH user | `SPCNAS` |
+| SSH password | the NAS password |
+| Database host | `127.0.0.1` |
+| Database port | `5432` |
+| User | `spcl_readonly` |
+| Password | the one you just set |
+| Database | `spcl_db` |
+
+The database host is `127.0.0.1` **as seen from the NAS**, which is why the
+loopback binding is enough. If you prefer a manual tunnel, the equivalent is
+`ssh -p 9222 -L 55432:127.0.0.1:5432 SPCNAS@100.98.108.77` and then
+connecting to `localhost:55432`.
+
+### Why read-only
+
+Grid views make editing a cell feel like editing a spreadsheet, and an
+`UPDATE` against live customer data has no undo. As `spcl_readonly`, a stray
+edit fails with a permissions error instead of rewriting a row. When you
+genuinely need to write, use `psql` deliberately:
+
+```bash
+docker exec -it spcl-backup psql
+```
+
+Schema changes never belong here in any case — those are migration files, so
+that every database ends up with the same shape.
 
 ---
 

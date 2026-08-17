@@ -2,8 +2,9 @@
 #
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 #
-# PostgreSQL is deliberately not published to the host. Only the API container
-# can reach it, over the private Docker network.
+# PostgreSQL is published on the NAS's loopback address only. The API reaches
+# it over the private Docker network; a GUI client reaches it through an SSH
+# tunnel. Nothing on the office LAN, and nothing on the internet, can see it.
 
 name: spcl-production
 
@@ -22,6 +23,13 @@ services:
 
     volumes:
       - ${SPCL_DATA_ROOT}/postgres-data:/var/lib/postgresql/data
+
+    # Bound to the NAS's own loopback, NOT to the LAN. Only something already
+    # logged into the NAS can connect - in practice, an SSH tunnel over
+    # Tailscale from a laptop. Keep the 127.0.0.1 prefix: writing this as
+    # "5432:5432" would hand the database to every machine in every office.
+    ports:
+      - "127.0.0.1:${SPCL_PG_PORT:-5432}:5432"
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]

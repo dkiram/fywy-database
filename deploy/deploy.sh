@@ -2,7 +2,7 @@
 #
 # Deploys SPCL to the NAS from wherever you happen to be.
 #
-#   ./deploy/deploy.sh              push, rebuild, migrate, restart, verify
+#   ./deploy/deploy.sh              push, migrate, rebuild, restart, verify
 #   ./deploy/deploy.sh --check      say what would happen, change nothing
 #   ./deploy/deploy.sh --yes        no confirmation prompts (for automation)
 #   ./deploy/deploy.sh --skip-migrations
@@ -14,9 +14,11 @@
 # Settings live in deploy/deploy.conf, which is not committed. Copy
 # deploy/deploy.conf.template to get started.
 #
-# The order is deliberate: code is pushed to GitHub first and the NAS pulls
-# from there, so what runs in production is always a commit that exists
-# somewhere other than one laptop.
+# The order is deliberate twice over. Code is pushed to GitHub first and the
+# NAS pulls from there, so what runs in production is always a commit that
+# exists somewhere other than one laptop. And migrations are applied before
+# the containers restart, so the new code never starts against a schema that
+# has not caught up with it yet.
 
 set -euo pipefail
 
@@ -541,13 +543,111 @@ if [ "$MODE" = "check" ]; then
   exit 0
 fi
 
-# --- 5. pull and rebuild -----------------------------------------------------
+# --- 5. pull -----------------------------------------------------------------
 
-step "Pulling and rebuilding"
+step "Pulling on the NAS"
 
 remote_git "pull --ff-only origin '$SPCL_BRANCH' 2>&1" | sed 's/^/    /' \
   || fail "git pull failed on the NAS. If someone edited files there directly,
        the pull will refuse rather than overwrite them."
+
+ok "the NAS has the new code on disk"
+
+# --- migrations and the restart, in that order -------------------------------
+#
+# Migrations run BEFORE the containers are rebuilt, so the schema is already
+# in place by the time the new code starts. The alternative - restart first,
+# migrate second - leaves the new code running against the old schema for as
+# long as the migration takes, throwing errors at whoever is mid-form.
+#
+# This depends on migrations being additive. Old code ignores a column it has
+# never heard of, so it keeps working between the migration and the restart.
+# A migration that DROPS something the running code still uses breaks the
+# same window from the other end: add and backfill in one deploy, drop in a
+# later one, once nothing references it.
+#
+# It also fails better. If a migration fails here, nothing has been rebuilt,
+# and the app carries on serving the old code against the old schema.
+#
+# The exception is a cold start: on a NAS where the stack has never run there
+# is no database to migrate yet, so migrations wait until after it comes up.
+
+wait_for_database() {
+  local ready="false"
+  local attempts=$(( SPCL_DB_WAIT_SECONDS / 2 ))
+  [ "$attempts" -lt 1 ] && attempts=1
+
+  for _ in $(seq 1 "$attempts"); do
+    if remote "$REMOTE_DOCKER exec spcl-postgres pg_isready -q" 2>/dev/null; then
+      ready="true"
+      break
+    fi
+    sleep 2
+  done
+
+  [ "$ready" = "true" ] || fail "PostgreSQL did not become ready within ${SPCL_DB_WAIT_SECONDS} seconds.
+       Check with: ssh $SPCL_SSH 'docker logs spcl-postgres --tail 50'"
+
+  ok "database is accepting connections"
+}
+
+run_migrations() {
+  if [ "$SKIP_MIGRATIONS" = "true" ]; then
+    step "Skipping migrations (--skip-migrations)"
+    return 0
+  fi
+
+  step "Checking for pending migrations"
+
+  local pending_output
+  pending_output="$(remote "$REMOTE_DOCKER exec spcl-backup sh /opt/spcl-deploy/migrate.sh --dry-run 2>&1" || true)"
+  echo "$pending_output" | sed 's/^/    /'
+
+  if echo "$pending_output" | grep -q "nothing to apply"; then
+    ok "schema is already up to date"
+
+  elif echo "$pending_output" | grep -q "would apply"; then
+    info ""
+    warn "the above migrations will change the live database"
+    muted "a safety backup is taken automatically before any of it runs"
+    muted "the app is still serving the previous version while you decide"
+
+    if confirm "Apply them now?"; then
+      remote "$REMOTE_DOCKER exec spcl-backup sh /opt/spcl-deploy/migrate.sh 2>&1" | sed 's/^/    /' \
+        || fail "a migration failed. The database was rolled back to before that
+       migration started, and a safety backup was taken before anything ran.
+       Nothing has been rebuilt, so the app is still serving the old code."
+      ok "migrations applied"
+    else
+      warn "migrations skipped - the new code may expect columns that do not exist yet"
+    fi
+
+  else
+    warn "could not read the migration status - check the output above"
+    confirm "Continue without migrating?" || fail "nothing further was changed."
+  fi
+}
+
+# Is there a database to migrate against yet?
+STACK_WAS_RUNNING="false"
+
+if remote "$REMOTE_DOCKER inspect -f '{{.State.Running}}' spcl-postgres 2>/dev/null" \
+   | tr -d '\r' | grep -q '^true$'
+then
+  STACK_WAS_RUNNING="true"
+fi
+
+if [ "$STACK_WAS_RUNNING" = "true" ]; then
+  wait_for_database
+  run_migrations
+else
+  step "First start on this NAS"
+  muted "no database running yet - migrations will run once it is up"
+fi
+
+# --- 6. build and restart ----------------------------------------------------
+
+step "Rebuilding and restarting"
 
 info "building - this takes a few minutes on first run"
 
@@ -563,58 +663,16 @@ remote_in_repo "$(compose_cmd) up -d --build 2>&1" | sed 's/^/    /' \
 
 ok "containers are up"
 
-# --- 6. wait for the database ------------------------------------------------
+# --- 7. wait for the database ------------------------------------------------
 
 step "Waiting for PostgreSQL"
 
-DB_READY="false"
-DB_ATTEMPTS=$(( SPCL_DB_WAIT_SECONDS / 2 ))
-[ "$DB_ATTEMPTS" -lt 1 ] && DB_ATTEMPTS=1
+wait_for_database
 
-for _ in $(seq 1 "$DB_ATTEMPTS"); do
-  if remote "$REMOTE_DOCKER exec spcl-postgres pg_isready -q" 2>/dev/null; then
-    DB_READY="true"
-    break
-  fi
-  sleep 2
-done
-
-[ "$DB_READY" = "true" ] || fail "PostgreSQL did not become ready within ${SPCL_DB_WAIT_SECONDS} seconds.
-       Check with: ssh $SPCL_SSH 'docker logs spcl-postgres --tail 50'"
-
-ok "database is accepting connections"
-
-# --- 7. migrations -----------------------------------------------------------
-
-if [ "$SKIP_MIGRATIONS" = "true" ]; then
-  step "Skipping migrations (--skip-migrations)"
-else
-  step "Checking for pending migrations"
-
-  PENDING_OUTPUT="$(remote "$REMOTE_DOCKER exec spcl-backup sh /opt/spcl-deploy/migrate.sh --dry-run 2>&1" || true)"
-  echo "$PENDING_OUTPUT" | sed 's/^/    /'
-
-  if echo "$PENDING_OUTPUT" | grep -q "nothing to apply"; then
-    ok "schema is already up to date"
-
-  elif echo "$PENDING_OUTPUT" | grep -q "would apply"; then
-    info ""
-    warn "the above migrations will change the live database"
-    muted "a safety backup is taken automatically before any of it runs"
-
-    if confirm "Apply them now?"; then
-      remote "$REMOTE_DOCKER exec spcl-backup sh /opt/spcl-deploy/migrate.sh 2>&1" | sed 's/^/    /' \
-        || fail "a migration failed. The database was rolled back to before that
-       migration started, and a safety backup was taken before anything ran."
-      ok "migrations applied"
-    else
-      warn "migrations skipped - the new code may expect columns that do not exist yet"
-    fi
-
-  else
-    warn "could not read the migration status - check the output above"
-    confirm "Continue without migrating?" || fail "nothing further was changed."
-  fi
+# On a cold start the migrations could not run earlier - there was nothing to
+# run them against. Everywhere else this is a no-op.
+if [ "$STACK_WAS_RUNNING" != "true" ]; then
+  run_migrations
 fi
 
 # --- 8. did it actually come back up -----------------------------------------
