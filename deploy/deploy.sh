@@ -97,6 +97,13 @@ SPCL_COMPOSE_PROFILES="${SPCL_COMPOSE_PROFILES:-}"
 # Absolute path to docker on the NAS. Leave empty to detect automatically.
 SPCL_DOCKER="${SPCL_DOCKER:-}"
 
+# How to run compose on the NAS. Leave empty to detect automatically: the
+# v2 plugin first, then a standalone docker-compose binary.
+SPCL_COMPOSE="${SPCL_COMPOSE:-}"
+
+# Set to true to run compose itself in a container when the NAS has neither.
+SPCL_COMPOSE_IN_DOCKER="${SPCL_COMPOSE_IN_DOCKER:-}"
+
 # Path ON THE NAS to a git credentials file, so the NAS can read the private
 # repo from GitHub. One line, mode 600:
 #
@@ -309,10 +316,89 @@ remote_git() {
   remote "cd '$SPCL_REMOTE_DIR' && $REMOTE_GIT $*"
 }
 
+# Compose comes in two shapes and this NAS has the older one. Docker Engine
+# only gained the `docker compose` subcommand with the Compose v2 plugin;
+# before that it was a separate `docker-compose` binary. Asking the wrong one
+# gives you "unknown shorthand flag: 'f' in -f", because docker parses global
+# flags before it discovers there is no such subcommand.
+REMOTE_COMPOSE=""
+REMOTE_COMPOSE_KIND=""
+
+detect_remote_compose() {
+  if [ -n "$SPCL_COMPOSE" ]; then
+    REMOTE_COMPOSE="$SPCL_COMPOSE"
+    REMOTE_COMPOSE_KIND="from deploy.conf"
+    muted "compose: $REMOTE_COMPOSE ($REMOTE_COMPOSE_KIND)"
+    return
+  fi
+
+  if remote "$REMOTE_DOCKER compose version >/dev/null 2>&1"; then
+    REMOTE_COMPOSE="$REMOTE_DOCKER compose"
+    REMOTE_COMPOSE_KIND="v2 plugin"
+    muted "compose: docker compose ($REMOTE_COMPOSE_KIND)"
+    return
+  fi
+
+  local found=""
+
+  # The standalone binary usually sits beside docker itself on TOS.
+  for candidate in \
+    "${REMOTE_DOCKER%/*}/docker-compose" \
+    /usr/local/bin/docker-compose /opt/bin/docker-compose \
+    /usr/bin/docker-compose /usr/sbin/docker-compose
+  do
+    if remote "test -x '$candidate'"; then
+      found="$candidate"
+      break
+    fi
+  done
+
+  if [ -z "$found" ]; then
+    found="$(remote 'bash -lc "command -v docker-compose 2>/dev/null"' 2>/dev/null \
+             | tr -d '\r' | grep '^/' | head -1)" || true
+  fi
+
+  if [ -n "$found" ]; then
+    REMOTE_COMPOSE="$found"
+    REMOTE_COMPOSE_KIND="standalone"
+    muted "compose: $found ($REMOTE_COMPOSE_KIND)"
+
+    if [ -n "$SPCL_COMPOSE_PROFILES" ]; then
+      warn "profiles need docker-compose 1.28 or newer - if the tunnel container"
+      warn "is ignored or errors, that is why"
+    fi
+    return
+  fi
+
+  # Last resort, and the same trick this script already uses for git: run
+  # compose itself in a container against the host's docker daemon. The repo
+  # is mounted at the SAME absolute path it has on the NAS, because relative
+  # bind mounts in the compose file are resolved by the daemon on the host,
+  # not inside this container.
+  if [ -n "$SPCL_COMPOSE_IN_DOCKER" ] && [ "$SPCL_COMPOSE_IN_DOCKER" != "false" ]; then
+    REMOTE_COMPOSE="$REMOTE_DOCKER run --rm -v /var/run/docker.sock:/var/run/docker.sock -v '$SPCL_REMOTE_DIR':'$SPCL_REMOTE_DIR' -w '$SPCL_REMOTE_DIR' docker/compose:1.29.2"
+    REMOTE_COMPOSE_KIND="containerised"
+    muted "compose: none on the NAS - running it in a container instead"
+    return
+  fi
+
+  fail "the NAS has docker but no compose.
+
+       'docker compose version' fails and there is no docker-compose binary,
+       which means Docker Engine here predates the Compose v2 plugin.
+
+       Find out what you have:
+
+         ssh -p $SPCL_SSH_PORT $SPCL_SSH 'bash -lc \"command -v docker-compose; ls ${REMOTE_DOCKER%/*}\"'
+
+       Then either set SPCL_COMPOSE in deploy/deploy.conf to that path, or
+       set SPCL_COMPOSE_IN_DOCKER=true to run compose in a container."
+}
+
 compose_cmd() {
   local profiles=""
   [ -n "$SPCL_COMPOSE_PROFILES" ] && profiles="--profile $SPCL_COMPOSE_PROFILES"
-  echo "$REMOTE_DOCKER compose -f '$SPCL_COMPOSE_FILE' --env-file '$SPCL_ENV_FILE' $profiles"
+  echo "$REMOTE_COMPOSE -f '$SPCL_COMPOSE_FILE' --env-file '$SPCL_ENV_FILE' $profiles"
 }
 
 # --- 1. local repository -----------------------------------------------------
@@ -403,6 +489,7 @@ else
 fi
 
 detect_remote_git
+detect_remote_compose
 
 remote_in_repo "test -f '$SPCL_COMPOSE_FILE'" \
   || fail "no $SPCL_COMPOSE_FILE in $SPCL_REMOTE_DIR on the NAS.
@@ -465,7 +552,13 @@ remote_git "pull --ff-only origin '$SPCL_BRANCH' 2>&1" | sed 's/^/    /' \
 info "building - this takes a few minutes on first run"
 
 remote_in_repo "$(compose_cmd) up -d --build 2>&1" | sed 's/^/    /' \
-  || fail "the build or start failed. The previous containers may still be running.
+  || fail "the build or start failed. The previous containers are usually still
+       running, so staff are probably unaffected.
+
+       'unknown shorthand flag' or 'no such option: --env-file' means the
+       compose on the NAS is too old for the flags used here, not that the
+       build itself is broken.
+
        Check with: ssh $SPCL_SSH 'cd $SPCL_REMOTE_DIR && $(compose_cmd) ps'"
 
 ok "containers are up"

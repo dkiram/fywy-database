@@ -59,3 +59,16 @@ SPCL_DOCKER=
 # directory is mounted into the git container, and a stray `git clean` inside
 # the deployment directory must never be able to delete it.
 SPCL_GIT_CREDENTIALS=/Volume1/SPCL/secrets/git-credentials
+
+# How to run compose on the NAS. Leave empty to detect automatically.
+#
+# This NAS's Docker Engine predates the Compose v2 plugin, so `docker compose`
+# does not exist and the standalone `docker-compose` binary is used instead.
+# Detection finds it on its own; set this only if it lives somewhere unusual:
+#
+#   ssh -p 9222 SPCNAS@100.98.108.77 'bash -lc "command -v docker-compose"'
+SPCL_COMPOSE=
+
+# Last resort, if the NAS has no compose at all: run compose in a container
+# against the host docker daemon. Set to true to enable.
+SPCL_COMPOSE_IN_DOCKER=
