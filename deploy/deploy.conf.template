@@ -1,0 +1,26 @@
+# Copy this to deploy/deploy.conf and fill in your values.
+#
+#   cp deploy/deploy.conf.template deploy/deploy.conf
+#
+# deploy.conf is gitignored. It holds no passwords, but it does describe how
+# to reach the NAS, which is not worth publishing.
+
+# How to reach the NAS over SSH.
+#
+# On the office network:   admin@192.168.1.8
+# Over Tailscale:          admin@100.x.y.z    (or admin@spcl-nas)
+#
+# Once Tailscale is set up, use the Tailscale address for both — it works
+# from the office AND from anywhere else, so there is nothing to remember.
+SPCL_SSH=admin@192.168.1.8
+
+# Where the repository lives on the NAS. Check the real path in TOS File
+# Manager — on TerraMaster it is usually /Volume1/SPCL/... or /mnt/md0/SPCL/...
+SPCL_REMOTE_DIR=/Volume1/SPCL/deployment
+
+# Branch to deploy.
+SPCL_BRANCH=main
+
+# Set to "remote" if you are also running the Cloudflare tunnel container,
+# otherwise leave empty. Getting this wrong stops the tunnel on every deploy.
+SPCL_COMPOSE_PROFILES=

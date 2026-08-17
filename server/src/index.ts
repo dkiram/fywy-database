@@ -8,6 +8,11 @@ import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcrypt";
+import {
+  checkLoginAllowed,
+  recordFailedLogin,
+  clearFailedLogins,
+} from "./loginThrottle.js";
 import applicationsRouter from "./routes/applications.js";
 import paymentsRouter from "./routes/payments.js";
 import accountsRouter from "./routes/accounts.js";
@@ -79,6 +84,62 @@ if (IS_PRODUCTION) {
 
 app.use(express.json());
 
+/**
+ * Decides whether the session cookie carries the Secure attribute, which tells
+ * the browser to send it only over an encrypted connection.
+ *
+ *   "auto"  - decided per request from req.secure. Branch offices arriving
+ *             through the Cloudflare tunnel get a Secure cookie; the home
+ *             office on the plain-HTTP LAN address keeps working. This is the
+ *             default, because it is the only setting that is correct for both
+ *             at once.
+ *   "true"  - always Secure. Correct once every office, including the home
+ *             office, reaches the app over HTTPS. Setting this while anyone is
+ *             still on http://<nas-ip>:<port> locks those staff out: the login
+ *             appears to succeed and immediately bounces back to the form.
+ *   "false" - never Secure. The old behaviour, kept as an escape hatch.
+ *
+ * "auto" depends on `trust proxy` being set above, otherwise req.secure can
+ * never be true behind the tunnel and "auto" quietly degrades to "false".
+ */
+function resolveSecureCookieSetting(): boolean | "auto" {
+  const configured = process.env.SESSION_COOKIE_SECURE?.trim().toLowerCase();
+
+  if (configured === "true") {
+    return true;
+  }
+
+  if (configured === "false") {
+    return false;
+  }
+
+  if (configured === "auto") {
+    return "auto";
+  }
+
+  if (configured) {
+    console.warn(
+      `SESSION_COOKIE_SECURE is "${configured}", which is not one of ` +
+        `true, false, or auto. Falling back to the default.`
+    );
+  }
+
+  // Development runs over plain HTTP with no proxy in front, so "auto" would
+  // resolve to false on every request anyway. Being explicit is clearer.
+  return IS_PRODUCTION ? "auto" : false;
+}
+
+const SECURE_COOKIE_SETTING = resolveSecureCookieSetting();
+
+if (IS_PRODUCTION) {
+  console.log(
+    `Session cookie Secure attribute: ${SECURE_COOKIE_SETTING}` +
+      (SECURE_COOKIE_SETTING === "auto"
+        ? " (per request, from the connection protocol)"
+        : "")
+  );
+}
+
 app.use(
   session({
     // Store sessions in PostgreSQL instead of process memory so restarts do not log everyone out.
@@ -99,12 +160,10 @@ app.use(
     cookie: {
       httpOnly: true,
 
-      // Only send the cookie over HTTPS in production. Set
-      // SESSION_COOKIE_SECURE=false if the deployment is temporarily on plain
-      // HTTP over the LAN, otherwise nobody will be able to log in.
-      secure: process.env.SESSION_COOKIE_SECURE
-        ? process.env.SESSION_COOKIE_SECURE === "true"
-        : IS_PRODUCTION,
+      // See resolveSecureCookieSetting above. Defaults to "auto" in
+      // production so HTTPS clients are protected without cutting off the
+      // offices still on the plain-HTTP LAN address.
+      secure: SECURE_COOKIE_SETTING,
 
       sameSite: "lax",
 
@@ -606,6 +665,26 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
+    // Brute-force check runs before the database lookup and before bcrypt, so
+    // a locked account costs almost nothing to turn away. bcrypt is
+    // deliberately slow, which makes it the thing an attacker would lean on
+    // to load the server.
+    const throttle = checkLoginAllowed(username, req.ip);
+
+    if (!throttle.allowed) {
+      console.warn(
+        `Login blocked by throttle (${throttle.reason}) for "${username.trim()}" from ${req.ip ?? "unknown IP"}.`
+      );
+
+      // Retry-After is the standard companion to 429 and costs nothing to send.
+      res.setHeader("Retry-After", String(throttle.retryAfterSeconds));
+
+      return res.status(429).json({
+        error: throttle.message,
+        retryAfterSeconds: throttle.retryAfterSeconds,
+      });
+    }
+
     // Use a case-insensitive username lookup but never expose whether an account exists.
     const result = await pool.query(
       `
@@ -636,6 +715,10 @@ app.post("/api/auth/login", async (req, res) => {
     const employee = result.rows[0];
 
     if (!employee) {
+      // Counted like any other failure. If unknown usernames were free,
+      // an attacker could enumerate valid accounts at full speed.
+      recordFailedLogin(username, req.ip);
+
       return res.status(401).json({
         error: "Invalid username or password.",
       });
@@ -654,10 +737,16 @@ app.post("/api/auth/login", async (req, res) => {
     );
 
     if (!passwordMatches) {
+      recordFailedLogin(username, req.ip);
+
       return res.status(401).json({
         error: "Invalid username or password.",
       });
     }
+
+    // A correct password clears this username's counter so earlier typos do
+    // not carry forward. The IP counter is left standing on purpose.
+    clearFailedLogins(username);
 
     // Store only the safe identity fields required by authorization and page headers.
     req.session.employee = {

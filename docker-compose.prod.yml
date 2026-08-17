@@ -59,10 +59,13 @@ services:
 
       SESSION_SECRET: ${SESSION_SECRET}
 
-      # Must be false while the stack is reached over plain HTTP on the LAN,
-      # and true once Tailscale HTTPS is in front of it. A secure cookie sent
-      # over HTTP is silently dropped by the browser and nobody can log in.
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      # auto | true | false. "auto" decides per request, so branch offices
+      # arriving over HTTPS through the tunnel get a protected cookie while
+      # the home office on the plain-HTTP LAN address keeps working. Only move
+      # to "true" once every office reaches the app over HTTPS: a Secure
+      # cookie sent over HTTP is dropped by the browser, and those staff can
+      # no longer log in.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-auto}
 
     ports:
       - "${SPCL_HTTP_PORT:-8090}:3000"
@@ -93,6 +96,10 @@ services:
     volumes:
       - ${SPCL_DATA_ROOT}/database-backups:/backups
       - ./deploy:/opt/spcl-deploy:ro
+
+      # Read-only so this container can apply migrations and one-off SQL, but
+      # can never write back into the repository.
+      - ./database:/opt/spcl-database:ro
 
     entrypoint: ["/bin/sh", "/opt/spcl-deploy/backup-loop.sh"]
 

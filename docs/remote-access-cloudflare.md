@@ -142,10 +142,44 @@ never reach the SPCL login page at all.
 
 ---
 
-## 6. Turn on secure cookies
+## 6. Secure cookies
 
-The app is now behind HTTPS, so the session cookie should refuse to travel over
-plain HTTP:
+The session cookie is the login. Whoever holds a copy of it is signed in as
+that employee, without ever needing the password. `SESSION_COOKIE_SECURE`
+controls whether browsers are told to keep it off unencrypted connections.
+
+**`auto` is the setting to use, and it is already the default.** Confirm the
+line in `.env.production` reads:
+
+```
+SESSION_COOKIE_SECURE=auto
+```
+
+On `auto` the app decides per request. A branch office arriving over HTTPS
+through the tunnel gets a protected cookie. The home office on
+`http://192.168.1.8:8090` gets the ordinary one and keeps working. Both at
+once, from the same running container, no coordination required.
+
+### Why not just `true`
+
+`true` is the textbook answer and it is wrong for this deployment while the
+home office is still on the LAN address. Browsers discard a Secure cookie
+arriving over plain HTTP, so those staff are locked out entirely — and the
+symptom is confusing rather than obvious: the login appears to succeed and
+immediately bounces back to the login form, over and over.
+
+Two things have to be true before `true` is safe:
+
+1. Every office, home office included, reaches the app over the HTTPS
+   hostname rather than the LAN address.
+2. You have accepted that a Cloudflare outage now takes the home office
+   offline too. Today the LAN address is the fallback that keeps the business
+   running when the tunnel is down. `true` removes it.
+
+Point 2 is the one that gets forgotten. `auto` costs nothing and keeps the
+fallback, so there is no hurry.
+
+### If you do move to `true` later
 
 ```bash
 cd /Volume1/SPCL/deployment
@@ -154,14 +188,20 @@ docker-compose -f docker-compose.prod.yml --env-file .env.production \
   --profile remote up -d
 ```
 
-**This is a trade-off, so decide deliberately.** With `true`, logging in over
-the LAN address `http://192.168.1.8:8090` stops working, because browsers
-discard secure cookies sent over plain HTTP. Everyone, including the home
-office, would use the HTTPS address instead.
+Do it when staff are not working, and have someone at the home office confirm
+they can still log in before you walk away.
 
-That is the correct end state. Just do not flip it and then wonder why the home
-office can suddenly no longer log in — the symptom is a login that appears to
-succeed and immediately bounces back to the login page.
+### If `auto` does not seem to protect anything
+
+`auto` reads the connection protocol from the `X-Forwarded-Proto` header that
+`cloudflared` adds, and Express only trusts that header when `trust proxy` is
+set — which the app does automatically when `NODE_ENV=production`. If the
+container is somehow not running in production mode, `auto` silently behaves
+like `false` rather than erroring. The API logs its decision on startup:
+
+```bash
+docker logs spcl-api | grep "Session cookie"
+```
 
 ---
 

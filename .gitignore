@@ -20,3 +20,7 @@ database/imports/*.xls
 
 # Local backup output
 deploy/backups/
+
+# Describes how to reach the NAS. Holds no passwords, but not worth
+# publishing. deploy/deploy.conf.template is the committed version.
+deploy/deploy.conf
