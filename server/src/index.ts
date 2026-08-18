@@ -1309,6 +1309,335 @@ app.get(
   }
 );
 
+/** Active offices, for the Office dropdown on the admin screen. */
+app.get("/api/locations", requireAuth, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT location_id, name, code, is_head_office
+       FROM public.locations
+       WHERE is_active = TRUE
+       ORDER BY is_head_office DESC, name;`
+    );
+
+    res.json({ locations: result.rows });
+  } catch (error) {
+    console.error("Could not load locations:", error);
+    res.status(500).json({ error: "Could not load offices." });
+  }
+});
+
+// Roles a person can hold and still log in. 'technician' is deliberately not
+// here: migration 034 makes a technician someone with no username and no
+// password hash at all, so moving in or out of that role means creating or
+// destroying a login, not editing a field. That is a different action from
+// "this cashier should be head office", and pretending otherwise in a dropdown
+// would produce a constraint violation the admin cannot interpret.
+const EDITABLE_ROLES = ["admin", "head_office", "branch"] as const;
+type EditableRole = (typeof EDITABLE_ROLES)[number];
+
+/**
+ * Edits one employee's role, office, or active state.
+ *
+ * The guards exist because this screen is the one place an admin can lock
+ * themselves — or everyone — out of the system, and the NAS is in Jamaica.
+ */
+app.patch(
+  "/api/admin/employees/:employeeId",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    const actor = req.session.employee!;
+    const { employeeId } = req.params;
+
+    if (!/^\d+$/.test(employeeId)) {
+      return res.status(400).json({ error: "Invalid employee ID." });
+    }
+
+    const targetId = Number(employeeId);
+    const wantsRole = req.body.role !== undefined;
+    const wantsActive = req.body.isActive !== undefined;
+    const wantsLocation = req.body.locationId !== undefined;
+
+    if (!wantsRole && !wantsActive && !wantsLocation) {
+      return res.status(400).json({ error: "Nothing to change." });
+    }
+
+    const role = wantsRole ? String(req.body.role) : null;
+    if (wantsRole && !EDITABLE_ROLES.includes(role as EditableRole)) {
+      return res.status(400).json({
+        error: `Role must be one of: ${EDITABLE_ROLES.join(", ")}.`,
+      });
+    }
+
+    if (wantsActive && typeof req.body.isActive !== "boolean") {
+      return res.status(400).json({ error: "isActive must be true or false." });
+    }
+
+    const locationId =
+      wantsLocation && req.body.locationId !== null
+        ? Number(req.body.locationId)
+        : null;
+
+    if (wantsLocation && locationId !== null && !Number.isInteger(locationId)) {
+      return res.status(400).json({ error: "Invalid office." });
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // Locked for the same reason the ticket update locks: two admins editing
+      // the same person would otherwise each overwrite the other's change.
+      const currentResult = await client.query(
+        `SELECT employee_id, first_name, last_name, username, role, is_active, location_id
+         FROM public.employees WHERE employee_id = $1 FOR UPDATE;`,
+        [targetId]
+      );
+
+      const current = currentResult.rows[0];
+
+      if (!current) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Employee not found." });
+      }
+
+      // Technicians have no login, so role and active state here would mean
+      // something different from what the screen implies. Office is fine.
+      if (wantsRole && current.role === "technician") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error:
+            "Technicians cannot be given a login role here. They have no username or password by design.",
+        });
+      }
+
+      // Changing your own role is how an admin accidentally stops being one,
+      // with no second admin around to undo it.
+      if (targetId === actor.employeeId && wantsRole && role !== current.role) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "You cannot change your own role. Ask another administrator.",
+        });
+      }
+
+      if (targetId === actor.employeeId && wantsActive && req.body.isActive === false) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "You cannot deactivate yourself." });
+      }
+
+      // The last active administrator must stay an active administrator,
+      // whether the change is a demotion or a deactivation.
+      const losingAdmin =
+        current.role === "admin" &&
+        ((wantsRole && role !== "admin") ||
+          (wantsActive && req.body.isActive === false));
+
+      if (losingAdmin) {
+        const remaining = await client.query(
+          `SELECT count(*)::INT AS n FROM public.employees
+           WHERE role = 'admin' AND is_active = TRUE AND employee_id <> $1;`,
+          [targetId]
+        );
+
+        if (remaining.rows[0].n === 0) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            error:
+              "This is the last active administrator. Promote someone else first, or nobody can administer the system.",
+          });
+        }
+      }
+
+      if (wantsLocation && locationId !== null) {
+        const office = await client.query(
+          `SELECT 1 FROM public.locations WHERE location_id = $1 AND is_active = TRUE;`,
+          [locationId]
+        );
+
+        if (office.rows.length === 0) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: "That office does not exist." });
+        }
+      }
+
+      const updated = await client.query(
+        `
+        UPDATE public.employees
+        SET role        = COALESCE($2, role),
+            is_active   = COALESCE($3, is_active),
+            location_id = CASE WHEN $4::BOOLEAN THEN $5::SMALLINT ELSE location_id END,
+            updated_at  = CURRENT_TIMESTAMP
+        WHERE employee_id = $1
+        RETURNING employee_id, first_name, last_name, username, role, is_active, location_id;
+        `,
+        [
+          targetId,
+          wantsRole ? role : null,
+          wantsActive ? req.body.isActive : null,
+          wantsLocation,
+          locationId,
+        ]
+      );
+
+      // One audit row per field that actually moved, so the trail reads as
+      // "what changed" rather than "someone opened the edit form".
+      const changes: Array<[string, string | null, string | null]> = [];
+
+      if (wantsRole && role !== current.role) {
+        changes.push(["role", current.role, role]);
+      }
+      if (wantsActive && req.body.isActive !== current.is_active) {
+        changes.push([
+          "is_active",
+          String(current.is_active),
+          String(req.body.isActive),
+        ]);
+      }
+      if (wantsLocation && locationId !== current.location_id) {
+        changes.push([
+          "location_id",
+          current.location_id === null ? null : String(current.location_id),
+          locationId === null ? null : String(locationId),
+        ]);
+      }
+
+      for (const [field, oldValue, newValue] of changes) {
+        await client.query(
+          `INSERT INTO public.audit_logs
+             (employee_id, actor_name, action, entity_type, entity_id,
+              field_name, old_value, new_value, reason)
+           VALUES ($1, $2, $3, 'employee', $4, $5, $6, $7, $8);`,
+          [
+            actor.employeeId,
+            `${actor.firstName} ${actor.lastName}`,
+            `Updated ${current.first_name} ${current.last_name}`,
+            String(targetId),
+            field,
+            oldValue,
+            newValue,
+            typeof req.body.reason === "string"
+              ? req.body.reason.trim().slice(0, 500) || null
+              : null,
+          ]
+        );
+      }
+
+      await client.query("COMMIT");
+
+      res.json({ employee: updated.rows[0], changed: changes.length });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      console.error("Could not update employee:", error);
+      res.status(500).json({ error: "Could not update the employee." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/**
+ * Issues a new password for someone who has lost theirs.
+ *
+ * The admin supplies the password rather than the server generating one, so
+ * the person handing it over is the person who knows it, and it never has to
+ * be read back out of a response or a log.
+ */
+app.post(
+  "/api/admin/employees/:employeeId/reset-password",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    const actor = req.session.employee!;
+    const { employeeId } = req.params;
+
+    if (!/^\d+$/.test(employeeId)) {
+      return res.status(400).json({ error: "Invalid employee ID." });
+    }
+
+    const newPassword = String(req.body.newPassword ?? "");
+
+    // Matches the minimum createEmployees.ts enforces, so a password issued
+    // here is no weaker than one issued at onboarding.
+    if (newPassword.length < 12) {
+      return res
+        .status(400)
+        .json({ error: "The new password must be at least 12 characters." });
+    }
+
+    // bcrypt silently truncates past 72 bytes, which would make two different
+    // passwords equivalent.
+    if (Buffer.byteLength(newPassword, "utf8") > 72) {
+      return res
+        .status(400)
+        .json({ error: "The new password is too long. Use 72 bytes or fewer." });
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const currentResult = await client.query(
+        `SELECT employee_id, first_name, last_name, username, role
+         FROM public.employees WHERE employee_id = $1 FOR UPDATE;`,
+        [Number(employeeId)]
+      );
+
+      const target = currentResult.rows[0];
+
+      if (!target) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Employee not found." });
+      }
+
+      if (target.username === null) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: `${target.first_name} ${target.last_name} has no login, so there is no password to reset.`,
+        });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 12);
+
+      await client.query(
+        `UPDATE public.employees
+         SET password_hash = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE employee_id = $2;`,
+        [passwordHash, target.employee_id]
+      );
+
+      // Never record password material, old or new — only that it happened.
+      await client.query(
+        `INSERT INTO public.audit_logs
+           (employee_id, actor_name, action, entity_type, entity_id, field_name, reason)
+         VALUES ($1, $2, $3, 'employee', $4, 'password', $5);`,
+        [
+          actor.employeeId,
+          `${actor.firstName} ${actor.lastName}`,
+          `Reset password for ${target.first_name} ${target.last_name}`,
+          String(target.employee_id),
+          typeof req.body.reason === "string"
+            ? req.body.reason.trim().slice(0, 500) || null
+            : null,
+        ]
+      );
+
+      await client.query("COMMIT");
+
+      res.json({
+        message: `Password reset for ${target.first_name} ${target.last_name}. Hand it to them directly and have them change it at first login.`,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      console.error("Could not reset password:", error);
+      res.status(500).json({ error: "Could not reset the password." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 
 app.post("/api/auth/logout", (req, res) => {
   // Destroy the server-side record before clearing the browser's session cookie.

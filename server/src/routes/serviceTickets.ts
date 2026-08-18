@@ -40,17 +40,46 @@ function parsePositiveId(value: unknown) {
   return /^\d+$/.test(text) && Number(text) > 0 ? Number(text) : null;
 }
 
-async function validateAssignee(client: PoolClient, employeeId: number | null) {
+/**
+ * Tickets go to technicians, and only to technicians.
+ *
+ * Enforced here as well as in the dropdown below, because a dropdown is a
+ * suggestion: the request that actually arrives can name any employee_id,
+ * whether from a page left open before this rule existed, a replayed request,
+ * or someone typing into dev tools.
+ *
+ * The one exception is a ticket that already names a non-technician, from
+ * before the rule. Re-saving such a ticket must not fail on an assignee the
+ * user never chose, so the existing value is allowed through unchanged.
+ */
+async function validateAssignee(
+  client: PoolClient,
+  employeeId: number | null,
+  currentAssigneeId: number | null = null
+) {
   if (employeeId === null) return true;
+  if (currentAssigneeId !== null && employeeId === currentAssigneeId) return true;
+
   const result = await client.query(
-    `SELECT 1 FROM public.employees WHERE employee_id = $1 AND is_active = TRUE;`,
+    `SELECT 1 FROM public.employees
+     WHERE employee_id = $1 AND is_active = TRUE AND role = 'technician';`,
     [employeeId]
   );
   return result.rows.length > 0;
 }
 
-// The create/edit form uses the coarse employee roles as permissions only;
-// any active employee may be selected as the technician/assignee for now.
+/**
+ * The assignee dropdown.
+ *
+ * Technicians only. This used to return every active employee, which put
+ * cashiers and head office into a list labelled "Technician" and left whoever
+ * was assigning to remember, from memory, which of twenty names actually goes
+ * out to a pole.
+ *
+ * Migration 034 made 'technician' a real role that cannot log in, so the role
+ * is now a reliable answer to "does this person do field work" rather than the
+ * rough permissions proxy it was when this endpoint was written.
+ */
 serviceTicketsRouter.get(
   "/service-ticket-assignees",
   requireAuth,
@@ -60,6 +89,7 @@ serviceTicketsRouter.get(
         SELECT employee_id, first_name, last_name, role
         FROM public.employees
         WHERE is_active = TRUE
+          AND role = 'technician'
         ORDER BY last_name, first_name;
       `);
       res.json({ employees: result.rows });
@@ -195,10 +225,25 @@ serviceTicketsRouter.get(
       const ticketResult = await pool.query(
         `
         SELECT t.*, c.name AS customer_name, c.address, c.telephone,
-          CONCAT_WS(' ', assignee.first_name, assignee.last_name) AS assigned_employee_name
+          CONCAT_WS(' ', assignee.first_name, assignee.last_name) AS assigned_employee_name,
+          assignee.role AS assigned_employee_role,
+          CONCAT_WS(' ', creator.first_name, creator.last_name) AS created_by_name,
+          -- Who marked it done, taken from the history rather than the ticket:
+          -- updated_by_employee_id is whoever touched it last, which is not the
+          -- same person once anybody edits a note after the work was finished.
+          (
+            SELECT CONCAT_WS(' ', e.first_name, e.last_name)
+            FROM public.service_ticket_history h
+            LEFT JOIN public.employees e ON e.employee_id = h.changed_by_employee_id
+            WHERE h.service_ticket_id = t.service_ticket_id
+              AND h.to_status = 'completed'
+            ORDER BY h.changed_at DESC, h.service_ticket_history_id DESC
+            LIMIT 1
+          ) AS completed_by_name
         FROM public.service_tickets t
         LEFT JOIN public.customers c ON c.customer_id = t.customer_id
         LEFT JOIN public.employees assignee ON assignee.employee_id = t.assigned_employee_id
+        LEFT JOIN public.employees creator  ON creator.employee_id  = t.created_by_employee_id
         WHERE t.service_ticket_id = $1;
         `,
         [ticketId]
@@ -377,7 +422,10 @@ serviceTicketsRouter.patch(
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "Choose a valid technician." });
       }
-      if (!(await validateAssignee(client, assignedEmployeeId))) {
+      // The ticket's existing assignee is passed so that a ticket assigned to
+      // a non-technician before this rule existed can still be edited without
+      // being blocked on a choice the user is not making now.
+      if (!(await validateAssignee(client, assignedEmployeeId, current.assigned_employee_id))) {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "Selected technician is unavailable." });
       }
