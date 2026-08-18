@@ -228,6 +228,103 @@ function requireRole(
 }
 
 
+/**
+ * Login history.
+ *
+ * Every attempt lands in login_sessions — successes as an open session,
+ * failures as a moment. Recording is best-effort: a failure to write history
+ * must never stop somebody signing in, so these swallow their errors and log
+ * rather than throwing into the request.
+ */
+async function recordFailedAttempt(
+  username: string,
+  reason: "unknown_username" | "wrong_password" | "inactive_account" | "rate_limited",
+  employeeId: number | null = null,
+  actorName: string | null = null
+) {
+  try {
+    await pool.query(
+      `INSERT INTO public.login_sessions
+         (employee_id, username_attempted, actor_name, outcome, failure_reason)
+       VALUES ($1, $2, $3, 'failed', $4);`,
+      [employeeId, username.trim().slice(0, 100), actorName, reason]
+    );
+  } catch (error) {
+    console.error("Could not record failed login:", error);
+  }
+}
+
+async function recordSuccessfulLogin(
+  employee: {
+    employee_id: number;
+    username: string;
+    first_name: string;
+    last_name: string;
+    location_id: number | null;
+    location_name: string | null;
+  },
+  sessionId: string
+): Promise<number | null> {
+  try {
+    const result = await pool.query(
+      `INSERT INTO public.login_sessions
+         (employee_id, username_attempted, actor_name, outcome,
+          location_id, location_name, session_sid, last_seen_at)
+       VALUES ($1, $2, $3, 'success', $4, $5, $6, CURRENT_TIMESTAMP)
+       RETURNING login_session_id;`,
+      [
+        employee.employee_id,
+        employee.username,
+        `${employee.first_name} ${employee.last_name}`,
+        employee.location_id,
+        employee.location_name,
+        sessionId,
+      ]
+    );
+
+    return result.rows[0].login_session_id;
+  } catch (error) {
+    console.error("Could not record login session:", error);
+    return null;
+  }
+}
+
+/**
+ * How stale last_seen_at is allowed to get before a request refreshes it.
+ *
+ * Without a heartbeat, a session nobody logs out of has a start time and
+ * nothing else — and most sessions end that way, because people close the
+ * laptop. One write per user per minute is nothing at this size, and it is
+ * what lets the panel say "last active 3:47pm" instead of leaving a blank.
+ */
+const SESSION_HEARTBEAT_MS = 60_000;
+
+app.use((req, _res, next) => {
+  const loginSessionId = req.session?.loginSessionId;
+
+  if (loginSessionId) {
+    const last = req.session.lastSeenWrittenAt ?? 0;
+    const now = Date.now();
+
+    if (now - last > SESSION_HEARTBEAT_MS) {
+      req.session.lastSeenWrittenAt = now;
+
+      // Deliberately not awaited: the heartbeat is bookkeeping, and the
+      // request should not wait on it or fail with it.
+      pool
+        .query(
+          `UPDATE public.login_sessions
+           SET last_seen_at = CURRENT_TIMESTAMP
+           WHERE login_session_id = $1 AND ended_at IS NULL;`,
+          [loginSessionId]
+        )
+        .catch((error) => console.error("Could not update session heartbeat:", error));
+    }
+  }
+
+  next();
+});
+
 // In production "/" belongs to the built frontend, which is mounted further
 // down. This placeholder only exists for API-only local development.
 if (!IS_PRODUCTION) {
@@ -1056,6 +1153,7 @@ app.post("/api/auth/login", async (req, res) => {
       // Counted like any other failure. If unknown usernames were free,
       // an attacker could enumerate valid accounts at full speed.
       recordFailedLogin(username, req.ip);
+      await recordFailedAttempt(username, "unknown_username");
 
       return res.status(401).json({
         error: "Invalid username or password.",
@@ -1063,6 +1161,13 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     if (!employee.is_active) {
+      await recordFailedAttempt(
+        username,
+        "inactive_account",
+        employee.employee_id,
+        `${employee.first_name} ${employee.last_name}`
+      );
+
       return res.status(403).json({
         error: "This employee account is inactive.",
       });
@@ -1076,6 +1181,12 @@ app.post("/api/auth/login", async (req, res) => {
 
     if (!passwordMatches) {
       recordFailedLogin(username, req.ip);
+      await recordFailedAttempt(
+        username,
+        "wrong_password",
+        employee.employee_id,
+        `${employee.first_name} ${employee.last_name}`
+      );
 
       return res.status(401).json({
         error: "Invalid username or password.",
@@ -1105,6 +1216,14 @@ app.post("/api/auth/login", async (req, res) => {
       `,
       [employee.employee_id]
     );
+
+    // Held on the session so logout can close the right row, and so the
+    // heartbeat above knows which one to touch.
+    req.session.loginSessionId = await recordSuccessfulLogin(
+      employee,
+      req.sessionID
+    );
+    req.session.lastSeenWrittenAt = Date.now();
 
     res.json({
       employee: req.session.employee,
@@ -1349,7 +1468,11 @@ app.patch(
     const actor = req.session.employee!;
     const { employeeId } = req.params;
 
-    if (!/^\d+$/.test(employeeId)) {
+    // Express types a route param as string | string[], so the typeof guard is
+    // what narrows it before the regex — the same shape the customer routes
+    // above use. Without it this compiles locally under a transpiler that
+    // strips types, and fails in the Docker build where tsc actually runs.
+    if (typeof employeeId !== "string" || !/^\d+$/.test(employeeId)) {
       return res.status(400).json({ error: "Invalid employee ID." });
     }
 
@@ -1537,6 +1660,96 @@ app.patch(
 );
 
 /**
+ * One employee's login history: sessions and failed attempts, newest first.
+ *
+ * A session with no ended_at is not necessarily still open — most sessions
+ * end because somebody shut a laptop, which fires nothing. So before reading,
+ * any unended row whose session has gone from user_sessions is settled as
+ * 'expired', dated at the last activity we saw. That runs here rather than on
+ * a timer because an admin opening this panel is the only time the answer
+ * matters, and it keeps the history from drifting forever.
+ */
+app.get(
+  "/api/admin/employees/:employeeId/sessions",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    const { employeeId } = req.params;
+
+    if (typeof employeeId !== "string" || !/^\d+$/.test(employeeId)) {
+      return res.status(400).json({ error: "Invalid employee ID." });
+    }
+
+    const requestedLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 100)
+      : 25;
+
+    const requestedOffset = Number.parseInt(String(req.query.offset ?? ""), 10);
+    const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
+
+    try {
+      // Settle anything that quietly lapsed. COALESCE keeps a row that somehow
+      // never got a heartbeat from ending before it began.
+      await pool.query(
+        `
+        UPDATE public.login_sessions ls
+        SET ended_at   = COALESCE(ls.last_seen_at, ls.started_at),
+            end_reason = 'expired'
+        WHERE ls.employee_id = $1
+          AND ls.outcome = 'success'
+          AND ls.ended_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM public.user_sessions us
+            WHERE us.sid = ls.session_sid
+              AND us.expire > CURRENT_TIMESTAMP
+          );
+        `,
+        [employeeId]
+      );
+
+      const result = await pool.query(
+        `
+        SELECT
+            ls.login_session_id,
+            ls.outcome,
+            ls.failure_reason,
+            ls.username_attempted,
+            ls.location_name,
+            ls.started_at,
+            ls.last_seen_at,
+            ls.ended_at,
+            ls.end_reason,
+            -- Anything still unended after the sweep above genuinely has a
+            -- live session behind it.
+            (ls.outcome = 'success' AND ls.ended_at IS NULL) AS is_active,
+            COUNT(*) OVER () AS total_count
+        FROM public.login_sessions ls
+        WHERE ls.employee_id = $1
+        ORDER BY ls.started_at DESC, ls.login_session_id DESC
+        LIMIT $2 OFFSET $3;
+        `,
+        [employeeId, limit, offset]
+      );
+
+      const total = result.rows.length > 0 ? Number(result.rows[0].total_count) : 0;
+      const sessions = result.rows.map(({ total_count, ...row }) => row);
+
+      res.json({
+        sessions,
+        total,
+        limit,
+        offset,
+        hasMore: offset + sessions.length < total,
+      });
+    } catch (error) {
+      console.error("Could not load login history:", error);
+      res.status(500).json({ error: "Could not load login history." });
+    }
+  }
+);
+
+/**
  * Issues a new password for someone who has lost theirs.
  *
  * The admin supplies the password rather than the server generating one, so
@@ -1551,7 +1764,11 @@ app.post(
     const actor = req.session.employee!;
     const { employeeId } = req.params;
 
-    if (!/^\d+$/.test(employeeId)) {
+    // Express types a route param as string | string[], so the typeof guard is
+    // what narrows it before the regex — the same shape the customer routes
+    // above use. Without it this compiles locally under a transpiler that
+    // strips types, and fails in the Docker build where tsc actually runs.
+    if (typeof employeeId !== "string" || !/^\d+$/.test(employeeId)) {
       return res.status(400).json({ error: "Invalid employee ID." });
     }
 
@@ -1639,7 +1856,26 @@ app.post(
 );
 
 
-app.post("/api/auth/logout", (req, res) => {
+app.post("/api/auth/logout", async (req, res) => {
+  // Close the history row before the session is destroyed, while the id is
+  // still readable. Best-effort: failing to write history must not stop
+  // somebody logging out.
+  const loginSessionId = req.session?.loginSessionId;
+
+  if (loginSessionId) {
+    try {
+      await pool.query(
+        `UPDATE public.login_sessions
+         SET ended_at = CURRENT_TIMESTAMP, end_reason = 'logout',
+             last_seen_at = CURRENT_TIMESTAMP
+         WHERE login_session_id = $1 AND ended_at IS NULL;`,
+        [loginSessionId]
+      );
+    } catch (error) {
+      console.error("Could not close login session:", error);
+    }
+  }
+
   // Destroy the server-side record before clearing the browser's session cookie.
   req.session.destroy((error) => {
     if (error) {
@@ -1650,7 +1886,11 @@ app.post("/api/auth/logout", (req, res) => {
       });
     }
 
-    res.clearCookie("connect.sid");
+    // Must match the name the session is configured with above. This said
+    // "connect.sid", express-session's default, so the real cookie was left
+    // in the browser on logout — harmless, since the session id it holds is
+    // already destroyed server-side, but it never actually cleared anything.
+    res.clearCookie(process.env.SESSION_COOKIE_NAME || "spcl.sid");
 
     res.json({
       message: "Logged out.",

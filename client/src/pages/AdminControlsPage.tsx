@@ -43,6 +43,7 @@ function AdminControlsPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<Employee | null>(null);
+  const [viewingSessions, setViewingSessions] = useState<Employee | null>(null);
 
   const loadEmployees = async () => {
     try {
@@ -165,16 +166,33 @@ function AdminControlsPage() {
                       </td>
 
                       <td className="px-6 py-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setNotice("");
-                            setEditing(employee);
-                          }}
-                          className="rounded-lg bg-surface-container px-4 py-2 text-sm font-medium text-on-surface"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          {/* Technicians never sign in, so there is no login
+                              history to show and the button would only lead to
+                              a permanently empty panel. */}
+                          {employee.username && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNotice("");
+                                setViewingSessions(employee);
+                              }}
+                              className="rounded-lg bg-surface-container px-4 py-2 text-sm font-medium text-on-surface"
+                            >
+                              Sessions
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNotice("");
+                              setEditing(employee);
+                            }}
+                            className="rounded-lg bg-surface-container px-4 py-2 text-sm font-medium text-on-surface"
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -184,6 +202,13 @@ function AdminControlsPage() {
           </div>
         )}
       </div>
+
+      {viewingSessions && (
+        <SessionHistoryModal
+          employee={viewingSessions}
+          onClose={() => setViewingSessions(null)}
+        />
+      )}
 
       {editing && (
         <EditEmployeeModal
@@ -200,6 +225,196 @@ function AdminControlsPage() {
       )}
     </div>
   );
+}
+
+type LoginSession = {
+  login_session_id: number;
+  outcome: "success" | "failed";
+  failure_reason: string | null;
+  username_attempted: string;
+  location_name: string | null;
+  started_at: string;
+  last_seen_at: string | null;
+  ended_at: string | null;
+  end_reason: "logout" | "expired" | null;
+  is_active: boolean;
+};
+
+const FAILURE_LABELS: Record<string, string> = {
+  unknown_username: "No such username",
+  wrong_password: "Wrong password",
+  inactive_account: "Account is inactive",
+  rate_limited: "Blocked by rate limit",
+};
+
+const SESSIONS_PAGE_SIZE = 25;
+
+function SessionHistoryModal({
+  employee,
+  onClose,
+}: {
+  employee: Employee;
+  onClose: () => void;
+}) {
+  const [sessions, setSessions] = useState<LoginSession[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = async (offset: number) => {
+    const response = await apiFetch(
+      `/api/admin/employees/${employee.employee_id}/sessions?limit=${SESSIONS_PAGE_SIZE}&offset=${offset}`
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not load login history.");
+    return data;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const data = await load(0);
+        if (!cancelled) {
+          setSessions(data.sessions ?? []);
+          setTotal(data.total ?? 0);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!cancelled) setError("Could not load login history.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employee.employee_id]);
+
+  const loadMore = async () => {
+    try {
+      setLoadingMore(true);
+      const data = await load(sessions.length);
+      setSessions((current) => [...current, ...(data.sessions ?? [])]);
+      setTotal(data.total ?? 0);
+    } catch (loadError) {
+      console.error(loadError);
+      setError("Could not load more history.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
+      <div className="my-4 flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col rounded-2xl bg-surface-container-lowest shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-surface-container px-6 py-5">
+          <div>
+            <h3 className="text-lg font-semibold text-on-surface">
+              {employee.first_name} {employee.last_name}
+            </h3>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Sign-ins and failed attempts, newest first
+              {total > 0 ? ` · showing ${sessions.length} of ${total}` : ""}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-surface-container px-4 py-2 text-sm font-medium text-on-surface-variant"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          {loading && <p className="text-sm text-on-surface-variant">Loading...</p>}
+
+          {error && (
+            <p className="rounded-lg bg-error/10 p-4 text-sm text-error">{error}</p>
+          )}
+
+          {!loading && !error && sessions.length === 0 && (
+            <p className="text-sm text-on-surface-variant">
+              Nothing recorded yet. History starts from when this was switched on — earlier
+              sign-ins were never stored.
+            </p>
+          )}
+
+          {sessions.length > 0 && (
+            <ul className="divide-y divide-surface-container">
+              {sessions.map((session) => (
+                <li key={session.login_session_id} className="py-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <p className="font-medium text-on-surface">
+                      {session.outcome === "failed"
+                        ? FAILURE_LABELS[session.failure_reason ?? ""] || "Failed sign-in"
+                        : "Signed in"}
+                      {session.location_name ? ` · ${session.location_name}` : ""}
+                    </p>
+                    <time className="shrink-0 text-xs text-on-surface-variant">
+                      {formatMoment(session.started_at)}
+                    </time>
+                  </div>
+                  <p className="mt-1 text-sm text-on-surface-variant">
+                    {describeSession(session)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {sessions.length < total && (
+          <div className="border-t border-surface-container p-4 text-center">
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="rounded-lg bg-surface-container px-5 py-2.5 text-sm font-medium text-on-surface disabled:opacity-50"
+            >
+              {loadingMore ? "Loading..." : "Load more"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Says what happened in a sentence, and is careful not to claim more than is
+ * known. A session that lapsed has no true end time — only the last moment it
+ * was seen being used — so it says that rather than inventing one.
+ */
+function describeSession(session: LoginSession) {
+  if (session.outcome === "failed") {
+    return `Attempted as "${session.username_attempted}"`;
+  }
+
+  if (session.is_active) {
+    return `Still signed in · last active ${formatMoment(session.last_seen_at ?? session.started_at)}`;
+  }
+
+  if (session.end_reason === "logout") {
+    return `Signed out ${formatMoment(session.ended_at)}`;
+  }
+
+  return `No sign-out recorded · last active ${formatMoment(session.last_seen_at ?? session.ended_at)}`;
+}
+
+function formatMoment(value: string | null) {
+  if (!value) return "unknown";
+  return new Date(value).toLocaleString("en-JM", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "America/Jamaica",
+  });
 }
 
 function EditEmployeeModal({

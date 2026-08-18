@@ -12,5 +12,11 @@ declare module "express-session" {
       locationId: number | null;
       locationName: string | null;
     };
+
+    /** Row in login_sessions this browser session opened, so logout can close it. */
+    loginSessionId?: number | null;
+
+    /** When the heartbeat last wrote last_seen_at, to keep it to once a minute. */
+    lastSeenWrittenAt?: number;
   }
 }
