@@ -16,6 +16,20 @@ const PRINT_FORMAT_STORAGE_KEY = "spcl.receiptPrintFormat";
 
 const A4_PAGE_RULE = "@page { size: A4 portrait; margin: 16mm; }";
 
+/* Printed at the foot of every receipt so a customer holding the slip has a
+   way to reach the company without looking one up. `display` is what goes on
+   the paper; `href` is what a click does on screen. */
+const CONTACT_NUMBERS = {
+  whatsapp: [
+    { display: "1-876-899-8867", href: "https://wa.me/18768998867" },
+    { display: "1-876-880-0093", href: "https://wa.me/18768800093" },
+  ],
+  telephone: [
+    { display: "1-876-941-0043", href: "tel:+18769410043" },
+    { display: "1-876-965-7334", href: "tel:+18769657334" },
+  ],
+} as const;
+
 /* Width of the roll. Change to 58 if an office ever runs narrow stock; the
    72mm printable column in .receipt-slip-layout has to come down with it. */
 const SLIP_WIDTH_MM = 80;
@@ -227,7 +241,7 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
         <div className="payment-receipt-print bg-white p-5 text-on-surface sm:p-9">
           <div className="receipt-header flex items-start justify-between gap-6 border-b-2 border-primary pb-5">
             <div>
-              <p className="receipt-brand text-xs font-semibold uppercase tracking-[0.2em] text-primary">SPCL</p>
+              <p className="receipt-brand text-xs font-semibold uppercase tracking-[0.2em] text-primary">SPCL/FYWY</p>
               <h2 className="receipt-title mt-1 text-2xl font-semibold">Payment Receipt</h2>
               <p className="receipt-subtitle mt-1 text-sm text-on-surface-variant">Official customer payment record</p>
             </div>
@@ -255,7 +269,7 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
             <ReceiptField label="Customer ID" value={String(displayPayment.customer_id)} />
             <ReceiptField label="Payment type" value={displayPayment.payment_type} />
             <ReceiptField label="Month paid for" value={formatMonth(displayPayment.month_paid)} />
-            <ReceiptField label="Cashier" value={displayPayment.cashier_name || "—"} />
+            <ReceiptField label="Cashier" value={firstName(displayPayment.cashier_name)} />
             <ReceiptField label="Location" value={displayPayment.location || "—"} />
           </div>
 
@@ -273,7 +287,15 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
           <div className="receipt-footer mt-7 border-t border-surface-container pt-4 text-center text-xs text-on-surface-variant">
             <p>Recorded {formatDateTime(displayPayment.recorded_at)} · Payment #{displayPayment.payment_id}</p>
             <p className="print-only hidden">Please keep this slip as proof of payment.</p>
-            <p className="receipt-thanks print-only hidden">Thank you</p>
+          </div>
+
+          {/* Kept out of .receipt-footer so the dashed rule above the contact
+              block reads as its own section on the slip rather than a second
+              line of recording metadata. */}
+          <div className="receipt-contact mt-5 border-t border-surface-container pt-4 text-center text-xs text-on-surface-variant">
+            <ContactLine label="WhatsApp" numbers={CONTACT_NUMBERS.whatsapp} />
+            <ContactLine label="Telephone" numbers={CONTACT_NUMBERS.telephone} />
+            <p className="receipt-thanks print-only mt-3 hidden">Thank you</p>
           </div>
         </div>
 
@@ -339,6 +361,23 @@ function PrintFormatOption({ label, description, active, onSelect }: { label: st
   );
 }
 
+/* Anchors rather than plain text: on screen a counter can tap through to
+   WhatsApp or dial, and print simply drops the affordance and leaves the
+   number readable. */
+function ContactLine({ label, numbers }: { label: string; numbers: readonly { display: string; href: string }[] }) {
+  return (
+    <p className="receipt-contact-line">
+      <span className="receipt-contact-label font-semibold">{label}</span>{" "}
+      {numbers.map((number, index) => (
+        <span key={number.href}>
+          {index > 0 && <span className="receipt-contact-separator"> or </span>}
+          <a href={number.href} className="receipt-contact-number whitespace-nowrap hover:underline">{number.display}</a>
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function ReceiptField({ label, value }: { label: string; value: string }) {
   return (
     <div className="receipt-field">
@@ -346,6 +385,14 @@ function ReceiptField({ label, value }: { label: string; value: string }) {
       <p className="receipt-field-value mt-1.5 break-words text-sm font-semibold text-on-surface">{value}</p>
     </div>
   );
+}
+
+/* The slip only needs to say who served the customer, and a counter is known
+   by a first name. The full name stays on the payment record itself, which is
+   what an audit looks at. */
+function firstName(value: string | null) {
+  const first = (value ?? "").trim().split(/\s+/)[0];
+  return first || "—";
 }
 
 function formatCurrency(value: string) {

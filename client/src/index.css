@@ -370,6 +370,33 @@ textarea {
   margin: 0.5mm 0 0 !important;
 }
 
+.receipt-slip-layout .receipt-contact {
+  margin: 2.5mm 0 0 !important;
+  padding: 1.5mm 0 0 !important;
+  border: 0 !important;
+  border-top: 1px dashed #000 !important;
+  text-align: center !important;
+  font-size: 8pt !important;
+}
+
+/* Label on its own line. Kept inline, "Telephone 1-876-941-0043 or
+   1-876-965-7334" is about 42 monospace characters — right at what 72mm
+   holds, so it would wrap at whichever number happened to overflow. Breaking
+   it here makes the wrap deliberate and identical on every slip. */
+.receipt-slip-layout .receipt-contact-label {
+  display: block !important;
+  font-weight: 700 !important;
+}
+
+.receipt-slip-layout .receipt-contact-line {
+  margin: 1mm 0 0 !important;
+}
+
+/* The underline is an on-screen affordance and only costs ink on paper. */
+.receipt-slip-layout .receipt-contact-number {
+  text-decoration: none !important;
+}
+
 .receipt-slip-layout .receipt-thanks {
   margin-top: 2mm !important;
   font-size: 9pt !important;
@@ -482,8 +509,14 @@ textarea {
   html.printing-a4 .receipt-header,
   html.printing-a4 .receipt-void,
   html.printing-a4 .receipt-amount,
-  html.printing-a4 .receipt-field {
+  html.printing-a4 .receipt-field,
+  html.printing-a4 .receipt-contact {
     break-inside: avoid;
+  }
+
+  /* Nothing to click on a sheet of paper — the number is the content. */
+  html.printing-a4 .receipt-contact-number {
+    text-decoration: none !important;
   }
 }
 
