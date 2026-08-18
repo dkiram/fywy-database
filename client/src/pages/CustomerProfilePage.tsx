@@ -10,6 +10,7 @@ import AccountOperationsPanel, {
   type AccountStatusUpdate,
 } from "../components/AccountOperationsPanel";
 import CustomerServiceHistory from "../components/CustomerServiceHistory";
+import CustomerActivityHistory from "../components/CustomerActivityHistory";
 
 type Customer = {
   customer_id: number;
@@ -66,7 +67,7 @@ const canManageSubscription =
   const [customer, setCustomer] = useState<Customer | null>(null);
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState("");
-    const [activeTab, setActiveTab] = useState<"overview" | "payments" | "support">(
+    const [activeTab, setActiveTab] = useState<"overview" | "payments" | "support" | "history">(
   "overview"
 );
 
@@ -274,6 +275,18 @@ if (error || !customer) {
     }
   >
     Support History
+  </button>
+
+  <button
+    type="button"
+    onClick={() => setActiveTab("history")}
+    className={
+      activeTab === "history"
+        ? "border-b-2 border-primary px-6 py-3 text-sm font-medium text-primary"
+        : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
+    }
+  >
+    History
   </button>
 </div>
 
@@ -616,8 +629,10 @@ if (error || !customer) {
         </div>
 ) : activeTab === "payments" ? (
   <PaymentHistory refreshKey={paymentRefreshKey} />
- ) : (
+ ) : activeTab === "support" ? (
   <CustomerServiceHistory customerId={customer.customer_id} />
+ ) : (
+  <CustomerActivityHistory customerId={customer.customer_id} />
 )}
 
       {showPaymentForm && employee && (

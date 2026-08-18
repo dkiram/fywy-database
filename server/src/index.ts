@@ -649,6 +649,335 @@ app.get("/api/audit-logs", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * One customer's history, merged from every table that records something
+ * happening to their account.
+ *
+ * Payments are deliberately absent. They have their own tab with amounts,
+ * receipt numbers and void state, and repeating them here would both double
+ * the length of the timeline and give two places to read the same number
+ * from. Audit entries about payments are filtered out for the same reason.
+ *
+ * The shape of each row is deliberately flat and pre-formatted — kind, title,
+ * detail, reason, actor — so the client renders a timeline without needing to
+ * know which of nine tables a given line came from.
+ *
+ * Paged 25 at a time. Filtering happens HERE rather than in the client: if the
+ * client filtered a page it had already been given, asking for "waivers" could
+ * show an empty tab on an account that has twenty of them further down, and
+ * "load more" would appear to do nothing. The filter has to reach the ORDER BY
+ * for paging to mean anything.
+ */
+const ACTIVITY_PAGE_SIZE = 25;
+const ACTIVITY_MAX_PAGE_SIZE = 100;
+
+/**
+ * Maps a filter name from the UI onto the event kinds it covers. "Tickets" is
+ * one idea to the person reading the page even though it is two kinds in the
+ * query, so the grouping lives here rather than making them choose.
+ */
+const ACTIVITY_FILTERS: Record<string, string[] | null> = {
+  all: null,
+  status_change: ["status_change"],
+  ticket: ["ticket_opened", "ticket_event"],
+  rate_change: ["rate_change"],
+  waiver: ["waiver"],
+  reconnection: ["reconnection"],
+  hold: ["hold"],
+  staff_edit: ["staff_edit"],
+};
+
+app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => {
+  try {
+    const { customerId } = req.params;
+
+    if (typeof customerId !== "string" || !/^\d+$/.test(customerId)) {
+      return res.status(400).json({ error: "Invalid customer ID" });
+    }
+
+    const requestedFilter =
+      typeof req.query.filter === "string" ? req.query.filter : "all";
+
+    if (!(requestedFilter in ACTIVITY_FILTERS)) {
+      return res.status(400).json({
+        error: `Unknown filter. Expected one of: ${Object.keys(ACTIVITY_FILTERS).join(", ")}`,
+      });
+    }
+
+    const kinds = ACTIVITY_FILTERS[requestedFilter];
+
+    // Clamped rather than rejected: a nonsense limit in a URL should still
+    // return a sane page, not a 400 the user cannot act on.
+    const requestedLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), ACTIVITY_MAX_PAGE_SIZE)
+      : ACTIVITY_PAGE_SIZE;
+
+    const requestedOffset = Number.parseInt(String(req.query.offset ?? ""), 10);
+    const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
+
+    const result = await pool.query(
+      `
+      WITH activity AS (
+          -- Account status changes: disconnections, reconnections, closures.
+          SELECT
+              COALESCE(h.changed_at, h.effective_date::TIMESTAMPTZ) AS occurred_at,
+              'status_change'::TEXT AS kind,
+              CASE
+                  WHEN h.from_status IS NULL THEN 'Account set to ' || h.to_status
+                  ELSE 'Status changed from ' || h.from_status || ' to ' || h.to_status
+              END AS title,
+              NULL::TEXT AS detail,
+              h.reason AS reason,
+              CONCAT_WS(' ', e.first_name, e.last_name) AS actor,
+              h.account_status_history_id::TEXT AS reference_id
+          FROM public.account_status_history h
+          LEFT JOIN public.employees e ON e.employee_id = h.changed_by_employee_id
+          WHERE h.customer_id = $1
+
+          UNION ALL
+
+          -- Monthly fee changes.
+          SELECT
+              COALESCE(r.created_at, r.effective_date::TIMESTAMPTZ),
+              'rate_change',
+              'Monthly fee set to J$' || TRIM(TO_CHAR(r.monthly_fee, 'FM999999990.00')),
+              'Effective ' || TO_CHAR(r.effective_date, 'DD Mon YYYY')
+                  || CASE WHEN r.is_legacy_estimate THEN ' (estimated from legacy data)' ELSE '' END,
+              r.reason,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              r.customer_rate_history_id::TEXT
+          FROM public.customer_rate_history r
+          LEFT JOIN public.employees e ON e.employee_id = r.changed_by_employee_id
+          WHERE r.customer_id = $1
+
+          UNION ALL
+
+          -- Service tickets, at the point they were raised.
+          SELECT
+              COALESCE(t.created_at, t.reported_date::TIMESTAMPTZ),
+              'ticket_opened',
+              'Service ticket raised: ' || t.issue_summary,
+              NULLIF(CONCAT_WS(' · ',
+                  NULLIF('Priority ' || t.priority, 'Priority '),
+                  NULLIF('Assigned to ' || CONCAT_WS(' ', a.first_name, a.last_name), 'Assigned to '),
+                  t.description
+              ), ''),
+              NULL,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              t.service_ticket_id::TEXT
+          FROM public.service_tickets t
+          LEFT JOIN public.employees e ON e.employee_id = t.created_by_employee_id
+          LEFT JOIN public.employees a ON a.employee_id = t.assigned_employee_id
+          WHERE t.customer_id = $1
+
+          UNION ALL
+
+          -- Everything that happened to those tickets afterwards.
+          SELECT
+              th.changed_at,
+              'ticket_event',
+              CASE
+                  WHEN th.to_status IS NOT NULL AND th.from_status IS NOT NULL
+                      THEN 'Ticket #' || th.service_ticket_id || ' moved from ' || th.from_status || ' to ' || th.to_status
+                  WHEN th.to_status IS NOT NULL
+                      THEN 'Ticket #' || th.service_ticket_id || ' set to ' || th.to_status
+                  ELSE 'Ticket #' || th.service_ticket_id || ' ' || th.event_type
+              END,
+              th.note,
+              NULL,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              th.service_ticket_id::TEXT
+          FROM public.service_ticket_history th
+          JOIN public.service_tickets t ON t.service_ticket_id = th.service_ticket_id
+          LEFT JOIN public.employees e ON e.employee_id = th.changed_by_employee_id
+          WHERE t.customer_id = $1
+
+          UNION ALL
+
+          -- Waivers: requested, reviewed, and possibly reversed. Each is its
+          -- own line, because "requested" and "approved three days later by
+          -- someone else" are two events, and collapsing them hides who
+          -- approved it — which is the part anyone reading this wants.
+          SELECT
+              w.requested_at,
+              'waiver',
+              'Waiver requested: J$' || TRIM(TO_CHAR(w.amount, 'FM999999990.00')),
+              NULL,
+              w.reason,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              w.waiver_request_id::TEXT
+          FROM public.waiver_requests w
+          LEFT JOIN public.employees e ON e.employee_id = w.requested_by_employee_id
+          WHERE w.customer_id = $1
+
+          UNION ALL
+
+          SELECT
+              w.reviewed_at,
+              'waiver',
+              'Waiver ' || w.status || ': J$' || TRIM(TO_CHAR(w.amount, 'FM999999990.00')),
+              NULL,
+              w.review_note,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              w.waiver_request_id::TEXT
+          FROM public.waiver_requests w
+          LEFT JOIN public.employees e ON e.employee_id = w.reviewed_by_employee_id
+          WHERE w.customer_id = $1 AND w.reviewed_at IS NOT NULL
+
+          UNION ALL
+
+          SELECT
+              w.reversed_at,
+              'waiver',
+              'Waiver reversed: J$' || TRIM(TO_CHAR(w.amount, 'FM999999990.00')),
+              NULL,
+              w.reversal_note,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              w.waiver_request_id::TEXT
+          FROM public.waiver_requests w
+          LEFT JOIN public.employees e ON e.employee_id = w.reversed_by_employee_id
+          WHERE w.customer_id = $1 AND w.reversed_at IS NOT NULL
+
+          UNION ALL
+
+          -- Reconnection requests and their decisions.
+          SELECT
+              n.requested_at,
+              'reconnection',
+              'Reconnection requested (balance J$' || TRIM(TO_CHAR(n.outstanding_balance_snapshot, 'FM999999990.00')) || ')',
+              NULL,
+              n.reason,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              n.reconnection_request_id::TEXT
+          FROM public.reconnection_requests n
+          LEFT JOIN public.employees e ON e.employee_id = n.requested_by_employee_id
+          WHERE n.customer_id = $1
+
+          UNION ALL
+
+          SELECT
+              n.reviewed_at,
+              'reconnection',
+              'Reconnection ' || n.status,
+              NULL,
+              n.review_note,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              n.reconnection_request_id::TEXT
+          FROM public.reconnection_requests n
+          LEFT JOIN public.employees e ON e.employee_id = n.reviewed_by_employee_id
+          WHERE n.customer_id = $1 AND n.reviewed_at IS NOT NULL
+
+          UNION ALL
+
+          -- Disconnection holds, placed and released.
+          SELECT
+              d.created_at,
+              'hold',
+              'Disconnection hold placed until ' || TO_CHAR(d.expires_on, 'DD Mon YYYY'),
+              NULL,
+              d.reason,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              d.disconnection_hold_id::TEXT
+          FROM public.disconnection_holds d
+          LEFT JOIN public.employees e ON e.employee_id = d.approved_by_employee_id
+          WHERE d.customer_id = $1
+
+          UNION ALL
+
+          SELECT
+              d.released_at,
+              'hold',
+              'Disconnection hold released',
+              NULL,
+              NULL,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              d.disconnection_hold_id::TEXT
+          FROM public.disconnection_holds d
+          LEFT JOIN public.employees e ON e.employee_id = d.released_by_employee_id
+          WHERE d.customer_id = $1 AND d.released_at IS NOT NULL
+
+          UNION ALL
+
+          -- Staff edits from the audit trail. actor_name is a snapshot taken
+          -- at write time, so an old entry still names the right person after
+          -- they leave or change their name.
+          SELECT
+              al.occurred_at,
+              'staff_edit',
+              al.action,
+              NULLIF(CONCAT_WS(' ',
+                  NULLIF(al.field_name, ''),
+                  CASE WHEN al.old_value IS NOT NULL OR al.new_value IS NOT NULL
+                       THEN COALESCE(al.old_value, '(blank)') || ' → ' || COALESCE(al.new_value, '(blank)')
+                  END
+              ), ''),
+              al.reason,
+              al.actor_name,
+              al.entity_id
+          FROM public.audit_logs al
+          LEFT JOIN public.service_tickets at_t
+            ON at_t.service_ticket_id = CASE
+                 WHEN al.entity_type = 'service_ticket' AND al.entity_id ~ '^[0-9]+$'
+                 THEN al.entity_id::BIGINT
+               END
+          LEFT JOIN public.applications at_a
+            ON at_a.application_id = CASE
+                 WHEN al.entity_type = 'application' AND al.entity_id ~ '^[0-9]+$'
+                 THEN al.entity_id::BIGINT
+               END
+          WHERE al.entity_type <> 'payment'
+            AND COALESCE(
+                  CASE WHEN al.entity_type = 'customer' AND al.entity_id ~ '^[0-9]+$'
+                       THEN al.entity_id::INTEGER END,
+                  at_t.customer_id,
+                  at_a.customer_id
+                ) = $1
+      )
+      SELECT
+          occurred_at,
+          kind,
+          title,
+          detail,
+          reason,
+          NULLIF(actor, '') AS actor,
+          reference_id,
+          -- Counted over the filtered set before LIMIT, in the same pass, so
+          -- the client can say "25 of 143" without a second round trip.
+          COUNT(*) OVER () AS total_count
+      FROM activity
+      -- A NULL timestamp means the event has not happened yet (an unreviewed
+      -- waiver, an unreleased hold), so it has no place on a timeline.
+      WHERE occurred_at IS NOT NULL
+        AND ($2::TEXT[] IS NULL OR kind = ANY($2::TEXT[]))
+      ORDER BY occurred_at DESC, kind, reference_id
+      LIMIT $3 OFFSET $4;
+      `,
+      [customerId, kinds, limit, offset]
+    );
+
+    // total_count is identical on every row, so it is read off the first and
+    // stripped from the payload rather than repeated 25 times.
+    const total = result.rows.length > 0 ? Number(result.rows[0].total_count) : 0;
+    const activity = result.rows.map(({ total_count, ...entry }) => entry);
+
+    res.json({
+      activity,
+      total,
+      limit,
+      offset,
+      filter: requestedFilter,
+      hasMore: offset + activity.length < total,
+    });
+  } catch (error) {
+    console.error("Could not load customer activity:", error);
+
+    res.status(500).json({
+      error: "Could not load activity for this customer.",
+    });
+  }
+});
+
 
 app.post("/api/auth/login", async (req, res) => {
   try {

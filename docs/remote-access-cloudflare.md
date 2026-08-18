@@ -1,7 +1,16 @@
-# SPCL — remote access for the branch offices
+# SPCL — remote access for people working offsite
 
-Newport, Mandeville, May Pen and Hanover reach the system through a Cloudflare
-tunnel. The home office keeps using the LAN address either way.
+**This is not how the offices connect.** Blenheim, Newport, Mandeville and
+Kingston are all on the same network as the NAS and reach it directly at its
+`192.168.x` address — confirmed by testing from Mandeville in August 2026. If
+the tunnel went down tomorrow, every office would carry on working.
+
+The tunnel is for people who are genuinely elsewhere: Toronto, someone's home,
+a phone on mobile data. That is a short named list, not the staff body, and
+the Access policy should stay that short.
+
+(An earlier version of this document said the branch offices depended on the
+tunnel. They never did.)
 
 Nothing is installed on staff computers. Nothing is exposed on the router. The
 NAS makes an outbound connection to Cloudflare and everything travels back down
@@ -219,11 +228,36 @@ docker logs spcl-api | grep "Session cookie"
 ## Running it
 
 **Adding a staff member:** add their email to the Access policy. Nothing to
-install on their machine.
+install on their machine. They type their own address, receive a six-digit
+code at it, and are through the outer door; the SPCL login still decides who
+they actually are.
 
 **Removing someone:** remove their email from the Access policy, and disable
 their SPCL employee account. Do both — the first stops them reaching the app,
 the second stops the account being useful if they ever get back in.
+
+### Why individual emails rather than one shared account
+
+A single shared mailbox for everyone offsite looks tidier and is the more
+expensive option in practice. Removing one person means changing the shared
+password and redistributing it to everyone else, which nobody does, so the
+account slowly accumulates former staff. Individual addresses make removal one
+deleted line that affects nobody else.
+
+It is also no harder for the person logging in — arguably easier. With their
+own address they type it and read a code. With a shared account they need that
+account's password *and* have to open someone else's inbox.
+
+### Checking the door is actually shut
+
+The failure that matters here is silent: a policy with the action set to
+**Bypass** rather than **Allow**, or an application domain that does not quite
+match the hostname, lets everybody through while working perfectly for you.
+
+Twice a year, and after any change to the policy, open the hostname in a
+private window and enter an email that is not on the list. Cloudflare should
+refuse you *before* the SPCL login page appears. Reaching the SPCL login means
+the app is on the open internet.
 
 **If remote access breaks but the home office is fine:** the tunnel is down, not
 the app.

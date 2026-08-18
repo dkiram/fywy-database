@@ -18,7 +18,12 @@
   {
     "firstName": "Example",
     "lastName": "Technician",
+    "role": "technician"
+  },
+  {
+    "firstName": "Based",
+    "lastName": "Technician",
     "role": "technician",
-    "locationCode": "HO"
+    "locationCode": "MAN"
   }
 ]

@@ -508,24 +508,38 @@ the grants stay intact for when you want it back.
 
 ### In TablePlus
 
-Create a PostgreSQL connection and turn **Over SSH** on:
+Create a PostgreSQL connection and turn **Over SSH** on. The dialog has two
+halves and it is very easy to fill them in the wrong way round — the top half
+is the DATABASE, the bottom half is the NAS.
 
-| | |
+Top half — the database:
+
+| Field | Value |
 |---|---|
-| SSH host | `100.98.108.77` |
-| SSH port | `9222` |
-| SSH user | `SPCNAS` |
-| SSH password | the NAS password |
-| Database host | `127.0.0.1` |
-| Database port | `5432` |
+| Host/Socket | `127.0.0.1` |
+| Port | `5432` |
 | User | `spcl_readonly` |
-| Password | the one you just set |
+| Password | the one you set with `ALTER ROLE` |
 | Database | `spcl_db` |
 
-The database host is `127.0.0.1` **as seen from the NAS**, which is why the
-loopback binding is enough. If you prefer a manual tunnel, the equivalent is
-`ssh -p 9222 -L 55432:127.0.0.1:5432 SPCNAS@100.98.108.77` and then
-connecting to `localhost:55432`.
+Bottom half, under **Over SSH** — the NAS:
+
+| Field | Value |
+|---|---|
+| Server | `100.98.108.77` |
+| Port | `9222` |
+| User | `SPCNAS` |
+| Password | the NAS login password |
+
+TablePlus connects to the NAS over SSH first, and *then* connects to
+`127.0.0.1:5432` from inside the NAS. So the database host is loopback **as
+the NAS sees it** — which is the whole reason binding Postgres to `127.0.0.1`
+is enough to keep it off the office network. Putting `100.98.108.77` in the
+top half asks your laptop to reach Postgres directly, which nothing can do.
+
+If you prefer a manual tunnel, the equivalent is
+`ssh -p 9222 -L 55432:127.0.0.1:5432 SPCNAS@100.98.108.77`, then connecting
+to `localhost:55432` with SSH turned off in TablePlus.
 
 ### Why read-only
 

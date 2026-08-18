@@ -21,8 +21,12 @@
  *       "locationCode": "HO", "username": "kdunn", "password": "..." }
  *
  *   technician  - someone who gets assigned work but never logs in
- *     { "firstName": "Suwayne", "lastName": "Frith", "role": "technician",
- *       "locationCode": "HO" }
+ *     { "firstName": "Suwayne", "lastName": "Frith", "role": "technician" }
+ *
+ * A technician may have a locationCode if they are based at one office, but
+ * does not need one - technicians travel, and a ticket in Hanover can go to
+ * whoever is free. System users always have a location, because it scopes
+ * what they see and prints on their receipts.
  *
  * Re-running is safe. Anyone already present is reported as skipped rather
  * than duplicated, so a partial run can simply be repeated.
@@ -36,7 +40,7 @@ type Person = {
   firstName: string;
   lastName: string;
   role: Role;
-  locationCode: string;
+  locationCode?: string;
   username?: string;
   password?: string;
 };
@@ -90,7 +94,13 @@ function validate(people: unknown): Person[] {
 
     if (!firstName) problems.push(`${where}: firstName is required`);
     if (!lastName) problems.push(`${where}: lastName is required`);
-    if (!locationCode) problems.push(`${where}: locationCode is required`);
+
+    // Technicians travel between offices, so being based at one is optional.
+    // For anyone who logs in it is not: location scopes what they can see and
+    // is what prints on a receipt.
+    if (!locationCode && role !== "technician") {
+      problems.push(`${where}: locationCode is required for ${role || "this role"}`);
+    }
 
     if (!ROLES.includes(role)) {
       problems.push(
@@ -158,24 +168,29 @@ async function createEmployees() {
 
     for (const person of people) {
       const label = `${person.firstName} ${person.lastName} (${person.role})`;
+      const where = person.locationCode ? ` at ${person.locationCode}` : " (no office)";
 
-      const location = await client.query(
-        `SELECT location_id FROM public.locations WHERE UPPER(code) = UPPER($1) LIMIT 1;`,
-        [person.locationCode]
-      );
+      let locationId: number | null = null;
 
-      if (location.rows.length === 0) {
-        const available = await client.query(
-          `SELECT code, name FROM public.locations WHERE is_active = TRUE ORDER BY code;`
+      if (person.locationCode) {
+        const location = await client.query(
+          `SELECT location_id FROM public.locations WHERE UPPER(code) = UPPER($1) LIMIT 1;`,
+          [person.locationCode]
         );
 
-        throw new Error(
-          `${label}: no location with code "${person.locationCode}". ` +
-            `Available: ${available.rows.map((r) => `${r.code} (${r.name})`).join(", ")}`
-        );
+        if (location.rows.length === 0) {
+          const available = await client.query(
+            `SELECT code, name FROM public.locations WHERE is_active = TRUE ORDER BY code;`
+          );
+
+          throw new Error(
+            `${label}: no location with code "${person.locationCode}". ` +
+              `Available: ${available.rows.map((r) => `${r.code} (${r.name})`).join(", ")}`
+          );
+        }
+
+        locationId = location.rows[0].location_id;
       }
-
-      const locationId = location.rows[0].location_id;
 
       // Technicians have no username to match on, so identity falls back to
       // the name. Two genuinely different technicians with the same name
@@ -201,7 +216,7 @@ async function createEmployees() {
       }
 
       if (DRY_RUN) {
-        created.push(`${label} at ${person.locationCode}`);
+        created.push(`${label}${where}`);
         continue;
       }
 
@@ -226,7 +241,7 @@ async function createEmployees() {
         ]
       );
 
-      created.push(`${label} at ${person.locationCode}`);
+      created.push(`${label}${where}`);
     }
 
     if (DRY_RUN) {

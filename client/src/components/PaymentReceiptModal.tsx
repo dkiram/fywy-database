@@ -1,7 +1,75 @@
-/** Presents a recorded payment as an on-screen and print-friendly receipt. */
-import { useState } from "react";
+/**
+ * Presents a recorded payment as an on-screen receipt and prints it either as
+ * an 80mm thermal slip for the customer or on A4. The print layouts live in
+ * index.css under `html.printing-receipt.printing-thermal` and
+ * `html.printing-receipt.printing-a4`; this file owns the classes and the
+ * @page rules that switch them on.
+ */
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
+
+type PrintFormat = "thermal" | "a4";
+
+const PRINT_FORMAT_STORAGE_KEY = "spcl.receiptPrintFormat";
+
+const A4_PAGE_RULE = "@page { size: A4 portrait; margin: 16mm; }";
+
+/* Width of the roll. Change to 58 if an office ever runs narrow stock; the
+   72mm printable column in .receipt-slip-layout has to come down with it. */
+const SLIP_WIDTH_MM = 80;
+
+/* CSS px per mm at the 96dpi reference resolution the CSS `mm` unit is
+   defined against. */
+const PX_PER_MM = 96 / 25.4;
+
+/* A couple of millimetres of slack so a sub-pixel rounding error can't push
+   the last line onto a second page — which on a continuous roll means a
+   second slip's worth of wasted paper and a stray cut. */
+const SLIP_HEIGHT_SLACK_MM = 2;
+
+/**
+ * Builds the @page rule for the slip.
+ *
+ * The page box needs an explicit height. `size: 80mm auto` looks like the
+ * obvious way to say "80mm wide, as long as it needs to be", but it is not
+ * valid CSS — `size` takes one or two lengths, or the bare keyword `auto`,
+ * never a length paired with `auto`. Browsers drop the invalid declaration
+ * and fall back to the printer's default sheet, so the slip lands on A4.
+ *
+ * So we measure instead: switch the slip layout on, read the height the
+ * receipt actually occupies at 72mm, and write it into the rule. The class is
+ * added and removed inside one synchronous block, so no frame is ever painted
+ * with it half-applied.
+ */
+function buildSlipPageRule(receipt: HTMLElement): string {
+  receipt.classList.add("receipt-slip-layout");
+  const heightPx = receipt.getBoundingClientRect().height;
+  receipt.classList.remove("receipt-slip-layout");
+
+  const heightMm = Math.ceil(heightPx / PX_PER_MM) + SLIP_HEIGHT_SLACK_MM;
+  return `@page { size: ${SLIP_WIDTH_MM}mm ${heightMm}mm; margin: 0; }`;
+}
+
+/* Branches hand the slip to the customer at the counter; head office and
+   admin don't serve customers directly and file a full sheet instead. This is
+   only the starting position — the toggle below overrides it and the choice
+   sticks per machine. */
+function defaultFormatForRole(role: string | undefined): PrintFormat {
+  return role === "branch" ? "thermal" : "a4";
+}
+
+function readStoredFormat(): PrintFormat | null {
+  try {
+    const stored = window.localStorage.getItem(PRINT_FORMAT_STORAGE_KEY);
+    return stored === "thermal" || stored === "a4" ? stored : null;
+  } catch {
+    // Storage can be unavailable (locked-down profile, private mode). The
+    // role default is a fine answer; printing must not depend on this.
+    return null;
+  }
+}
 
 export type PaymentReceipt = {
   payment_id: number;
@@ -36,6 +104,69 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const canVoid = employee?.role === "admin" || employee?.role === "head_office";
   const canDelete = employee?.role === "admin";
+
+  const [printFormat, setPrintFormat] = useState<PrintFormat>(
+    () => readStoredFormat() ?? defaultFormatForRole(employee?.role),
+  );
+
+  const choosePrintFormat = (format: PrintFormat) => {
+    setPrintFormat(format);
+    try {
+      window.localStorage.setItem(PRINT_FORMAT_STORAGE_KEY, format);
+    } catch {
+      // Non-fatal: the toggle still works for this session.
+    }
+  };
+
+  // Driven off beforeprint rather than the button's click handler so that
+  // Ctrl+P with the receipt open produces the same output as the button, and
+  // so the @page size is never left applied to the rest of the app.
+  useEffect(() => {
+    let pageStyle: HTMLStyleElement | null = null;
+
+    const enterPrintMode = () => {
+      const receipt = document.querySelector<HTMLElement>(".payment-receipt-print");
+      const thermal = printFormat === "thermal" && receipt !== null;
+
+      // Measure before anything else: buildSlipPageRule needs the receipt in
+      // its on-screen box, not the unwrapped print one.
+      const rule = thermal ? buildSlipPageRule(receipt) : A4_PAGE_RULE;
+
+      document.documentElement.classList.add(
+        "printing-receipt",
+        thermal ? "printing-thermal" : "printing-a4",
+      );
+      if (thermal) receipt.classList.add("receipt-slip-layout");
+
+      if (pageStyle) return;
+      pageStyle = document.createElement("style");
+      pageStyle.textContent = rule;
+      document.head.appendChild(pageStyle);
+    };
+
+    const exitPrintMode = () => {
+      document.documentElement.classList.remove(
+        "printing-receipt",
+        "printing-thermal",
+        "printing-a4",
+      );
+      document
+        .querySelector(".payment-receipt-print")
+        ?.classList.remove("receipt-slip-layout");
+      pageStyle?.remove();
+      pageStyle = null;
+    };
+
+    window.addEventListener("beforeprint", enterPrintMode);
+    window.addEventListener("afterprint", exitPrintMode);
+    return () => {
+      window.removeEventListener("beforeprint", enterPrintMode);
+      window.removeEventListener("afterprint", exitPrintMode);
+      exitPrintMode();
+    };
+    // Re-bound when the format changes so beforeprint always reads the
+    // current choice rather than the one captured at mount.
+  }, [printFormat]);
 
   // Voiding preserves the receipt and posts a separate balance reversal.
   const voidPayment = async () => {
@@ -81,37 +212,45 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={`Receipt ${displayPayment.receipt_number}`}>
-      <div className="my-2 flex max-h-[calc(100dvh-1rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:my-0 sm:max-h-[calc(100dvh-2rem)]">
+  // Portalled to <body> so the printed slip can be isolated with a single
+  // `body > *:not(.receipt-modal-root)` rule, and so the fixed overlay is not
+  // trapped by a transformed ancestor.
+  return createPortal(
+    <div className="receipt-modal-root fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={`Receipt ${displayPayment.receipt_number}`}>
+      <div className="receipt-modal-card my-2 flex max-h-[calc(100dvh-1rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:my-0 sm:max-h-[calc(100dvh-2rem)]">
         {/* Keep long receipts and destructive confirmations inside a dedicated
             scroll region while the main action bar remains reachable. */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {/* Print CSS hides the surrounding app and leaves only this receipt section visible. */}
+        <div className="receipt-modal-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        {/* Print CSS drops the rest of the app and reflows this section into a
+            single 72mm column. The hook classes below are print-only; they
+            carry no screen styling. */}
         <div className="payment-receipt-print bg-white p-5 text-on-surface sm:p-9">
-          <div className="flex items-start justify-between gap-6 border-b-2 border-primary pb-5">
+          <div className="receipt-header flex items-start justify-between gap-6 border-b-2 border-primary pb-5">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">SPCL</p>
-              <h2 className="mt-1 text-2xl font-semibold">Payment Receipt</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">Official customer payment record</p>
+              <p className="receipt-brand text-xs font-semibold uppercase tracking-[0.2em] text-primary">SPCL</p>
+              <h2 className="receipt-title mt-1 text-2xl font-semibold">Payment Receipt</h2>
+              <p className="receipt-subtitle mt-1 text-sm text-on-surface-variant">Official customer payment record</p>
             </div>
-            <div className="text-right">
-              <p className="font-mono text-sm font-medium text-primary">{displayPayment.receipt_number}</p>
+            <div className="receipt-meta text-right">
+              <p className="receipt-number font-mono text-sm font-medium text-primary">{displayPayment.receipt_number}</p>
               <p className="mt-1 text-xs text-on-surface-variant">{formatDate(displayPayment.payment_date)}</p>
             </div>
           </div>
 
           {displayPayment.is_voided && (
             // The original receipt remains printable but can never be mistaken
-            // for a valid collection after its reversal.
-            <div className="mt-5 rounded-xl border-2 border-error bg-error/10 p-4 text-center text-error">
-              <p className="text-2xl font-semibold uppercase tracking-[0.25em]">Voided</p>
+            // for a valid collection after its reversal. On a monochrome head
+            // the box, the struck figure and the wording carry that on their
+            // own — none of it depends on the red.
+            <div className="receipt-void mt-5 rounded-xl border-2 border-error bg-error/10 p-4 text-center text-error">
+              <p className="receipt-void-word text-2xl font-semibold uppercase tracking-[0.25em]">Voided</p>
+              <p className="receipt-void-note print-only hidden">This payment was reversed. Not a valid receipt.</p>
               <p className="mt-2 text-sm font-semibold">{displayPayment.void_reason}</p>
-              <p className="mt-1 text-xs">{displayPayment.voided_at ? formatDateTime(displayPayment.voided_at) : ""}{displayPayment.voided_by_name ? ` · ${displayPayment.voided_by_name}` : ""}</p>
+              <p className="receipt-void-meta mt-1 text-xs">{displayPayment.voided_at ? formatDateTime(displayPayment.voided_at) : ""}{displayPayment.voided_by_name ? ` · ${displayPayment.voided_by_name}` : ""}</p>
             </div>
           )}
 
-          <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div className="receipt-fields mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <ReceiptField label="Received from" value={displayPayment.customer_name || "Unnamed customer"} />
             <ReceiptField label="Customer ID" value={String(displayPayment.customer_id)} />
             <ReceiptField label="Payment type" value={displayPayment.payment_type} />
@@ -120,20 +259,22 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
             <ReceiptField label="Location" value={displayPayment.location || "—"} />
           </div>
 
-          <div className="mt-7 rounded-xl bg-primary/10 px-5 py-5 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Amount received</p>
-            <p className="mt-2 text-4xl font-medium text-primary">{formatCurrency(displayPayment.amount_paid)}</p>
+          <div className={`receipt-amount${displayPayment.is_voided ? " receipt-amount--voided" : ""} mt-7 rounded-xl bg-primary/10 px-5 py-5 text-center`}>
+            <p className="receipt-amount-label text-xs font-semibold uppercase tracking-[0.18em] text-primary">Amount received</p>
+            <p className="receipt-amount-value mt-2 text-4xl font-medium text-primary">{formatCurrency(displayPayment.amount_paid)}</p>
           </div>
 
           {displayPayment.note && (
-            <div className="mt-6 border-t border-surface-container pt-4">
+            <div className="receipt-note mt-6 border-t border-surface-container pt-4">
               <ReceiptField label="Note" value={displayPayment.note} />
             </div>
           )}
 
-          <p className="mt-7 border-t border-surface-container pt-4 text-center text-xs text-on-surface-variant">
-            Recorded {formatDateTime(displayPayment.recorded_at)} · Payment #{displayPayment.payment_id}
-          </p>
+          <div className="receipt-footer mt-7 border-t border-surface-container pt-4 text-center text-xs text-on-surface-variant">
+            <p>Recorded {formatDateTime(displayPayment.recorded_at)} · Payment #{displayPayment.payment_id}</p>
+            <p className="print-only hidden">Please keep this slip as proof of payment.</p>
+            <p className="receipt-thanks print-only hidden">Thank you</p>
+          </div>
         </div>
 
         {showVoidForm && (
@@ -165,22 +306,44 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
           {canDelete && displayPayment.is_voided && !showDeleteForm && (
             <button type="button" onClick={() => { setShowDeleteForm(true); setError(""); }} className="mr-auto rounded-lg bg-error px-5 py-2.5 text-sm font-medium text-white">Delete Permanently</button>
           )}
+          {/* Counters print the 80mm slip, head office prints a full sheet.
+              Defaults by role, then remembers whatever this machine last used. */}
+          <div className="flex items-center gap-0.5 rounded-lg bg-surface-container p-0.5" role="group" aria-label="Print format">
+            <PrintFormatOption label="Slip" description="Print as an 80mm thermal slip" active={printFormat === "thermal"} onSelect={() => choosePrintFormat("thermal")} />
+            <PrintFormatOption label="A4" description="Print on A4 paper" active={printFormat === "a4"} onSelect={() => choosePrintFormat("a4")} />
+          </div>
           <button type="button" onClick={onClose} className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant sm:px-5">Close</button>
           <button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary sm:px-5">
             <span className="material-symbols-outlined text-lg">print</span>
-            Print Receipt
+            {printFormat === "thermal" ? "Print Slip" : "Print A4"}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
+  );
+}
+
+function PrintFormatOption({ label, description, active, onSelect }: { label: string; description: string; active: boolean; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={active}
+      title={description}
+      className={`rounded-md px-3 py-2 text-sm font-medium ${active ? "bg-surface-container-lowest text-on-surface shadow-sm" : "text-on-surface-variant"}`}
+    >
+      {label}
+      <span className="sr-only"> — {description}</span>
+    </button>
   );
 }
 
 function ReceiptField({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p>
-      <p className="mt-1.5 break-words text-sm font-semibold text-on-surface">{value}</p>
+    <div className="receipt-field">
+      <p className="receipt-field-label text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p>
+      <p className="receipt-field-value mt-1.5 break-words text-sm font-semibold text-on-surface">{value}</p>
     </div>
   );
 }
