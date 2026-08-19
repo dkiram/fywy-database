@@ -223,12 +223,22 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
       case "delinquent-customers":
         // Delinquency is based on the oldest unpaid anniversary charge after
         // its ten-day grace period; active holds are shown but remain in debt.
+        //
+        // Active accounts only. This list answers "who do we disconnect next",
+        // so somebody already disconnected does not belong on it - they are on
+        // the Disconnected Customers report instead, with what they owe. Their
+        // debt is not forgotten, it is just not a disconnection decision.
+        // hidden_from_app excludes the blank legacy shells migration 039 hid
+        // from the rest of the app; chasing a customer with no name is not a
+        // thing anyone can act on.
         values = [search, searchPattern];
         countSql = `
           SELECT COUNT(*)::INTEGER AS total
           FROM public.customer_billing_status billing
           JOIN public.customers c USING (customer_id)
           WHERE billing.is_delinquent
+            AND c.status = 'active'
+            AND c.hidden_from_app = FALSE
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2);`;
         rowsSql = `
@@ -243,6 +253,8 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           LEFT JOIN public.payments p ON p.customer_id = c.customer_id
             AND p.voided_at IS NULL
           WHERE billing.is_delinquent
+            AND c.status = 'active'
+            AND c.hidden_from_app = FALSE
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2)
           GROUP BY c.customer_id, billing.customer_id, billing.outstanding_balance,
@@ -262,6 +274,8 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           FROM public.customer_billing_status billing
           JOIN public.customers c USING (customer_id)
           WHERE billing.is_delinquent
+            AND c.status = 'active'
+            AND c.hidden_from_app = FALSE
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2);`;
         break;

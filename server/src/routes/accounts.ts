@@ -443,8 +443,12 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
           COUNT(*) FILTER (
             WHERE status = 'pending_reconnection'
           )::INTEGER AS pending_reconnection,
-          (SELECT COUNT(*)::INTEGER FROM public.customer_billing_status
-            WHERE is_delinquent) AS delinquent,
+          (SELECT COUNT(*)::INTEGER
+            FROM public.customer_billing_status billing
+            JOIN public.customers c2 USING (customer_id)
+            WHERE billing.is_delinquent
+              AND c2.status = 'active'
+              AND c2.hidden_from_app = FALSE) AS delinquent,
           (SELECT COUNT(*)::INTEGER FROM public.customer_billing_status
             WHERE eligible_for_disconnection) AS eligible_for_disconnection
         FROM public.customers

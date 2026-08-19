@@ -10,7 +10,10 @@ type ApplicationStatus =
   | "cancelled"
   | "declined"
   | "legacy_unresolved"
-  | "match_review";
+  | "match_review"
+  // Confirmed to be somebody already in the customer list. Not an activation:
+  // no account was created and no customer record was touched.
+  | "confirmed_existing";
 
 type ApplicationRecord = {
   application_id: number;
@@ -37,8 +40,11 @@ type ApplicationRecord = {
   customer_id: number | null;
   suggested_customer_id: number | null;
   suggested_customer_name: string | null;
+  linked_customer_name: string | null;
   match_method: string | null;
   closure_reason: string | null;
+  match_confirmed_at: string | null;
+  match_confirmed_by_name: string | null;
   is_overdue: boolean;
 };
 
@@ -54,6 +60,7 @@ type Package = {
 type ApplicationSummary = {
   active: number;
   closed: number;
+  confirmed: number;
   overdue: number;
 };
 
@@ -70,6 +77,7 @@ type ApplicationView =
   | "serviced"
   | "closed"
   | "unresolved"
+  | "confirmed"
   | "all";
 
 type NewApplicationForm = {
@@ -91,6 +99,7 @@ type NewApplicationForm = {
 const emptySummary: ApplicationSummary = {
   active: 0,
   closed: 0,
+  confirmed: 0,
   overdue: 0,
 };
 
@@ -162,7 +171,9 @@ function ApplicationsPage() {
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [decision, setDecision] = useState<"service" | "close" | null>(null);
+  const [decision, setDecision] = useState<
+    "service" | "close" | "confirm-match" | "reopen-match" | null
+  >(null);
   const [serviceMode, setServiceMode] = useState<"link" | "create">("create");
   const [decisionNote, setDecisionNote] = useState("");
   const [closeStatus, setCloseStatus] = useState<"cancelled" | "declined">(
@@ -240,6 +251,23 @@ function ApplicationsPage() {
     setActivationPort(application.port_number ?? "");
     setActivationDate(application.activation_date?.slice(0, 10) ?? jamaicaToday());
     setDecision("service");
+  };
+
+  // Match Review's third outcome. Separate from Activate on purpose: this
+  // creates nothing and bills nobody, and putting it behind the same tick was
+  // exactly why reviewers left confirmed matches sitting in the queue.
+  const openConfirmMatch = (application: ApplicationRecord) => {
+    setSelected(application);
+    setDecisionNote("");
+    setDecisionError("");
+    setDecision("confirm-match");
+  };
+
+  const openReopenMatch = (application: ApplicationRecord) => {
+    setSelected(application);
+    setDecisionNote("");
+    setDecisionError("");
+    setDecision("reopen-match");
   };
 
   const openCloseDecision = (application: ApplicationRecord) => {
@@ -333,6 +361,77 @@ function ApplicationsPage() {
     }
   };
 
+  const submitConfirmMatch = async () => {
+    if (!activeApplication) return;
+    try {
+      setSaving(true);
+      setDecisionError("");
+      const response = await apiFetch(
+        `/api/applications/${activeApplication.application_id}/confirm-match`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId: activeApplication.suggested_customer_id,
+            note: decisionNote,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not confirm the match.");
+      }
+      setDecision(null);
+      setSelected(null);
+      setNotice(
+        `Confirmed as customer #${data.customerId}. The application has left the review queue; nothing about the customer was changed.`
+      );
+      setNoticeCustomerId(data.customerId);
+      await loadApplications();
+    } catch (saveError) {
+      setDecisionError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not confirm the match."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitReopenMatch = async () => {
+    if (!activeApplication) return;
+    try {
+      setSaving(true);
+      setDecisionError("");
+      const response = await apiFetch(
+        `/api/applications/${activeApplication.application_id}/reopen-match`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: decisionNote }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not reopen the match.");
+      }
+      setDecision(null);
+      setSelected(null);
+      setNotice(`Application #${data.applicationId} is back in Match Review.`);
+      setNoticeCustomerId(null);
+      await loadApplications();
+    } catch (saveError) {
+      setDecisionError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not reopen the match."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const submitCloseDecision = async () => {
     if (!activeApplication) return;
     try {
@@ -419,6 +518,7 @@ function ApplicationsPage() {
                 ["review", "Match Review"],
                 ["serviced", "Serviced"],
                 ["closed", "Closed"],
+                ["confirmed", "Confirmed Existing"],
                 ["unresolved", "Unresolved"],
                 ["all", "All"],
               ] as Array<[ApplicationView, string]>
@@ -492,9 +592,18 @@ function ApplicationsPage() {
                       <div className="flex justify-end gap-2">
                         {canDecide && canTakeDecision(application) && (
                           <>
-                            <IconButton icon="check" label="Activate customer" positive onClick={(event) => { event.stopPropagation(); openServiceDecision(application); }} />
+                            {/* Only offered where there is a suggested customer
+                                to confirm against - a plain new application has
+                                nobody to be the same person as. */}
+                            {application.suggested_customer_id && (
+                              <IconButton icon="how_to_reg" label={`Same person as customer #${application.suggested_customer_id}`} tone="neutral" onClick={(event) => { event.stopPropagation(); openConfirmMatch(application); }} />
+                            )}
+                            <IconButton icon="check" label="Activate customer" tone="positive" onClick={(event) => { event.stopPropagation(); openServiceDecision(application); }} />
                             <IconButton icon="close" label="Close application" onClick={(event) => { event.stopPropagation(); openCloseDecision(application); }} />
                           </>
+                        )}
+                        {canDecide && application.status === "confirmed_existing" && (
+                          <IconButton icon="undo" label="Reopen this match" tone="neutral" onClick={(event) => { event.stopPropagation(); openReopenMatch(application); }} />
                         )}
                         <button type="button" onClick={(event) => { event.stopPropagation(); setSelected(application); }} className="rounded-lg px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10">View</button>
                       </div>
@@ -610,10 +719,17 @@ function ApplicationsPage() {
           onClose={() => setSelected(null)}
           footer={
             canDecide && canTakeDecision(activeApplication) ? (
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <button type="button" onClick={() => openServiceDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-tertiary px-4 py-3 text-sm font-medium text-white transition hover:bg-tertiary/90"><span className="material-symbols-outlined">check</span>Activate Customer</button>
-                <button type="button" onClick={() => openCloseDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error transition hover:bg-error/15"><span className="material-symbols-outlined">close</span>Not Serviced</button>
+              <div className="flex flex-col gap-3">
+                {activeApplication.suggested_customer_id && (
+                  <button type="button" onClick={() => openConfirmMatch(activeApplication)} className="flex items-center justify-center gap-2 rounded-lg bg-secondary/15 px-4 py-3 text-sm font-medium text-secondary transition hover:bg-secondary/25"><span className="material-symbols-outlined">how_to_reg</span>Same Person as Customer #{activeApplication.suggested_customer_id}</button>
+                )}
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button type="button" onClick={() => openServiceDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-tertiary px-4 py-3 text-sm font-medium text-white transition hover:bg-tertiary/90"><span className="material-symbols-outlined">check</span>Activate Customer</button>
+                  <button type="button" onClick={() => openCloseDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error transition hover:bg-error/15"><span className="material-symbols-outlined">close</span>Not Serviced</button>
+                </div>
               </div>
+            ) : canDecide && activeApplication.status === "confirmed_existing" ? (
+              <button type="button" onClick={() => openReopenMatch(activeApplication)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-surface-container px-4 py-3 text-sm font-medium transition hover:bg-surface-container-high"><span className="material-symbols-outlined">undo</span>Reopen This Match</button>
             ) : undefined
           }
         >
@@ -655,6 +771,19 @@ function ApplicationsPage() {
                 <p className="mt-2 font-semibold">{activeApplication.suggested_customer_name || "Existing customer"} · #{activeApplication.suggested_customer_id}</p>
                 <p className="mt-1 text-xs text-on-surface-variant">Match basis: {humanize(activeApplication.match_method || "review required")}</p>
                 <button type="button" onClick={() => navigate(`/customers/${activeApplication.suggested_customer_id}`)} className="mt-3 text-sm font-medium text-primary underline">Open customer profile</button>
+              </div>
+            )}
+
+            {activeApplication.status === "confirmed_existing" && (
+              <div className="rounded-xl border border-secondary/20 bg-secondary-container/50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Confirmed as an existing customer</p>
+                <p className="mt-2 font-semibold">{activeApplication.linked_customer_name || "Customer"} · #{activeApplication.customer_id}</p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  Confirmed by {activeApplication.match_confirmed_by_name || "a reviewer"}
+                  {activeApplication.match_confirmed_at ? ` on ${formatDate(activeApplication.match_confirmed_at)}` : ""}.
+                  No customer record was changed.
+                </p>
+                <button type="button" onClick={() => navigate(`/customers/${activeApplication.customer_id}`)} className="mt-3 text-sm font-medium text-primary underline">Open customer profile</button>
               </div>
             )}
 
@@ -716,6 +845,46 @@ function ApplicationsPage() {
             <Field label="Optional activation note"><textarea rows={3} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="Installation or activation note..." /></Field>
             {decisionError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{decisionError}</p>}
             <ModalActions saving={saving} primaryLabel="Activate Customer" onPrimary={submitServiceDecision} onCancel={() => setDecision(null)} />
+          </div>
+        </Modal>
+      )}
+
+      {activeApplication && decision === "confirm-match" && (
+        <Modal title="Same person?" onClose={() => !saving && setDecision(null)}>
+          <div className="space-y-5">
+            <p className="text-sm text-on-surface-variant">
+              Confirm that <strong>{activeApplication.name}</strong> on this application is the customer already on file.
+            </p>
+            <div className="rounded-xl border border-secondary/20 bg-secondary-container/50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Existing customer</p>
+              <p className="mt-2 font-semibold">{activeApplication.suggested_customer_name || "Existing customer"} · #{activeApplication.suggested_customer_id}</p>
+              <p className="mt-1 text-xs text-on-surface-variant">Match basis: {humanize(activeApplication.match_method || "review required")}</p>
+            </div>
+            {/* Says plainly what this does and does not do. The whole reason
+                this action exists is that Activate looked like it might bill
+                somebody twice. */}
+            <ul className="space-y-1.5 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+              <li className="flex gap-2"><span className="material-symbols-outlined text-base text-tertiary">check</span>The application leaves the review queue.</li>
+              <li className="flex gap-2"><span className="material-symbols-outlined text-base text-tertiary">check</span>It records which customer it turned out to be, and who decided that.</li>
+              <li className="flex gap-2"><span className="material-symbols-outlined text-base text-on-surface-variant">block</span>No new customer is created, and nobody is charged anything.</li>
+              <li className="flex gap-2"><span className="material-symbols-outlined text-base text-on-surface-variant">block</span>Customer #{activeApplication.suggested_customer_id} is not modified — same address, package, rate and balance as now.</li>
+            </ul>
+            <Field label="Optional note"><textarea rows={3} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="How you established it is the same person..." /></Field>
+            {decisionError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{decisionError}</p>}
+            <ModalActions saving={saving} primaryLabel="Confirm Same Person" onPrimary={submitConfirmMatch} onCancel={() => setDecision(null)} />
+          </div>
+        </Modal>
+      )}
+
+      {activeApplication && decision === "reopen-match" && (
+        <Modal title="Reopen this match?" onClose={() => !saving && setDecision(null)}>
+          <div className="space-y-5">
+            <p className="text-sm text-on-surface-variant">
+              This puts application #{activeApplication.application_id} back into Match Review and clears the customer it was confirmed against. Nothing was changed on the customer when it was confirmed, so there is nothing to undo there.
+            </p>
+            <Field label="Reason" required><textarea required rows={3} minLength={3} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="Why this confirmation was wrong..." /></Field>
+            {decisionError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{decisionError}</p>}
+            <ModalActions saving={saving || decisionNote.trim().length < 3} primaryLabel="Reopen Match" onPrimary={submitReopenMatch} onCancel={() => setDecision(null)} />
           </div>
         </Modal>
       )}
@@ -816,6 +985,7 @@ function StatusBadge({ status }: { status: ApplicationStatus }) {
     declined: "bg-error/10 text-error",
     legacy_unresolved: "bg-warning-container text-warning",
     match_review: "bg-info/10 text-info",
+    confirmed_existing: "bg-secondary/15 text-secondary",
   };
   return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}>{humanize(status)}</span>;
 }
@@ -824,9 +994,14 @@ function TableHeading({ children }: { children: React.ReactNode }) {
   return <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{children}</th>;
 }
 
-function IconButton({ icon, label, onClick, positive = false }: { icon: string; label: string; onClick: React.MouseEventHandler<HTMLButtonElement>; positive?: boolean }) {
+function IconButton({ icon, label, onClick, tone = "destructive" }: { icon: string; label: string; onClick: React.MouseEventHandler<HTMLButtonElement>; tone?: "positive" | "neutral" | "destructive" }) {
+  const styles = {
+    positive: "bg-tertiary/10 text-tertiary hover:bg-tertiary/20",
+    neutral: "bg-secondary/15 text-secondary hover:bg-secondary/25",
+    destructive: "bg-error/10 text-error hover:bg-error/20",
+  } as const;
   return (
-    <button type="button" title={label} aria-label={label} onClick={onClick} className={`flex h-9 w-9 items-center justify-center rounded-lg transition ${positive ? "bg-tertiary/10 text-tertiary hover:bg-tertiary/20" : "bg-error/10 text-error hover:bg-error/20"}`}><span className="material-symbols-outlined text-lg">{icon}</span></button>
+    <button type="button" title={label} aria-label={label} onClick={onClick} className={`flex h-9 w-9 items-center justify-center rounded-lg transition ${styles[tone]}`}><span className="material-symbols-outlined text-lg">{icon}</span></button>
   );
 }
 

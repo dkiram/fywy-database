@@ -126,6 +126,10 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
       serviced: "a.status = 'serviced'",
       closed: "a.status IN ('cancelled', 'declined')",
       unresolved: "a.status = 'legacy_unresolved'",
+      // Applications confirmed to be an existing customer. Deliberately absent
+      // from every other view, including 'active' and 'review', so confirming
+      // one clears it off the queue. Still reachable here and under 'all'.
+      confirmed: "a.status = 'confirmed_existing'",
       all: "TRUE",
     };
     const viewClause = viewClauses[view] ?? viewClauses.active;
@@ -178,8 +182,12 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         a.suggested_customer_id,
         a.match_method,
         a.closure_reason,
+        a.match_confirmed_at,
         p.name AS package_name,
         suggested.name AS suggested_customer_name,
+        linked.name AS linked_customer_name,
+        CONCAT_WS(' ', confirmer.first_name, confirmer.last_name)
+          AS match_confirmed_by_name,
         (
           a.status = ANY($3::TEXT[])
           AND a.application_date <
@@ -190,6 +198,10 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         ON a.package_id = p.package_id
       LEFT JOIN public.customers suggested
         ON a.suggested_customer_id = suggested.customer_id
+      LEFT JOIN public.customers linked
+        ON a.customer_id = linked.customer_id
+      LEFT JOIN public.employees confirmer
+        ON a.match_confirmed_by_employee_id = confirmer.employee_id
       WHERE ${viewClause}
         AND (
           $1 = ''
@@ -227,6 +239,9 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         COUNT(*) FILTER (
           WHERE status IN ('cancelled', 'declined')
         )::INTEGER AS closed,
+        COUNT(*) FILTER (
+          WHERE status = 'confirmed_existing'
+        )::INTEGER AS confirmed,
         COUNT(*) FILTER (
           WHERE (
             status = 'pending'
@@ -683,6 +698,223 @@ applicationsRouter.patch(
       await client.query("ROLLBACK");
       console.error("Could not activate application:", error);
       res.status(500).json({ error: "Could not activate application." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// Confirm that an application belongs to a customer who already exists.
+//
+// This is not an activation. No customer is created, and the customer named
+// here is not modified in any way - not their address, package, rate, status,
+// activation date or billing. The only thing that changes is the application:
+// it records which customer it turned out to be, and leaves the work queue.
+applicationsRouter.patch(
+  "/applications/:applicationId/confirm-match",
+  requireAuth,
+  requireApplicationDecisionRole,
+  async (req, res) => {
+    const applicationId = parseApplicationId(req, res);
+    if (applicationId === null) return;
+
+    const note = cleanText(req.body.note);
+    // The reviewer may confirm against a customer they found themselves rather
+    // than the suggested one; falling back to the suggestion covers the
+    // ordinary case of agreeing with it.
+    const requestedCustomerId = String(req.body.customerId ?? "").trim();
+    if (requestedCustomerId && !/^\d+$/.test(requestedCustomerId)) {
+      return res.status(400).json({ error: "Invalid customer ID." });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const applicationResult = await client.query(
+        `
+        SELECT status, legacy_source, application_date, suggested_customer_id
+        FROM public.applications
+        WHERE application_id = $1
+        FOR UPDATE;
+        `,
+        [applicationId]
+      );
+      const application = applicationResult.rows[0];
+      if (!application) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Application not found." });
+      }
+      if (!isImportedDecisionAllowed(application)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "This imported application is kept as historical evidence.",
+        });
+      }
+      if (!activeStatuses.includes(application.status)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "This application has already been decided.",
+        });
+      }
+
+      const customerId = requestedCustomerId
+        ? Number(requestedCustomerId)
+        : application.suggested_customer_id;
+
+      if (customerId == null) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "Choose the existing customer this applicant matches.",
+        });
+      }
+
+      const customerResult = await client.query(
+        `SELECT customer_id, name FROM public.customers WHERE customer_id = $1;`,
+        [customerId]
+      );
+      if (customerResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Selected customer not found." });
+      }
+
+      await client.query(
+        `
+        UPDATE public.applications
+        SET
+          status = 'confirmed_existing',
+          customer_id = $1,
+          suggested_customer_id = COALESCE(suggested_customer_id, $1),
+          match_confirmed_by_employee_id = $2,
+          match_confirmed_at = CURRENT_TIMESTAMP,
+          closure_reason = NULLIF($3, ''),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE application_id = $4;
+        `,
+        [customerId, employee.employeeId, note, applicationId]
+      );
+
+      await client.query(
+        `
+        INSERT INTO public.audit_logs (
+          employee_id, actor_name, action, entity_type, entity_id,
+          field_name, old_value, new_value, reason, occurred_at
+        )
+        VALUES ($1, $2, 'Confirmed application matches existing customer',
+          'application', $3, 'status', $4, 'confirmed_existing',
+          NULLIF($5, ''), CURRENT_TIMESTAMP);
+        `,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(applicationId),
+          application.status,
+          note || `Confirmed as existing customer #${customerId}`,
+        ]
+      );
+
+      await client.query("COMMIT");
+      res.json({
+        applicationId,
+        customerId,
+        customerName: customerResult.rows[0].name,
+        status: "confirmed_existing",
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not confirm application match:", error);
+      res.status(500).json({ error: "Could not confirm the match." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// Undo a confirmation made against the wrong customer. Returns the application
+// to the review queue; nothing else was ever changed, so there is nothing else
+// to put back.
+applicationsRouter.patch(
+  "/applications/:applicationId/reopen-match",
+  requireAuth,
+  requireApplicationDecisionRole,
+  async (req, res) => {
+    const applicationId = parseApplicationId(req, res);
+    if (applicationId === null) return;
+
+    const reason = cleanText(req.body.reason);
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({
+        error: "Give a reason of 3 to 500 characters for reopening this match.",
+      });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const applicationResult = await client.query(
+        `
+        SELECT status, customer_id
+        FROM public.applications
+        WHERE application_id = $1
+        FOR UPDATE;
+        `,
+        [applicationId]
+      );
+      const application = applicationResult.rows[0];
+      if (!application) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Application not found." });
+      }
+      if (application.status !== "confirmed_existing") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "Only a confirmed match can be reopened.",
+        });
+      }
+
+      // customer_id is cleared because the confirmation is what put it there.
+      // suggested_customer_id stays, so the reviewer sees the same suggestion
+      // they saw the first time.
+      await client.query(
+        `
+        UPDATE public.applications
+        SET
+          status = 'match_review',
+          customer_id = NULL,
+          match_confirmed_by_employee_id = NULL,
+          match_confirmed_at = NULL,
+          closure_reason = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE application_id = $1;
+        `,
+        [applicationId]
+      );
+
+      await client.query(
+        `
+        INSERT INTO public.audit_logs (
+          employee_id, actor_name, action, entity_type, entity_id,
+          field_name, old_value, new_value, reason, occurred_at
+        )
+        VALUES ($1, $2, 'Reopened a confirmed application match',
+          'application', $3, 'status', 'confirmed_existing', 'match_review',
+          $4, CURRENT_TIMESTAMP);
+        `,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(applicationId),
+          reason,
+        ]
+      );
+
+      await client.query("COMMIT");
+      res.json({ applicationId, status: "match_review" });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not reopen application match:", error);
+      res.status(500).json({ error: "Could not reopen the match." });
     } finally {
       client.release();
     }

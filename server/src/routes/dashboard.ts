@@ -53,8 +53,17 @@ dashboardRouter.get("/dashboard", requireAuth, requireAdmin, async (_req, res) =
           (SELECT COUNT(*)::INTEGER FROM public.pole_boxes) AS pole_boxes,
           (SELECT COUNT(*)::INTEGER FROM public.pole_box_usage
             WHERE duplicate_assignments > 0 OR over_capacity) AS pole_box_alerts,
-          (SELECT COUNT(*)::INTEGER FROM public.customer_billing_status
-            WHERE is_delinquent) AS delinquent_customers,
+          -- Active accounts only, matching the Delinquent Customers report
+          -- this tile links to. Counting disconnected debtors here made the
+          -- tile disagree with its own drill-down, and with the
+          -- eligible_for_disconnection count beside it, which has always been
+          -- active-only inside the view.
+          (SELECT COUNT(*)::INTEGER
+            FROM public.customer_billing_status billing
+            JOIN public.customers c USING (customer_id)
+            WHERE billing.is_delinquent
+              AND c.status = 'active'
+              AND c.hidden_from_app = FALSE) AS delinquent_customers,
           (SELECT COUNT(*)::INTEGER FROM public.customer_billing_status
             WHERE eligible_for_disconnection) AS eligible_for_disconnection;
       `),
