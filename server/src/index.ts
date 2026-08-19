@@ -437,11 +437,15 @@ app.get("/api/customers", requireAuth, async (req, res) => {
       LEFT JOIN public.packages p
         ON c.package_id = p.package_id
 
-      WHERE
-        $1 = ''
-        OR c.customer_id::TEXT ILIKE $2
-        OR c.name ILIKE $2
-        OR c.telephone ILIKE $2
+      -- The OR chain has to be parenthesised: without the brackets the
+      -- hidden filter would bind to the last OR branch only and do nothing.
+      WHERE c.hidden_from_app = FALSE
+        AND (
+          $1 = ''
+          OR c.customer_id::TEXT ILIKE $2
+          OR c.name ILIKE $2
+          OR c.telephone ILIKE $2
+        )
 
       ${orderBy}
 

@@ -167,6 +167,7 @@ poleBoxesRouter.get("/pole-boxes/:poleBoxId", requireAuth, async (req, res) => {
         SELECT customer_id, name, address, telephone, status, port_number
         FROM public.customers
         WHERE UPPER(TRIM(pole_box_number)) = UPPER(TRIM($1))
+          AND hidden_from_app = FALSE
         ORDER BY NULLIF(REGEXP_REPLACE(COALESCE(port_number, ''), '[^0-9]', '', 'g'), '')::BIGINT NULLS LAST,
           port_number, customer_id;
         `,

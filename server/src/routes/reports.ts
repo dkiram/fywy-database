@@ -159,6 +159,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
         countSql = `
           SELECT COUNT(*)::INTEGER AS total FROM public.customers c
           WHERE c.status IN ('disconnected', 'pending_reconnection')
+            AND c.hidden_from_app = FALSE
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2 OR COALESCE(c.telephone, '') ILIKE $2);`;
         rowsSql = `
           SELECT c.customer_id, c.name AS customer_name, c.telephone, c.address,
@@ -169,6 +170,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           LEFT JOIN public.payments p ON p.customer_id = c.customer_id
             AND p.voided_at IS NULL
           WHERE c.status IN ('disconnected', 'pending_reconnection')
+            AND c.hidden_from_app = FALSE
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2 OR COALESCE(c.telephone, '') ILIKE $2)
           GROUP BY c.customer_id
           ORDER BY c.deactivation_date DESC NULLS LAST, c.customer_id DESC

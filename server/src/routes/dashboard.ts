@@ -44,9 +44,12 @@ dashboardRouter.get("/dashboard", requireAuth, requireAdmin, async (_req, res) =
             WHERE status IN ('pending', 'match_review')) AS pending_applications,
           (SELECT COUNT(*)::INTEGER FROM public.service_tickets
             WHERE status IN ('open', 'assigned', 'in_progress')) AS pending_service_tickets,
-          (SELECT COUNT(*)::INTEGER FROM public.customers WHERE status = 'active') AS active_customers,
-          (SELECT COUNT(*)::INTEGER FROM public.customers WHERE status = 'disconnected') AS disconnected_customers,
-          (SELECT COUNT(*)::INTEGER FROM public.customers WHERE status = 'pending_reconnection') AS pending_reconnections,
+          (SELECT COUNT(*)::INTEGER FROM public.customers
+            WHERE status = 'active' AND hidden_from_app = FALSE) AS active_customers,
+          (SELECT COUNT(*)::INTEGER FROM public.customers
+            WHERE status = 'disconnected' AND hidden_from_app = FALSE) AS disconnected_customers,
+          (SELECT COUNT(*)::INTEGER FROM public.customers
+            WHERE status = 'pending_reconnection' AND hidden_from_app = FALSE) AS pending_reconnections,
           (SELECT COUNT(*)::INTEGER FROM public.pole_boxes) AS pole_boxes,
           (SELECT COUNT(*)::INTEGER FROM public.pole_box_usage
             WHERE duplicate_assignments > 0 OR over_capacity) AS pole_box_alerts,

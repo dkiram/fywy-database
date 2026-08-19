@@ -364,7 +364,8 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
       `
       SELECT COUNT(*)::INTEGER AS total
       FROM public.customers c
-      WHERE ${viewClause}
+      WHERE c.hidden_from_app = FALSE
+        AND (${viewClause})
         AND (
           $1 = ''
           OR c.customer_id::TEXT ILIKE $2
@@ -416,7 +417,8 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
         ) latest ON TRUE
         LEFT JOIN public.customer_billing_status billing
           ON billing.customer_id = c.customer_id
-        WHERE ${viewClause}
+        WHERE c.hidden_from_app = FALSE
+          AND (${viewClause})
           AND (
             $1 = ''
             OR c.customer_id::TEXT ILIKE $2
@@ -445,7 +447,8 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
             WHERE is_delinquent) AS delinquent,
           (SELECT COUNT(*)::INTEGER FROM public.customer_billing_status
             WHERE eligible_for_disconnection) AS eligible_for_disconnection
-        FROM public.customers;
+        FROM public.customers
+        WHERE hidden_from_app = FALSE;
         `
       ),
     ]);
