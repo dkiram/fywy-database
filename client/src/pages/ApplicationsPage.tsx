@@ -568,7 +568,10 @@ function ApplicationsPage() {
                 ["review", "Match Review"],
                 ["serviced", "Serviced"],
                 ["closed", "Closed"],
-                ["confirmed", "Confirmed Existing"],
+                // No tab for confirmed_existing. It is an artefact of the
+                // one-off Access import and will only ever hold a handful of
+                // rows; the status, who confirmed it and when all stay in the
+                // database, and the rows are still reachable under All.
                 ["unresolved", "Unresolved"],
                 ["all", "All"],
               ] as Array<[ApplicationView, string]>
@@ -997,14 +1000,12 @@ function isActionable(status: ApplicationStatus) {
   return ["pending", "legacy_unresolved", "match_review"].includes(status);
 }
 
+// Mirrors isImportedDecisionAllowed on the server, which is the real control.
+// Anything still in an active status can be decided, imported or not. The old
+// rule additionally required a 2026 date on legacy rows, which is why the
+// legacy_unresolved half of the active queue showed no buttons at all.
 function canTakeDecision(application: ApplicationRecord) {
-  if (!isActionable(application.status)) return false;
-  if (!application.legacy_source) return true;
-
-  return (
-    application.status === "match_review" &&
-    application.application_date.startsWith("2026-")
-  );
+  return isActionable(application.status);
 }
 
 function humanize(value: string) {

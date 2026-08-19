@@ -47,24 +47,26 @@ function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+// Whether an imported row may still be decided. Every caller separately
+// requires an active status, so this is only ever asked about pending,
+// match_review and legacy_unresolved rows.
+//
+// Until Aug 2026 this also demanded a 2026 application_date on legacy rows,
+// which froze the whole legacy_unresolved backlog - roughly half the active
+// queue showed no buttons at all and could never be cleared. Head office works
+// those by hand now. The date test was redundant besides: migration 020 only
+// ever assigns match_review to 2026 rows in the first place, so the extra
+// condition could not admit anything, and would silently strand a row if that
+// ever stopped being true.
 function isImportedDecisionAllowed(application: {
-  application_date: unknown;
   legacy_source: unknown;
   status: unknown;
 }) {
-  // New-system applications are always eligible. For imported records, only
-  // the curated 2026 Match Review set is actionable; older legacy rows remain
-  // historical evidence and cannot be changed accidentally.
   if (!application.legacy_source) return true;
 
-  const applicationDate =
-    application.application_date instanceof Date
-      ? application.application_date.toISOString()
-      : String(application.application_date ?? "");
-
   return (
-    application.status === "match_review" &&
-    applicationDate.startsWith("2026-")
+    application.status === "match_review" ||
+    application.status === "legacy_unresolved"
   );
 }
 
