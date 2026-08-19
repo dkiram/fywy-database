@@ -286,7 +286,7 @@ if (error || !customer) {
         : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
     }
   >
-    History
+    Timeline
   </button>
 </div>
 

@@ -605,7 +605,8 @@ paymentsRouter.delete(
 );
 
 paymentsRouter.get("/payments/daily-summary", requireAuth, requireAdmin, async (req, res) => {
-  // Branch employees see only their location; head-office/admin employees see all locations.
+  // Every office sees its own takings and nobody else's. Only an admin sees
+  // the company-wide figure, because only an admin has a reason to.
   const requestedDate = cleanText(req.query.date);
   if (requestedDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
     return res.status(400).json({ error: "Choose a valid date." });
@@ -618,14 +619,16 @@ paymentsRouter.get("/payments/daily-summary", requireAuth, requireAdmin, async (
   const limit = 25;
 
   const employee = req.session.employee!;
-  if (employee.role === "branch" && employee.locationId === null) {
+  const scopedToOwnOffice = employee.role !== "admin";
+
+  if (scopedToOwnOffice && employee.locationId === null) {
     return res.status(409).json({
-      error: "Your employee account needs a branch before viewing totals.",
+      error: "Your employee account needs an office before viewing totals.",
     });
   }
 
-  const locationId = employee.role === "branch" ? employee.locationId : null;
-  const locationName = employee.role === "branch" ? employee.locationName ?? "" : "";
+  const locationId = scopedToOwnOffice ? employee.locationId : null;
+  const locationName = scopedToOwnOffice ? employee.locationName ?? "" : "";
 
   try {
     const dateResult = await pool.query(

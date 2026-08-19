@@ -38,7 +38,11 @@ TARGET="$DAILY_DIR/spcl-$STAMP.dump"
 
 log "starting dump of $PGDATABASE"
 
-if ! pg_dump --format=custom --compress=6 --file="$TARGET.partial"; then
+# The staging schema holds the raw Access import - scratch data from a
+# one-off cutover that never changes again. It was adding roughly six
+# megabytes to every single nightly backup for no benefit. The CSVs it was
+# loaded from are the real archive. Drop --exclude-schema to put it back.
+if ! pg_dump --format=custom --compress=6 --exclude-schema=staging --file="$TARGET.partial"; then
   rm -f "$TARGET.partial"
   fail "pg_dump returned an error"
 fi

@@ -1068,7 +1068,17 @@ app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => 
                  WHEN al.entity_type = 'application' AND al.entity_id ~ '^[0-9]+$'
                  THEN al.entity_id::BIGINT
                END
+          -- Who did it, so administrative housekeeping can be told apart from
+          -- a real change to this customer.
+          LEFT JOIN public.employees at_e
+            ON at_e.employee_id = al.employee_id
           WHERE al.entity_type <> 'payment'
+            -- An admin editing this customer belongs on the timeline. An admin
+            -- doing admin things that merely touch the customer does not.
+            AND (
+              al.entity_type = 'customer'
+              OR COALESCE(at_e.role, '') <> 'admin'
+            )
             AND COALESCE(
                   CASE WHEN al.entity_type = 'customer' AND al.entity_id ~ '^[0-9]+$'
                        THEN al.entity_id::INTEGER END,
