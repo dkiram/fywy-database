@@ -180,6 +180,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2 OR t.issue_summary ILIKE $2);`;
         rowsSql = `
           SELECT t.service_ticket_id, t.customer_id, c.name AS customer_name,
+            c.address AS customer_address,
             t.issue_summary, t.priority, t.status, t.reported_date,
             CONCAT_WS(' ', e.first_name, e.last_name) AS technician,
             t.pole_box_number, t.port_number

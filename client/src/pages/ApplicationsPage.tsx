@@ -48,6 +48,15 @@ type ApplicationRecord = {
   is_overdue: boolean;
 };
 
+// Minimal shape of /api/customers, used by the Match Review customer picker.
+type CustomerOption = {
+  customer_id: number;
+  name: string | null;
+  address: string | null;
+  telephone: string | null;
+  status: string;
+};
+
 type Package = {
   package_id: number;
   name: string;
@@ -174,6 +183,13 @@ function ApplicationsPage() {
   const [decision, setDecision] = useState<
     "service" | "close" | "confirm-match" | "reopen-match" | null
   >(null);
+  // Match Review customer picker. Most reviews arrive with a suggestion, but
+  // the matcher only suggests where it found strong evidence - plenty of real
+  // matches are ones only a person recognises, so the reviewer must be able to
+  // go and find the customer themselves.
+  const [matchCustomer, setMatchCustomer] = useState<CustomerOption | null>(null);
+  const [matchSearch, setMatchSearch] = useState("");
+  const [matchResults, setMatchResults] = useState<CustomerOption[]>([]);
   const [serviceMode, setServiceMode] = useState<"link" | "create">("create");
   const [decisionNote, setDecisionNote] = useState("");
   const [closeStatus, setCloseStatus] = useState<"cancelled" | "declined">(
@@ -230,6 +246,25 @@ function ApplicationsPage() {
     loadPackages().catch(() => setPackages([]));
   }, []);
 
+  useEffect(() => {
+    if (decision !== "confirm-match" || matchCustomer || matchSearch.trim().length < 2) {
+      setMatchResults([]);
+      return;
+    }
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await apiFetch(
+          `/api/customers?search=${encodeURIComponent(matchSearch.trim())}`
+        );
+        const data = await response.json();
+        setMatchResults(response.ok ? data.slice(0, 8) : []);
+      } catch {
+        setMatchResults([]);
+      }
+    }, 200);
+    return () => window.clearTimeout(timeout);
+  }, [decision, matchCustomer, matchSearch]);
+
   const activeApplication = useMemo(
     () =>
       applications.find(
@@ -260,6 +295,21 @@ function ApplicationsPage() {
     setSelected(application);
     setDecisionNote("");
     setDecisionError("");
+    setMatchSearch("");
+    setMatchResults([]);
+    // A suggestion pre-fills the picker; the reviewer can still clear it and
+    // choose somebody else if the matcher guessed the wrong person.
+    setMatchCustomer(
+      application.suggested_customer_id
+        ? {
+            customer_id: application.suggested_customer_id,
+            name: application.suggested_customer_name,
+            address: null,
+            telephone: null,
+            status: "active",
+          }
+        : null
+    );
     setDecision("confirm-match");
   };
 
@@ -372,7 +422,7 @@ function ApplicationsPage() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            customerId: activeApplication.suggested_customer_id,
+            customerId: matchCustomer?.customer_id,
             note: decisionNote,
           }),
         }
@@ -592,11 +642,12 @@ function ApplicationsPage() {
                       <div className="flex justify-end gap-2">
                         {canDecide && canTakeDecision(application) && (
                           <>
-                            {/* Only offered where there is a suggested customer
-                                to confirm against - a plain new application has
-                                nobody to be the same person as. */}
-                            {application.suggested_customer_id && (
-                              <IconButton icon="how_to_reg" label={`Same person as customer #${application.suggested_customer_id}`} tone="neutral" onClick={(event) => { event.stopPropagation(); openConfirmMatch(application); }} />
+                            {/* Every Match Review gets this, suggested match or
+                                not. A pending application keeps just the tick
+                                and the cross - there is nobody for a brand new
+                                applicant to already be. */}
+                            {application.status === "match_review" && (
+                              <IconButton icon="how_to_reg" label={application.suggested_customer_id ? `Same person as customer #${application.suggested_customer_id}` : "Same person as an existing customer"} tone="neutral" onClick={(event) => { event.stopPropagation(); openConfirmMatch(application); }} />
                             )}
                             <IconButton icon="check" label="Activate customer" tone="positive" onClick={(event) => { event.stopPropagation(); openServiceDecision(application); }} />
                             <IconButton icon="close" label="Close application" onClick={(event) => { event.stopPropagation(); openCloseDecision(application); }} />
@@ -720,8 +771,8 @@ function ApplicationsPage() {
           footer={
             canDecide && canTakeDecision(activeApplication) ? (
               <div className="flex flex-col gap-3">
-                {activeApplication.suggested_customer_id && (
-                  <button type="button" onClick={() => openConfirmMatch(activeApplication)} className="flex items-center justify-center gap-2 rounded-lg bg-secondary/15 px-4 py-3 text-sm font-medium text-secondary transition hover:bg-secondary/25"><span className="material-symbols-outlined">how_to_reg</span>Same Person as Customer #{activeApplication.suggested_customer_id}</button>
+                {activeApplication.status === "match_review" && (
+                  <button type="button" onClick={() => openConfirmMatch(activeApplication)} className="flex items-center justify-center gap-2 rounded-lg bg-secondary/15 px-4 py-3 text-sm font-medium text-secondary transition hover:bg-secondary/25"><span className="material-symbols-outlined">how_to_reg</span>{activeApplication.suggested_customer_id ? `Same Person as Customer #${activeApplication.suggested_customer_id}` : "Same Person as an Existing Customer"}</button>
                 )}
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button type="button" onClick={() => openServiceDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-tertiary px-4 py-3 text-sm font-medium text-white transition hover:bg-tertiary/90"><span className="material-symbols-outlined">check</span>Activate Customer</button>
@@ -855,11 +906,42 @@ function ApplicationsPage() {
             <p className="text-sm text-on-surface-variant">
               Confirm that <strong>{activeApplication.name}</strong> on this application is the customer already on file.
             </p>
-            <div className="rounded-xl border border-secondary/20 bg-secondary-container/50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Existing customer</p>
-              <p className="mt-2 font-semibold">{activeApplication.suggested_customer_name || "Existing customer"} · #{activeApplication.suggested_customer_id}</p>
-              <p className="mt-1 text-xs text-on-surface-variant">Match basis: {humanize(activeApplication.match_method || "review required")}</p>
-            </div>
+            {matchCustomer ? (
+              <div className="rounded-xl border border-secondary/20 bg-secondary-container/50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Existing customer</p>
+                    <p className="mt-2 font-semibold">{matchCustomer.name || "Existing customer"} · #{matchCustomer.customer_id}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      {matchCustomer.customer_id === activeApplication.suggested_customer_id
+                        ? `Suggested by the matcher · ${humanize(activeApplication.match_method || "review required")}`
+                        : "Chosen by you"}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => { setMatchCustomer(null); setMatchSearch(""); }} className="whitespace-nowrap text-sm font-medium text-primary underline">Change</button>
+                </div>
+              </div>
+            ) : (
+              <Field label="Which existing customer is this?" required>
+                <div className="relative">
+                  <input autoFocus value={matchSearch} onChange={(event) => setMatchSearch(event.target.value)} className={inputClass} placeholder="Search name, customer ID, or phone..." />
+                  {matchResults.length > 0 && (
+                    <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-outline-variant bg-white shadow-xl">
+                      {matchResults.map((customer) => (
+                        <button key={customer.customer_id} type="button" onClick={() => { setMatchCustomer(customer); setMatchResults([]); }} className="block w-full border-b border-surface-container px-4 py-3 text-left last:border-0 hover:bg-surface-container-low">
+                          <span className="font-semibold">{customer.name || "Unnamed customer"}</span>
+                          <span className="ml-2 text-xs text-on-surface-variant">#{customer.customer_id} · {customer.telephone || "No phone"} · {humanize(customer.status)}</span>
+                          <p className="mt-1 truncate text-xs text-on-surface-variant">{customer.address || "No address"}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* The applicant's own details, so the reviewer can compare
+                    without leaving the modal. */}
+                <p className="mt-2 text-xs text-on-surface-variant">Applicant: {activeApplication.telephone || "no phone"} · {activeApplication.address || "no address"}</p>
+              </Field>
+            )}
             {/* Says plainly what this does and does not do. The whole reason
                 this action exists is that Activate looked like it might bill
                 somebody twice. */}
@@ -867,11 +949,11 @@ function ApplicationsPage() {
               <li className="flex gap-2"><span className="material-symbols-outlined text-base text-tertiary">check</span>The application leaves the review queue.</li>
               <li className="flex gap-2"><span className="material-symbols-outlined text-base text-tertiary">check</span>It records which customer it turned out to be, and who decided that.</li>
               <li className="flex gap-2"><span className="material-symbols-outlined text-base text-on-surface-variant">block</span>No new customer is created, and nobody is charged anything.</li>
-              <li className="flex gap-2"><span className="material-symbols-outlined text-base text-on-surface-variant">block</span>Customer #{activeApplication.suggested_customer_id} is not modified — same address, package, rate and balance as now.</li>
+              <li className="flex gap-2"><span className="material-symbols-outlined text-base text-on-surface-variant">block</span>Customer {matchCustomer ? `#${matchCustomer.customer_id}` : "chosen here"} is not modified — same address, package, rate and balance as now.</li>
             </ul>
             <Field label="Optional note"><textarea rows={3} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="How you established it is the same person..." /></Field>
             {decisionError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{decisionError}</p>}
-            <ModalActions saving={saving} primaryLabel="Confirm Same Person" onPrimary={submitConfirmMatch} onCancel={() => setDecision(null)} />
+            <ModalActions saving={saving || !matchCustomer} primaryLabel="Confirm Same Person" onPrimary={submitConfirmMatch} onCancel={() => setDecision(null)} />
           </div>
         </Modal>
       )}
