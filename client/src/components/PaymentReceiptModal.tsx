@@ -281,9 +281,14 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
             <p className="receipt-amount-value mt-2 text-4xl font-medium text-primary">{formatCurrency(displayPayment.amount_paid)}</p>
           </div>
 
+          {/* Staff-only. `no-print` drops it from both the A4 file copy and the
+              80mm slip, and index.css removes it from the slip layout as well
+              so the measured page height does not reserve paper for it. The
+              customer's receipt must not carry an internal remark like "paid
+              Monday, receipt handed in today". */}
           {displayPayment.note && (
-            <div className="receipt-note mt-6 border-t border-surface-container pt-4">
-              <ReceiptField label="Note" value={displayPayment.note} />
+            <div className="receipt-note no-print mt-6 rounded-lg border border-dashed border-outline-variant bg-surface-container-low p-4">
+              <ReceiptField label="Internal note — not printed" value={displayPayment.note} />
             </div>
           )}
 

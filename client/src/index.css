@@ -350,11 +350,13 @@ textarea {
   text-decoration: line-through !important;
 }
 
+/* The payment note is an internal remark, not something the customer should
+   read on their slip. Removed rather than hidden, and removed here rather than
+   only under @media print, because buildSlipPageRule measures the receipt with
+   this class applied - left in, its height would be baked into the @page rule
+   and the printer would feed blank paper for a note that never appears. */
 .receipt-slip-layout .receipt-note {
-  margin: 2.5mm 0 0 !important;
-  padding: 1.5mm 0 0 !important;
-  border: 0 !important;
-  border-top: 1px dashed #000 !important;
+  display: none !important;
 }
 
 .receipt-slip-layout .receipt-footer {

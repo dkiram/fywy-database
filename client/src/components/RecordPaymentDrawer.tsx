@@ -105,8 +105,11 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
               </Field>
             )}
 
-            <Field label="Optional note">
-              <textarea rows={4} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} className={inputClass} placeholder="Payment details or reference..." />
+            {/* The place to record that the money came in on a different day
+                from the receipt, which is why the payment date itself stays
+                fixed and uneditable. */}
+            <Field label="Internal note (not printed on the receipt)">
+              <textarea rows={4} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} className={inputClass} placeholder="Payment details or correct date..." />
             </Field>
 
             <div className="rounded-xl border border-primary/15 bg-primary/5 p-4 text-sm text-on-surface-variant">
