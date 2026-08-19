@@ -12,7 +12,28 @@ type PaymentCustomer = {
   reconnection_fee: string | null;
 };
 
-const paymentTypes = ["Monthly Fee", "Reconnection Fee", "Installation Fee"] as const;
+// The three original types take their amount from the customer's package, so
+// they carry no price here. The flat service charges added Aug 2026 do, and
+// the cashier can still edit the amount before taking the money.
+//
+// recordablePaymentTypes in server/src/routes/payments.ts must list the same
+// names, or the server rejects the payment.
+const paymentTypeOptions = [
+  { label: "Monthly Fee", price: null },
+  { label: "Reconnection Fee", price: null },
+  { label: "Installation Fee", price: null },
+  { label: "Password Change", price: "1000.00" },
+  { label: "Modem Relocation", price: "1500.00" },
+  { label: "Modem Reset", price: "1500.00" },
+  { label: "Broken Ends", price: "1500.00" },
+  { label: "Cable Remote", price: "1500.00" },
+] as const;
+
+type PaymentTypeLabel = (typeof paymentTypeOptions)[number]["label"];
+
+const paymentTypes: readonly PaymentTypeLabel[] = paymentTypeOptions.map(
+  (option) => option.label,
+);
 
 function jamaicaCurrentMonth() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -23,7 +44,7 @@ function jamaicaCurrentMonth() {
 }
 
 function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { customer: PaymentCustomer; employee: Employee; onClose: () => void; onRecorded: (receipt: PaymentReceipt) => void }) {
-  const [paymentType, setPaymentType] = useState<(typeof paymentTypes)[number]>("Monthly Fee");
+  const [paymentType, setPaymentType] = useState<PaymentTypeLabel>("Monthly Fee");
   const [amount, setAmount] = useState(customer.monthly_fee ?? "");
   const [monthPaid, setMonthPaid] = useState(jamaicaCurrentMonth());
   const [note, setNote] = useState("");
@@ -39,12 +60,14 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
     };
   }, []);
 
-  const updatePaymentType = (value: (typeof paymentTypes)[number]) => {
+  const updatePaymentType = (value: PaymentTypeLabel) => {
     // Prefill the configured fee but leave the amount editable for the cashier.
     setPaymentType(value);
-    if (value === "Monthly Fee") setAmount(customer.monthly_fee ?? "");
-    if (value === "Reconnection Fee") setAmount(customer.reconnection_fee ?? "");
-    if (value === "Installation Fee") setAmount(customer.installation_fee ?? "");
+    if (value === "Monthly Fee") return setAmount(customer.monthly_fee ?? "");
+    if (value === "Reconnection Fee") return setAmount(customer.reconnection_fee ?? "");
+    if (value === "Installation Fee") return setAmount(customer.installation_fee ?? "");
+    // Flat service charges carry their own price.
+    setAmount(paymentTypeOptions.find((option) => option.label === value)?.price ?? "");
   };
 
   const submitPayment = async (event: React.FormEvent) => {
@@ -90,7 +113,7 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
             </div>
 
             <Field label="Payment type" required>
-              <select value={paymentType} onChange={(event) => updatePaymentType(event.target.value as (typeof paymentTypes)[number])} className={inputClass}>
+              <select value={paymentType} onChange={(event) => updatePaymentType(event.target.value as PaymentTypeLabel)} className={inputClass}>
                 {paymentTypes.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </Field>

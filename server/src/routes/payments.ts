@@ -7,10 +7,23 @@ import { insertStatusHistory } from "./accounts.js";
 
 const paymentsRouter = Router();
 
+// What a cashier may take money for. payment_type is a free TEXT column with
+// no database constraint, so this list is the only thing standing between the
+// request body and the receipt - a type not named here is rejected.
+//
+// The first three are per-customer: their amount comes from the customer's
+// package. The rest are flat service charges added Aug 2026, priced in
+// RecordPaymentDrawer.tsx. Keep the two lists in step; this one decides what
+// is accepted, that one decides what is offered and what it costs.
 const recordablePaymentTypes = [
   "Monthly Fee",
   "Reconnection Fee",
   "Installation Fee",
+  "Password Change",
+  "Modem Relocation",
+  "Modem Reset",
+  "Broken Ends",
+  "Cable Remote",
 ] as const;
 
 // Router-local helpers keep untrusted path/body/query values out of SQL until validated.
@@ -214,8 +227,12 @@ paymentsRouter.post(
       );
 
       // Only monthly and reconnection payments affect the account balance.
-      // Installation payments remain valid receipts but are intentionally kept
-      // outside the recurring-service ledger confirmed by SPCL.
+      // Installation, and the flat service charges added Aug 2026 (password
+      // change, modem relocation, modem reset, broken ends, cable remote), are
+      // one-off work paid for at the counter. There is no matching charge on
+      // the ledger for them, so posting a credit would hand the customer a
+      // balance they were never owed. They stay valid receipts and appear in
+      // the daily takings; they just do not touch the recurring-service ledger.
       const ledgerEntryType = paymentType === "Monthly Fee"
         ? "monthly_payment"
         : paymentType === "Reconnection Fee"
