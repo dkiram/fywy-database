@@ -444,7 +444,7 @@ if (error || !customer) {
         setActivationError("");
         setEditingActivation(true);
       }}
-      className="self-start text-xs font-medium text-primary hover:underline"
+      className="self-start rounded-md border border-tertiary px-2 py-0.5 text-[11px] font-medium leading-5 text-tertiary transition hover:bg-tertiary/10"
     >
       Correct this date
     </button>
