@@ -21,13 +21,15 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Voiding changes financial totals, so branch cashiers may view the result but
-// only Admin and Head Office can authorize the reversal.
+// Voiding changes financial totals, so everyone may view the result but only
+// Admin can authorize the reversal. Head Office held this until Aug 2026 and
+// no longer does: reversing money taken at a counter is now a single desk's
+// decision. Anyone else gets a plain 403, including through a typed URL.
 function requirePaymentManager(req: Request, res: Response, next: NextFunction) {
   const employee = req.session.employee;
   if (!employee) return res.status(401).json({ error: "Not authenticated." });
-  if (!['admin', 'head_office'].includes(employee.role)) {
-    return res.status(403).json({ error: "Only Admin and Head Office can void payments." });
+  if (employee.role !== "admin") {
+    return res.status(403).json({ error: "Only Admin can void payments." });
   }
   next();
 }

@@ -25,6 +25,32 @@ function validDate(value: string) {
 // not offered rather than being scoped down to something meaningless.
 const ADMIN_ONLY_REPORTS = new Set(["payments-by-date", "payments-by-location"]);
 
+// Sortable columns, per report. The client sends a column key; this maps it to
+// a literal ORDER BY fragment, so a column name never arrives from the request
+// as text. A key that is not listed falls back to the report's own default
+// ordering rather than erroring, so an old bookmark still loads.
+//
+// Every entry ends in customer_id. Sorting six thousand rows across 245 pages
+// on a column with ties would otherwise let the database return them in a
+// different order per page, showing one customer twice and skipping another.
+const REPORT_SORTS: Record<string, Record<string, string>> = {
+  "delinquent-customers": {
+    oldest_unpaid_due_date: "billing.oldest_unpaid_due_date %DIR% NULLS LAST, c.customer_id",
+    grace_end_date: "billing.grace_end_date %DIR% NULLS LAST, c.customer_id",
+    scheduled_disconnection_date: "billing.scheduled_disconnection_date %DIR% NULLS LAST, c.customer_id",
+    outstanding_balance: "billing.outstanding_balance %DIR%, c.customer_id",
+    last_payment_date: "MAX(p.payment_date) %DIR% NULLS LAST, c.customer_id",
+    customer_name: "c.name %DIR%, c.customer_id",
+    customer_id: "c.customer_id %DIR%",
+  },
+};
+
+function sortClause(reportKey: string, sort: string, direction: string) {
+  const template = REPORT_SORTS[reportKey]?.[sort];
+  if (!template) return "";
+  return template.replaceAll("%DIR%", direction === "asc" ? "ASC" : "DESC");
+}
+
 type ReportResult = {
   rows: Record<string, unknown>[];
   total: number;
@@ -48,6 +74,9 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
   const to = cleanText(req.query.to);
   const requestedPage = Math.max(Number.parseInt(cleanText(req.query.page), 10) || 1, 1);
   const limit = 25;
+  const sort = cleanText(req.query.sort);
+  const direction = cleanText(req.query.dir) === "asc" ? "asc" : "desc";
+  const orderBy = sortClause(reportKey, sort, direction);
 
   // Daily cross-company collection totals are administrator-only. Hiding the
   // report card in the client is not sufficient because URLs can be typed.
@@ -220,8 +249,9 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             billing.oldest_unpaid_due_date, billing.grace_end_date,
             billing.scheduled_disconnection_date, billing.eligible_for_disconnection,
             billing.is_on_hold, billing.hold_expires_on, billing.unverified_entries
-          ORDER BY billing.eligible_for_disconnection DESC,
-            billing.scheduled_disconnection_date, billing.outstanding_balance DESC
+          ORDER BY ${orderBy || `billing.eligible_for_disconnection DESC,
+            billing.scheduled_disconnection_date, billing.outstanding_balance DESC,
+            c.customer_id`}
           LIMIT $3 OFFSET $4;`;
         // Deliberately counts the customers but not the money. The total owed
         // across the company is a board-level number, not something anyone

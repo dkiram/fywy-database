@@ -116,7 +116,10 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
   const [showDeleteForm, setShowDeleteForm] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
-  const canVoid = employee?.role === "admin" || employee?.role === "head_office";
+  // Voiding and permanent deletion are both Admin-only. Head Office lost the
+  // void button in Aug 2026; the server enforces the same rule, so hiding it
+  // here is presentation, not the control.
+  const canVoid = employee?.role === "admin";
   const canDelete = employee?.role === "admin";
 
   const [printFormat, setPrintFormat] = useState<PrintFormat>(
