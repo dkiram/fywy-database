@@ -20,6 +20,11 @@ function validDate(value: string) {
   return value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+// Company-wide takings. A branch or head-office employee has no version of
+// these that is "their" number - the figures span every office - so they are
+// not offered rather than being scoped down to something meaningless.
+const ADMIN_ONLY_REPORTS = new Set(["payments-by-date", "payments-by-location"]);
+
 type ReportResult = {
   rows: Record<string, unknown>[];
   total: number;
@@ -28,6 +33,15 @@ type ReportResult = {
 
 reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
   const reportKey = cleanText(req.params.reportKey);
+
+  if (
+    ADMIN_ONLY_REPORTS.has(reportKey) &&
+    req.session.employee!.role !== "admin"
+  ) {
+    return res.status(403).json({
+      error: "Only Admin can view company-wide payment totals.",
+    });
+  }
   const search = cleanText(req.query.search);
   const searchPattern = `%${search}%`;
   const from = cleanText(req.query.from);

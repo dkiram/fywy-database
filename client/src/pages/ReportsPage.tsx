@@ -29,7 +29,14 @@ function ReportsPage() {
   // Head Office keeps operational reports but cannot see the company-wide
   // Payments by Date report or select it through a copied URL.
   const availableReports = useMemo(
-    () => employee?.role === "admin" ? reports : reports.filter((item) => item.key !== "payments-by-date"),
+    () =>
+      employee?.role === "admin"
+        ? reports
+        : reports.filter(
+            (item) =>
+              item.key !== "payments-by-date" &&
+              item.key !== "payments-by-location"
+          ),
     [employee?.role]
   );
   const [reportKey, setReportKey] = useState<ReportKey>(availableReports.some((item) => item.key === requestedReport) ? requestedReport! : availableReports[0].key);

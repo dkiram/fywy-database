@@ -14,6 +14,7 @@ set -eu
 
 BACKUP_ROOT="${BACKUP_ROOT:-/backups}"
 DAILY_DIR="$BACKUP_ROOT/daily"
+WEEKLY_DIR="$BACKUP_ROOT/weekly"
 MONTHLY_DIR="$BACKUP_ROOT/monthly"
 GLOBALS_DIR="$BACKUP_ROOT/globals"
 LOG_FILE="$BACKUP_ROOT/backup.log"
@@ -93,9 +94,10 @@ echo
 echo "Retention"
 
 DAILY_COUNT="$(find "$DAILY_DIR" -name 'spcl-*.dump' 2>/dev/null | wc -l | tr -d ' ')"
+WEEKLY_COUNT="$(find "$WEEKLY_DIR" -name 'spcl-week-*.dump' 2>/dev/null | wc -l | tr -d ' ')"
 MONTHLY_COUNT="$(find "$MONTHLY_DIR" -name 'spcl-*.dump' 2>/dev/null | wc -l | tr -d ' ')"
 
-echo "  $DAILY_COUNT daily, $MONTHLY_COUNT monthly"
+echo "  $DAILY_COUNT daily, $WEEKLY_COUNT weekly, $MONTHLY_COUNT monthly"
 
 if [ "$DAILY_COUNT" -lt 2 ]; then
   warn "only $DAILY_COUNT daily backup - one bad night leaves nothing to fall back to"

@@ -26,4 +26,4 @@ CREATE TABLE IF NOT EXISTS staging.payments (
     monthly_fee_customer_tbl TEXT,
 
     imported_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);-
+);
