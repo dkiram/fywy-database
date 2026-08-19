@@ -23,9 +23,8 @@ SELECT
     l.location_id
 FROM (
     VALUES
-        ('Kimone',   'Dunn',     'kdunn',     '$2b$12$vDS9ICPV7VphQqJ3InkH7eQA5AYb9B2Dz/BxKGU/zBLGXkgURH.JW', 'head_office'),
-        ('Suwayne',  'Frith',    'sfrith',    '$2b$12$JgL8idkBzCROT7KAlcHn1eidv0D42hn328VsH43JEFn5EedOo0rse', 'head_office'),
-        ('Quacian',  'Babootie', 'qbabootie', '$2b$12$Mxhi8nGTWqwdsKBbz7qInOLo0Fev8GXbkWY9DQqz01c4vaBI5KKaK', 'head_office')
+        ('Lisa',   'Dunn',     'ldunn',     '$2b$12$17zeW1y8IjSXoeEGmpKFDOZycgnWhM2MUNL7i/AjCxrrrwwcUK2ta', 'head_office'),
+
 ) AS new_employee (first_name, last_name, username, password_hash, role)
 
 JOIN public.locations l
