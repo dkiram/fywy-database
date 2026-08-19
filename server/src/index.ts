@@ -2084,6 +2084,165 @@ app.patch(
 );
 
 app.patch(
+  "/api/customers/:customerId/activation-date",
+  requireAuth,
+  requireRole("admin", "head_office"),
+  async (req, res) => {
+    // Activation date is the billing anchor - every monthly due date is derived
+    // from it. Correcting it therefore means rebuilding the customer's charges,
+    // which is only safe while nothing has been settled against them. A
+    // customer who has been paying on a schedule keeps the date they have,
+    // because moving it would rewrite bills they have already received.
+    const { customerId } = req.params;
+    if (typeof customerId !== "string" || !/^\d+$/.test(customerId)) {
+      return res.status(400).json({ error: "Invalid customer ID" });
+    }
+
+    const activationDate = String(req.body.activationDate ?? "").trim();
+    const reason = String(req.body.reason ?? "").trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(activationDate)) {
+      return res.status(400).json({ error: "Choose a valid activation date." });
+    }
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({
+        error: "A reason between 3 and 500 characters is required.",
+      });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const customerResult = await client.query(
+        `SELECT customer_id, name, activation_date, status
+           FROM public.customers
+          WHERE customer_id = $1
+          FOR UPDATE;`,
+        [Number(customerId)]
+      );
+      if (customerResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Customer not found." });
+      }
+
+      const customer = customerResult.rows[0];
+
+      // Sanity bounds. A date before the company existed or years into the
+      // future is a typo, and a typo here silently reschedules their billing.
+      const boundsResult = await client.query(
+        `SELECT
+            $1::DATE < DATE '2000-01-01' AS too_early,
+            $1::DATE > ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE + 90)
+              AS too_late,
+            $1::DATE = $2::DATE AS unchanged;`,
+        [activationDate, customer.activation_date]
+      );
+      const bounds = boundsResult.rows[0];
+
+      if (bounds.too_early || bounds.too_late) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error:
+            "That activation date is outside the range this can be corrected to.",
+        });
+      }
+      if (bounds.unchanged) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "That is already the activation date.",
+        });
+      }
+
+      // Eligibility. The window closes the moment they are first billed: up
+      // to that point the assigned billing date is just a plan and moving it
+      // costs nothing, but the first charge is a bill the customer has been
+      // given, and changing the date it was derived from would contradict it.
+      const historyResult = await client.query(
+        `SELECT
+            (SELECT count(*) FROM public.payments
+              WHERE customer_id = $1)::INTEGER AS payments,
+            (SELECT count(*) FROM public.account_ledger_entries
+              WHERE customer_id = $1
+                AND entry_type = 'monthly_charge')::INTEGER AS charges,
+            (SELECT count(*) FROM public.waiver_requests
+              WHERE customer_id = $1)::INTEGER AS waivers,
+            (SELECT count(*) FROM public.reconnection_requests
+              WHERE customer_id = $1)::INTEGER AS reconnections;`,
+        [Number(customerId)]
+      );
+      const history = historyResult.rows[0];
+
+      if (
+        history.charges > 0 ||
+        history.payments > 0 ||
+        history.waivers > 0 ||
+        history.reconnections > 0
+      ) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error:
+            "This customer has already been billed on their current " +
+            "activation date, so it can no longer be corrected here. Ask an " +
+            "administrator to adjust it directly.",
+        });
+      }
+
+      await client.query(
+        `UPDATE public.customers
+            SET activation_date = $1::DATE
+          WHERE customer_id = $2;`,
+        [activationDate, Number(customerId)]
+      );
+
+      // Rebuild rather than leave the old anniversary behind - see migration
+      // 040 for why a stale charge set is the dangerous outcome here.
+      const rebuiltResult = await client.query(
+        `SELECT public.spcl_regenerate_customer_charges(
+            $1,
+            (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+         ) AS rebuilt;`,
+        [Number(customerId)]
+      );
+
+      await client.query(
+        `INSERT INTO public.audit_logs (
+            employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason, occurred_at
+         ) VALUES ($1, $2, 'Corrected activation date', 'customer', $3,
+            'activation_date', $4, $5, $6, CURRENT_TIMESTAMP);`,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          customerId,
+          customer.activation_date === null
+            ? null
+            : String(customer.activation_date),
+          activationDate,
+          reason,
+        ]
+      );
+
+      await client.query("COMMIT");
+
+      res.json({
+        customerId: Number(customerId),
+        activationDate,
+        chargesRebuilt: Number(rebuiltResult.rows[0].rebuilt),
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not correct the activation date:", error);
+      res.status(500).json({ error: "Could not correct the activation date." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+app.patch(
   "/api/customers/:customerId/subscription",
   requireAuth,
   requireRole("admin", "head_office"),

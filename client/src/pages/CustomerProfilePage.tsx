@@ -77,7 +77,56 @@ const [selectedPackageId, setSelectedPackageId] = useState("");
 const [subscriptionReason, setSubscriptionReason] = useState("");
 const [savingSubscription, setSavingSubscription] = useState(false);
 const [subscriptionError, setSubscriptionError] = useState("");
+const [editingActivation, setEditingActivation] = useState(false);
+const [activationInput, setActivationInput] = useState("");
+const [activationReason, setActivationReason] = useState("");
+const [savingActivation, setSavingActivation] = useState(false);
+const [activationError, setActivationError] = useState("");
 const [showPaymentForm, setShowPaymentForm] = useState(false);
+
+  // Correcting an activation date rebuilds the customer's billing schedule, so
+  // the server refuses once anything has been settled against the old one. The
+  // error it returns is written to be shown to staff as-is.
+  const saveActivationDate = async () => {
+    if (!customer) return;
+
+    try {
+      setSavingActivation(true);
+      setActivationError("");
+
+      const response = await apiFetch(
+        `/api/customers/${customer.customer_id}/activation-date`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            activationDate: activationInput,
+            reason: activationReason,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not correct the activation date.");
+      }
+
+      setCustomer((current) =>
+        current ? { ...current, activation_date: data.activationDate } : current
+      );
+      setEditingActivation(false);
+      setActivationReason("");
+    } catch (error) {
+      setActivationError(
+        error instanceof Error
+          ? error.message
+          : "Could not correct the activation date."
+      );
+    } finally {
+      setSavingActivation(false);
+    }
+  };
+
 const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceipt | null>(null);
 const [paymentRefreshKey, setPaymentRefreshKey] = useState(0);
 
@@ -380,10 +429,76 @@ if (error || !customer) {
               <div className="flex flex-col gap-4">
                 <DetailRow label="Status" value={customer.status.replace("_", " ")} />
               
-<DetailRow
-  label="Date Joined"
-  value={formatDate(customer.activation_date)}
-/>
+<div className="flex flex-col gap-2">
+  <DetailRow
+    label="Date Joined"
+    value={formatDate(customer.activation_date)}
+  />
+
+  {canManageSubscription && !editingActivation && (
+    <button
+      type="button"
+      onClick={() => {
+        setActivationInput(customer.activation_date?.slice(0, 10) ?? "");
+        setActivationReason("");
+        setActivationError("");
+        setEditingActivation(true);
+      }}
+      className="self-start text-xs font-medium text-primary hover:underline"
+    >
+      Correct this date
+    </button>
+  )}
+
+  {canManageSubscription && editingActivation && (
+    <div className="flex flex-col gap-2 rounded-lg border border-surface-container p-3">
+      {/* Only offered before the first bill goes out. The server checks the
+          same thing and will refuse once they have been billed. */}
+      <p className="text-xs text-on-surface-variant">
+        This sets their billing date. It can only be changed up until their
+        first bill.
+      </p>
+
+      <input
+        type="date"
+        value={activationInput}
+        onChange={(event) => setActivationInput(event.target.value)}
+        className="rounded-lg border border-surface-container px-3 py-2 text-sm"
+      />
+
+      <input
+        type="text"
+        value={activationReason}
+        onChange={(event) => setActivationReason(event.target.value)}
+        placeholder="Reason for the correction"
+        className="rounded-lg border border-surface-container px-3 py-2 text-sm"
+      />
+
+      {activationError && (
+        <p className="text-xs text-error">{activationError}</p>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={savingActivation}
+          onClick={saveActivationDate}
+          className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-on-primary disabled:opacity-60"
+        >
+          {savingActivation ? "Saving..." : "Save date"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setEditingActivation(false)}
+          className="rounded-lg px-3 py-2 text-xs font-medium text-on-surface-variant"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )}
+</div>
 
 <DetailRow
   label="Tenure"
