@@ -129,6 +129,34 @@ function resolveSecureCookieSetting(): boolean | "auto" {
   return IS_PRODUCTION ? "auto" : false;
 }
 
+/**
+ * How long a session survives WITHOUT activity.
+ *
+ * This is an idle timeout, not a fixed lifetime: `rolling: true` below pushes
+ * the expiry forward on every request, so somebody working through the day is
+ * never interrupted, while a counter machine left alone closes itself.
+ *
+ * The trade-off is that an unattended browser at a branch is only exposed for
+ * this long instead of a full shift. Raise it if staff start complaining that
+ * a quiet afternoon signs them out mid-task.
+ */
+const SESSION_IDLE_MINUTES = (() => {
+  const configured = Number.parseInt(process.env.SESSION_IDLE_MINUTES ?? "", 10);
+
+  if (Number.isFinite(configured) && configured >= 5 && configured <= 720) {
+    return configured;
+  }
+
+  if (process.env.SESSION_IDLE_MINUTES) {
+    console.warn(
+      `SESSION_IDLE_MINUTES is "${process.env.SESSION_IDLE_MINUTES}", which is not a ` +
+        `number of minutes between 5 and 720. Falling back to 60.`
+    );
+  }
+
+  return 60;
+})();
+
 const SECURE_COOKIE_SETTING = resolveSecureCookieSetting();
 
 if (IS_PRODUCTION) {
@@ -137,6 +165,10 @@ if (IS_PRODUCTION) {
       (SECURE_COOKIE_SETTING === "auto"
         ? " (per request, from the connection protocol)"
         : "")
+  );
+
+  console.log(
+    `Session idle timeout: ${SESSION_IDLE_MINUTES} minutes (refreshed on each request)`
   );
 }
 
@@ -154,6 +186,12 @@ app.use(
     resave: false,
     saveUninitialized: false,
 
+    // Re-issues the cookie and touches the stored expiry on every response, so
+    // the countdown restarts with any activity. Without this the maxAge below
+    // would be a hard cut-off measured from login, and someone mid-payment at
+    // 59 minutes would be signed out regardless of what they were doing.
+    rolling: true,
+
     // Do not advertise the framework in the cookie name.
     name: process.env.SESSION_COOKIE_NAME || "spcl.sid",
 
@@ -167,8 +205,11 @@ app.use(
 
       sameSite: "lax",
 
-      // 8 hours
-      maxAge: 1000 * 60 * 60 * 8,
+      // Idle timeout, refreshed on every request by `rolling` above. The
+      // browser drops the cookie by itself once this passes, so an abandoned
+      // machine stops carrying a usable session even before anything asks
+      // the server.
+      maxAge: 1000 * 60 * SESSION_IDLE_MINUTES,
     },
   })
 );

@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 
-import { apiFetch } from "../lib/api";
+import { apiFetch, setUnauthorizedHandler } from "../lib/api";
 
 export type EmployeeRole =
   | "admin"
@@ -26,6 +26,9 @@ export type Employee = {
 type AuthContextType = {
   employee: Employee | null;
   loading: boolean;
+
+  /** True when the last sign-out was the idle timeout rather than a click. */
+  sessionExpired: boolean;
 
   login: (
     username: string,
@@ -51,6 +54,21 @@ export function AuthProvider({
     useState<Employee | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // Any 401 from a normal endpoint means the hour lapsed while this tab sat
+  // open. Clearing the employee is what sends ProtectedRoute back to login;
+  // the flag is what lets the login screen say why.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setEmployee((current) => {
+        if (current) setSessionExpired(true);
+        return null;
+      });
+    });
+
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   useEffect(() => {
     // Ask the server whether its HTTP-only session cookie still identifies an employee.
@@ -110,6 +128,7 @@ export function AuthProvider({
       );
     }
 
+    setSessionExpired(false);
     setEmployee(data.employee);
   };
 
@@ -127,6 +146,7 @@ export function AuthProvider({
       value={{
         employee,
         loading,
+        sessionExpired,
         login,
         logout,
       }}

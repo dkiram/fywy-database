@@ -6,7 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, sessionExpired } = useAuth();
 
   // Form and request state remain local because no other screen needs credentials.
   const [username, setUsername] = useState("");
@@ -165,6 +165,18 @@ function LoginPage() {
                   Forgot password?
                 </button>
               </div>
+
+              {/* Shown instead of nothing when the hour lapsed with the tab
+                  open, so being bounced to this screen has an explanation. A
+                  real sign-in error takes precedence over it. */}
+              {sessionExpired && !error && (
+                <div role="status" className="flex items-start gap-2.5 rounded-xl border border-white/15 bg-white/8 px-4 py-3 text-sm text-white/85">
+                  <span className="material-symbols-outlined mt-0.5 text-lg" aria-hidden="true">
+                    schedule
+                  </span>
+                  <span>You were signed out after an hour of inactivity. Please sign in again.</span>
+                </div>
+              )}
 
               {error && (
                 <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-error/15 bg-error/8 px-4 py-3 text-sm text-error">

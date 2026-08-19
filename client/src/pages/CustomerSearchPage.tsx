@@ -110,9 +110,24 @@ function CustomerSearchPage() {
             <tbody>
               {!loading &&
                 customers.map((customer) => (
+                  // The whole row opens the profile, not just the button at
+                  // the far right — on a wide table that button is a long way
+                  // from the name you actually read. Kept keyboard-reachable
+                  // because a row is not a link as far as the browser is
+                  // concerned, and this screen gets used all day.
                   <tr
                     key={customer.customer_id}
-                    className="border-t border-surface-container transition hover:bg-surface-container-low/40"
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`Open ${customer.name || "unnamed customer"}`}
+                    onClick={() => navigate(`/customers/${customer.customer_id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        navigate(`/customers/${customer.customer_id}`);
+                      }
+                    }}
+                    className="cursor-pointer border-t border-surface-container transition hover:bg-surface-container-low/40 focus-visible:bg-surface-container-low/40"
                   >
                     <td className="px-6 py-4 text-sm text-on-surface-variant">
                       {customer.customer_id}
@@ -139,13 +154,17 @@ function CustomerSearchPage() {
                     </td>
 
                     <td className="px-6 py-4 text-right">
+                      {/* Kept as the visible affordance — someone scanning the
+                          table should still see that a row goes somewhere. The
+                          click is stopped so it does not also trigger the row
+                          handler wrapping it. */}
                       <button
                         type="button"
-                        onClick={() =>
-                          navigate(
-                            `/customers/${customer.customer_id}`
-                          )
-                        }
+                        tabIndex={-1}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/customers/${customer.customer_id}`);
+                        }}
                         className="rounded-lg px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10"
                       >
                         View
