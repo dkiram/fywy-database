@@ -209,9 +209,12 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           ORDER BY billing.eligible_for_disconnection DESC,
             billing.scheduled_disconnection_date, billing.outstanding_balance DESC
           LIMIT $3 OFFSET $4;`;
+        // Deliberately counts the customers but not the money. The total owed
+        // across the company is a board-level number, not something anyone
+        // needs while working a chase list, so it is not computed at all
+        // rather than computed and hidden.
         totalsSql = `
-          SELECT COUNT(*)::INTEGER AS delinquent_count,
-            COALESCE(SUM(billing.outstanding_balance), 0)::NUMERIC(14,2) AS outstanding_total
+          SELECT COUNT(*)::INTEGER AS delinquent_count
           FROM public.customer_billing_status billing
           JOIN public.customers c USING (customer_id)
           WHERE billing.is_delinquent
@@ -270,18 +273,6 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
     if (totalsSql) {
       const totalsResult = await pool.query(totalsSql, values);
       totals = totalsResult.rows[0];
-
-      // The delinquent list itself is working material - head office chases
-      // these people. The total owed across the whole company is not: it
-      // cannot be split by office, so there is no version of it that is
-      // "their" number. Admins only.
-      if (
-        reportKey === "delinquent-customers" &&
-        req.session.employee!.role !== "admin"
-      ) {
-        const { outstanding_total: _hidden, ...rest } = totals;
-        totals = rest;
-      }
     }
     const result: ReportResult = { rows: rowsResult.rows, total, totals };
     res.json({ ...result, pagination: { page, limit, total, totalPages } });
