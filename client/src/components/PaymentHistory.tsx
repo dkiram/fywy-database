@@ -505,10 +505,16 @@ function formatDate(date: string | null) {
     return "—";
   }
 
-  return new Date(date).toLocaleDateString("en-US", {
+  // PostgreSQL DATE values are calendar dates, not moments in time. Parsing a
+  // bare value at midnight UTC makes Aug 20 become Aug 19 on Jamaica devices.
+  // Noon UTC remains on the same Jamaica calendar day, and the explicit time
+  // zone keeps the display independent of the employee's device settings.
+  const jamaicaDate = new Date(`${date.slice(0, 10)}T12:00:00.000Z`);
+  return jamaicaDate.toLocaleDateString("en-JM", {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "America/Jamaica",
   });
 }
 
@@ -517,9 +523,13 @@ function formatMonth(date: string | null) {
     return "—";
   }
 
-  return new Date(date).toLocaleDateString("en-US", {
+  // month_paid is stored as the first day of the selected billing month. The
+  // same date-only rule prevents Aug 1 from displaying as July 31 / July.
+  const jamaicaDate = new Date(`${date.slice(0, 10)}T12:00:00.000Z`);
+  return jamaicaDate.toLocaleDateString("en-JM", {
     year: "numeric",
     month: "long",
+    timeZone: "America/Jamaica",
   });
 }
 

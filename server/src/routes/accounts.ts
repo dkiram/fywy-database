@@ -465,9 +465,22 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
             JOIN public.customers c2 USING (customer_id)
             WHERE billing.is_delinquent
               AND c2.status = 'active'
-              AND c2.hidden_from_app = FALSE) AS delinquent,
-          (SELECT COUNT(*)::INTEGER FROM public.customer_billing_status
-            WHERE eligible_for_disconnection) AS eligible_for_disconnection
+              AND c2.hidden_from_app = FALSE
+              AND (
+                c2.source_staging_id IS NULL
+                OR billing.scheduled_disconnection_date IS NULL
+                OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+              )) AS delinquent,
+          (SELECT COUNT(*)::INTEGER
+            FROM public.customer_billing_status billing
+            JOIN public.customers c2 USING (customer_id)
+            WHERE billing.eligible_for_disconnection
+              AND c2.hidden_from_app = FALSE
+              AND (
+                c2.source_staging_id IS NULL
+                OR billing.scheduled_disconnection_date IS NULL
+                OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+              )) AS eligible_for_disconnection
         FROM public.customers
         WHERE hidden_from_app = FALSE;
         `

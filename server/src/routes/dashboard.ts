@@ -63,9 +63,22 @@ dashboardRouter.get("/dashboard", requireAuth, requireAdmin, async (_req, res) =
             JOIN public.customers c USING (customer_id)
             WHERE billing.is_delinquent
               AND c.status = 'active'
-              AND c.hidden_from_app = FALSE) AS delinquent_customers,
-          (SELECT COUNT(*)::INTEGER FROM public.customer_billing_status
-            WHERE eligible_for_disconnection) AS eligible_for_disconnection;
+              AND c.hidden_from_app = FALSE
+              AND (
+                c.source_staging_id IS NULL
+                OR billing.scheduled_disconnection_date IS NULL
+                OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+              )) AS delinquent_customers,
+          (SELECT COUNT(*)::INTEGER
+            FROM public.customer_billing_status billing
+            JOIN public.customers c USING (customer_id)
+            WHERE billing.eligible_for_disconnection
+              AND c.hidden_from_app = FALSE
+              AND (
+                c.source_staging_id IS NULL
+                OR billing.scheduled_disconnection_date IS NULL
+                OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+              )) AS eligible_for_disconnection;
       `),
       pool.query(`
         WITH dates AS (

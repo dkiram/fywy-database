@@ -232,6 +232,11 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
         // hidden_from_app excludes the blank legacy shells migration 039 hid
         // from the rest of the app; chasing a customer with no name is not a
         // thing anyone can act on.
+        //
+        // Legacy rows whose displayed Disconnect On date predates 2024 are
+        // retained in the database and everywhere else in the app, but are no
+        // longer actionable delinquency work. New-system customers are never
+        // excluded by this historical cutoff.
         values = [search, searchPattern];
         countSql = `
           SELECT COUNT(*)::INTEGER AS total
@@ -240,6 +245,11 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           WHERE billing.is_delinquent
             AND c.status = 'active'
             AND c.hidden_from_app = FALSE
+            AND (
+              c.source_staging_id IS NULL
+              OR billing.scheduled_disconnection_date IS NULL
+              OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+            )
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2);`;
         rowsSql = `
@@ -256,6 +266,11 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           WHERE billing.is_delinquent
             AND c.status = 'active'
             AND c.hidden_from_app = FALSE
+            AND (
+              c.source_staging_id IS NULL
+              OR billing.scheduled_disconnection_date IS NULL
+              OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+            )
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2)
           GROUP BY c.customer_id, billing.customer_id, billing.outstanding_balance,
@@ -277,6 +292,11 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           WHERE billing.is_delinquent
             AND c.status = 'active'
             AND c.hidden_from_app = FALSE
+            AND (
+              c.source_staging_id IS NULL
+              OR billing.scheduled_disconnection_date IS NULL
+              OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+            )
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2);`;
         break;
