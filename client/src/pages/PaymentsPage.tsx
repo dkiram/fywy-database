@@ -28,6 +28,7 @@ type RecentPayment = {
   location: string | null;
   legacy_customer_id: string | null;
   customer_id: number | null;
+  application_id: number | null;
   customer_name: string | null;
   source: "imported" | "new_system";
 };
@@ -196,7 +197,7 @@ function PaymentsPage() {
                     <tr key={payment.payment_id} className="transition hover:bg-surface-container-low/60">
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-on-surface-variant">{formatTime(payment.recorded_at)}</td>
                       <td className="px-6 py-4">
-                        <p className="font-semibold text-on-surface">{payment.customer_name || "Unmatched legacy customer"}</p>
+                        <p className="font-semibold text-on-surface">{payment.customer_name || "Unmatched legacy customer"}{payment.customer_id === null && payment.application_id !== null && <span className="ml-2 rounded-full bg-secondary/15 px-2 py-0.5 text-[11px] font-medium text-secondary">Applicant</span>}</p>
                         <p className="mt-1 text-xs text-on-surface-variant">{customerReference(payment)}</p>
                       </td>
                       <td className="px-6 py-4"><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">{payment.payment_type}</span></td>
@@ -277,6 +278,9 @@ function SourceBadge({ source }: { source: RecentPayment["source"] }) {
 
 function customerReference(payment: RecentPayment) {
   if (payment.customer_id !== null) return `Customer #${payment.customer_id}`;
+  // An installation fee collected at intake belongs to an applicant who has no
+  // customer number yet, so the row is identified by the application instead.
+  if (payment.application_id !== null) return `Application #${payment.application_id}`;
   if (payment.legacy_customer_id) return `Legacy ID ${payment.legacy_customer_id}`;
   return "No customer ID";
 }

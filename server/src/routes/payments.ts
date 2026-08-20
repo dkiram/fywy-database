@@ -70,8 +70,17 @@ function parsePositiveId(value: unknown) {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-async function loadReceipt(client: PoolClient, paymentId: number) {
-  // Only new-system payments have receipt numbers and guaranteed customer links.
+// Loads a receipt for either party a payment can belong to.
+//
+// Every receipt used to require a customer, because every payment had one. An
+// installation fee collected at application time does not: the applicant is not
+// a customer yet and may never become one. They still handed over cash at the
+// counter and still need paper, so the applicant's own name and address stand
+// in until activation re-points the payment at a real customer record.
+//
+// Imported Access rows remain excluded by the receipt_number test - no receipt
+// was ever issued for those, so there is nothing to reprint.
+export async function loadReceipt(client: PoolClient, paymentId: number) {
   const result = await client.query(
     `
     SELECT
@@ -90,16 +99,20 @@ async function loadReceipt(client: PoolClient, paymentId: number) {
       pay.void_reason,
       CONCAT_WS(' ', voider.first_name, voider.last_name) AS voided_by_name,
       c.customer_id,
-      c.name AS customer_name,
-      c.address AS customer_address,
-      c.telephone AS customer_telephone
+      pay.application_id,
+      COALESCE(c.name, app.name) AS customer_name,
+      COALESCE(c.address, app.address) AS customer_address,
+      COALESCE(c.telephone, app.telephone) AS customer_telephone
     FROM public.payments pay
-    INNER JOIN public.customers c
+    LEFT JOIN public.customers c
       ON pay.customer_id = c.customer_id
+    LEFT JOIN public.applications app
+      ON pay.application_id = app.application_id
     LEFT JOIN public.employees voider
       ON voider.employee_id = pay.voided_by_employee_id
     WHERE pay.payment_id = $1
-      AND pay.receipt_number IS NOT NULL;
+      AND pay.receipt_number IS NOT NULL
+      AND (c.customer_id IS NOT NULL OR app.application_id IS NOT NULL);
     `,
     [paymentId]
   );
@@ -411,11 +424,11 @@ paymentsRouter.post(
       await client.query("BEGIN");
       const paymentResult = await client.query(
         `
-        SELECT pay.payment_id, pay.customer_id, pay.payment_type,
-          pay.amount_paid, pay.receipt_number, pay.recorded_by_employee_id,
-          pay.voided_at, c.status AS customer_status
+        SELECT pay.payment_id, pay.customer_id, pay.application_id,
+          pay.payment_type, pay.amount_paid, pay.receipt_number,
+          pay.recorded_by_employee_id, pay.voided_at, c.status AS customer_status
         FROM public.payments pay
-        JOIN public.customers c ON c.customer_id = pay.customer_id
+        LEFT JOIN public.customers c ON c.customer_id = pay.customer_id
         WHERE pay.payment_id = $1
         FOR UPDATE OF pay, c;
         `,
@@ -471,12 +484,17 @@ paymentsRouter.post(
         [paymentId, employee.employeeId, reason]
       );
 
-      let customerStatus = payment.customer_status as string;
+      // An installation fee still sitting against an application has no
+      // customer and therefore no balance to recompute. Everything below this
+      // point is about a customer account, so it is skipped for those.
+      let customerStatus = payment.customer_status as string | null;
       let statusHistory = null;
-      const billingResult = await client.query(
-        `SELECT outstanding_balance FROM public.customer_billing_status WHERE customer_id = $1;`,
-        [payment.customer_id]
-      );
+      const billingResult = payment.customer_id === null
+        ? { rows: [] as { outstanding_balance?: string }[] }
+        : await client.query(
+            `SELECT outstanding_balance FROM public.customer_billing_status WHERE customer_id = $1;`,
+            [payment.customer_id]
+          );
       const outstandingBalance = Number(billingResult.rows[0]?.outstanding_balance ?? 0);
 
       // If the reversed payment had qualified the account for approval, return
@@ -734,7 +752,11 @@ paymentsRouter.get("/payments/daily-summary", requireAuth, requireAdmin, async (
             pay.location,
             pay.legacy_customer_id,
             c.customer_id,
-            c.name AS customer_name,
+            pay.application_id,
+            -- An installation fee taken at the counter before activation has
+            -- no customer to name, so the ledger shows the applicant instead
+            -- of an empty row the office cannot account for.
+            COALESCE(c.name, app.name) AS customer_name,
             CASE
               WHEN pay.recorded_by_employee_id IS NULL THEN 'imported'
               ELSE 'new_system'
@@ -742,6 +764,8 @@ paymentsRouter.get("/payments/daily-summary", requireAuth, requireAdmin, async (
           FROM public.payments pay
           LEFT JOIN public.customers c
             ON pay.customer_id = c.customer_id
+          LEFT JOIN public.applications app
+            ON pay.application_id = app.application_id
           ${whereClause}
           ORDER BY pay.recorded_at DESC NULLS LAST, pay.payment_id DESC
           LIMIT $4

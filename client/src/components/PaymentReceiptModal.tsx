@@ -96,7 +96,11 @@ export type PaymentReceipt = {
   location: string | null;
   cashier_name: string | null;
   note: string | null;
-  customer_id: number;
+  // Null while an installation fee is still sitting against an application:
+  // the money is collected but the applicant is not a customer yet. Activation
+  // fills this in on the same row.
+  customer_id: number | null;
+  application_id: number | null;
   customer_name: string | null;
   customer_address: string | null;
   customer_telephone: string | null;
@@ -269,7 +273,13 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
 
           <div className="receipt-fields mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <ReceiptField label="Received from" value={displayPayment.customer_name || "Unnamed customer"} />
-            <ReceiptField label="Customer ID" value={String(displayPayment.customer_id)} />
+            {/* An applicant has no customer number to print yet, so the slip
+                carries the application number they can quote instead. */}
+            {displayPayment.customer_id !== null ? (
+              <ReceiptField label="Customer ID" value={String(displayPayment.customer_id)} />
+            ) : (
+              <ReceiptField label="Application" value={displayPayment.application_id !== null ? `#${displayPayment.application_id}` : "—"} />
+            )}
             <ReceiptField label="Payment type" value={displayPayment.payment_type} />
             <ReceiptField label="Month paid for" value={formatMonth(displayPayment.month_paid)} />
             <ReceiptField label="Cashier" value={firstName(displayPayment.cashier_name)} />

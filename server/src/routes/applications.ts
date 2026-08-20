@@ -3,6 +3,7 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { pool } from "../db.js";
 import { insertStatusHistory } from "./accounts.js";
+import { loadReceipt } from "./payments.js";
 
 // Application workflow API, including the MVP 3 activation handoff from an
 // approved application to an active customer account.
@@ -86,6 +87,8 @@ applicationsRouter.get("/packages", requireAuth, async (_req, res) => {
         package_id,
         name,
         default_monthly_charge,
+        -- Drives the installation fee prefilled on the New Application form.
+        installation_fee,
         service_type,
         plan_tier,
         speed_mbps
@@ -190,6 +193,10 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         linked.name AS linked_customer_name,
         CONCAT_WS(' ', confirmer.first_name, confirmer.last_name)
           AS match_confirmed_by_name,
+        fee.payment_id AS installation_payment_id,
+        fee.amount_paid AS installation_amount,
+        fee.receipt_number AS installation_receipt_number,
+        (fee.voided_at IS NOT NULL) AS installation_voided,
         (
           a.status = ANY($3::TEXT[])
           AND a.application_date <
@@ -204,6 +211,16 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         ON a.customer_id = linked.customer_id
       LEFT JOIN public.employees confirmer
         ON a.match_confirmed_by_employee_id = confirmer.employee_id
+      -- The installation fee taken with this application, if any. A live one
+      -- is preferred over a voided one so the drawer shows what is actually
+      -- outstanding; the partial unique index guarantees at most one live row.
+      LEFT JOIN LATERAL (
+        SELECT payment_id, amount_paid, receipt_number, voided_at
+        FROM public.payments
+        WHERE application_id = a.application_id
+        ORDER BY voided_at NULLS FIRST, payment_id
+        LIMIT 1
+      ) fee ON TRUE
       WHERE ${viewClause}
         AND (
           $1 = ''
@@ -284,6 +301,11 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
   const monthlyFeeText = String(req.body.monthlyFee ?? "").trim();
   const applicationDate = cleanText(req.body.applicationDate);
   const additionalBoxText = String(req.body.additionalBox ?? "0").trim();
+  // Cash taken across the counter when the form is filled in. The client
+  // prefills it from the chosen package; an empty value or a zero means no
+  // money changed hands and no payment is recorded.
+  const installationFeeSupplied = req.body.installationFee !== undefined;
+  const installationFeeText = String(req.body.installationFee ?? "").trim();
 
   if (!name || !address || !telephone) {
     return res.status(400).json({
@@ -312,18 +334,44 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
   if (applicationDate && !/^\d{4}-\d{2}-\d{2}$/.test(applicationDate)) {
     return res.status(400).json({ error: "Enter a valid application date." });
   }
+  if (
+    installationFeeSupplied &&
+    installationFeeText !== "" &&
+    (!/^\d+(\.\d{1,2})?$/.test(installationFeeText) ||
+      Number(installationFeeText) > 999999999999)
+  ) {
+    return res.status(400).json({ error: "Enter a valid installation fee." });
+  }
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     // Validate the foreign key explicitly so users receive a useful 400 error.
     const packageResult = await client.query(
-      `SELECT package_id FROM public.packages WHERE package_id = $1;`,
+      `SELECT package_id, installation_fee
+       FROM public.packages WHERE package_id = $1;`,
       [Number(packageIdText)]
     );
     if (packageResult.rows.length === 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Selected package does not exist." });
+    }
+
+    // The package fee is the default; an explicit value from the counter wins,
+    // including an explicit blank when nothing was collected.
+    const feeText = installationFeeSupplied
+      ? installationFeeText
+      : String(packageResult.rows[0].installation_fee ?? "").trim();
+    const collectingFee = feeText !== "" && Number(feeText) > 0;
+
+    // A payment has to say which office took it. Branch staff without an
+    // office assigned cannot record money anywhere in this application, and
+    // silently dropping the fee would lose it.
+    if (collectingFee && employee.role === "branch" && employee.locationId === null) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "Your employee account needs a branch before recording the installation fee.",
+      });
     }
 
     const result = await client.query(
@@ -390,8 +438,90 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
       ]
     );
 
+    // The installation fee is collected when the application is taken, so it
+    // belongs in today's takings for the office that took it - not in the
+    // takings for whatever later day somebody gets around to activating the
+    // account. It hangs off the application until then.
+    //
+    // payment_date is today in Jamaica even when the application itself is
+    // backdated, because it is the day the money arrived. That matches the
+    // rule for every other payment: the date is what happened, and a
+    // discrepancy goes in the note rather than in the date.
+    let installationPayment = null;
+    if (collectingFee) {
+      const paymentResult = await client.query(
+        `
+        INSERT INTO public.payments (
+          application_id,
+          payment_type,
+          amount_paid,
+          payment_date,
+          location,
+          cashier_name,
+          recorded_by_employee_id,
+          location_id,
+          note,
+          recorded_at
+        )
+        VALUES (
+          $1, 'Installation Fee', $2,
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+          $3, $4, $5, $6, $7, CURRENT_TIMESTAMP
+        )
+        RETURNING payment_id;
+        `,
+        [
+          application.application_id,
+          feeText,
+          employee.locationName ?? "Unassigned location",
+          `${employee.firstName} ${employee.lastName}`,
+          employee.employeeId,
+          employee.locationId,
+          `Installation fee collected with application #${application.application_id}`,
+        ]
+      );
+      const paymentId = Number(paymentResult.rows[0].payment_id);
+
+      // Separate statement on purpose: an UPDATE in the same WITH clause as the
+      // INSERT reads the pre-insert snapshot and matches nothing.
+      await client.query(
+        `
+        UPDATE public.payments
+        SET receipt_number =
+          'SPCL-' || TO_CHAR(payment_date, 'YYYYMMDD') || '-' ||
+          LPAD(payment_id::TEXT, 9, '0')
+        WHERE payment_id = $1;
+        `,
+        [paymentId]
+      );
+
+      // No ledger entry. Installation is one-off work with no matching charge
+      // on the account, exactly as when a cashier records one against an
+      // existing customer - crediting it would hand somebody a balance they
+      // were never owed. And there is no account to credit yet regardless.
+      await client.query(
+        `
+        INSERT INTO public.audit_logs (
+          employee_id, actor_name, action, entity_type, entity_id,
+          field_name, old_value, new_value, reason, occurred_at
+        )
+        VALUES ($1, $2, 'Recorded installation fee with application', 'payment',
+          $3, 'amount_paid', NULL, $4, $5, CURRENT_TIMESTAMP);
+        `,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(paymentId),
+          feeText,
+          `Collected with application #${application.application_id}`,
+        ]
+      );
+
+      installationPayment = await loadReceipt(client, paymentId);
+    }
+
     await client.query("COMMIT");
-    res.status(201).json({ application });
+    res.status(201).json({ application, installationPayment });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Could not create application:", error);
@@ -671,6 +801,47 @@ applicationsRouter.patch(
         ]
       );
 
+      // Hand the installation fee to the account it was always for. The same
+      // payment row is re-pointed rather than copied, so the receipt number
+      // the applicant is holding stays valid, the day's takings do not move,
+      // and it lands in the customer's history as their first payment - dated
+      // when the money was actually taken.
+      //
+      // No ledger entry is posted here for the same reason none was posted
+      // when it was collected: installation has no matching charge.
+      const installationResult = await client.query(
+        `
+        UPDATE public.payments
+        SET customer_id = $1
+        WHERE application_id = $2
+          AND customer_id IS NULL
+          AND voided_at IS NULL
+        RETURNING payment_id, amount_paid, receipt_number;
+        `,
+        [customerId, applicationId]
+      );
+      const installationPayment = installationResult.rows[0] ?? null;
+
+      if (installationPayment) {
+        await client.query(
+          `
+          INSERT INTO public.audit_logs (
+            employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason, occurred_at
+          )
+          VALUES ($1, $2, 'Assigned installation fee to activated customer',
+            'payment', $3, 'customer_id', NULL, $4, $5, CURRENT_TIMESTAMP);
+          `,
+          [
+            employee.employeeId,
+            `${employee.firstName} ${employee.lastName}`,
+            String(installationPayment.payment_id),
+            String(customerId),
+            `Collected on application #${applicationId}; receipt ${installationPayment.receipt_number}`,
+          ]
+        );
+      }
+
       await client.query(
         `
         INSERT INTO public.audit_logs (
@@ -695,7 +866,13 @@ applicationsRouter.patch(
       // Customer creation/linking, application servicing, history, and both
       // audit entries succeed or roll back together.
       await client.query("COMMIT");
-      res.json({ applicationId, customerId, createdCustomer, status: "serviced" });
+      res.json({
+        applicationId,
+        customerId,
+        createdCustomer,
+        status: "serviced",
+        installationPayment,
+      });
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Could not activate application:", error);
@@ -796,6 +973,45 @@ applicationsRouter.patch(
         [customerId, employee.employeeId, note, applicationId]
       );
 
+      // The one thing that does follow the applicant to the existing customer:
+      // money already taken from them. If the counter collected an installation
+      // fee on this application, it moves to that customer's payment history
+      // rather than sitting against an application nobody will ever activate.
+      // Nothing is charged and no balance moves - installation never posts to
+      // the ledger.
+      const installationResult = await client.query(
+        `
+        UPDATE public.payments
+        SET customer_id = $1
+        WHERE application_id = $2
+          AND customer_id IS NULL
+          AND voided_at IS NULL
+        RETURNING payment_id, amount_paid, receipt_number;
+        `,
+        [customerId, applicationId]
+      );
+      const installationPayment = installationResult.rows[0] ?? null;
+
+      if (installationPayment) {
+        await client.query(
+          `
+          INSERT INTO public.audit_logs (
+            employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason, occurred_at
+          )
+          VALUES ($1, $2, 'Assigned installation fee to matched customer',
+            'payment', $3, 'customer_id', NULL, $4, $5, CURRENT_TIMESTAMP);
+          `,
+          [
+            employee.employeeId,
+            `${employee.firstName} ${employee.lastName}`,
+            String(installationPayment.payment_id),
+            String(customerId),
+            `Collected on application #${applicationId}; receipt ${installationPayment.receipt_number}`,
+          ]
+        );
+      }
+
       await client.query(
         `
         INSERT INTO public.audit_logs (
@@ -821,6 +1037,7 @@ applicationsRouter.patch(
         customerId,
         customerName: customerResult.rows[0].name,
         status: "confirmed_existing",
+        installationPayment,
       });
     } catch (error) {
       await client.query("ROLLBACK");
@@ -892,6 +1109,41 @@ applicationsRouter.patch(
         `,
         [applicationId]
       );
+
+      // A confirmation against the wrong person also put this application's
+      // installation fee on the wrong customer's history. Take it back to the
+      // application, where the next reviewer's decision will place it again.
+      const detachedResult = await client.query(
+        `
+        UPDATE public.payments
+        SET customer_id = NULL
+        WHERE application_id = $1
+          AND voided_at IS NULL
+        RETURNING payment_id, receipt_number;
+        `,
+        [applicationId]
+      );
+      const detachedPayment = detachedResult.rows[0] ?? null;
+
+      if (detachedPayment) {
+        await client.query(
+          `
+          INSERT INTO public.audit_logs (
+            employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason, occurred_at
+          )
+          VALUES ($1, $2, 'Removed installation fee from reopened match',
+            'payment', $3, 'customer_id', $4, NULL, $5, CURRENT_TIMESTAMP);
+          `,
+          [
+            employee.employeeId,
+            `${employee.firstName} ${employee.lastName}`,
+            String(detachedPayment.payment_id),
+            String(application.customer_id ?? ""),
+            reason,
+          ]
+        );
+      }
 
       await client.query(
         `
@@ -984,6 +1236,52 @@ applicationsRouter.patch(
         [status, reason, employee.employeeId, applicationId]
       );
 
+      // An application that never becomes an account cannot keep the money it
+      // took. Voiding is the same reversal an admin would apply by hand: the
+      // receipt survives as evidence, stamped VOIDED, and the amount drops out
+      // of the day's takings and every report. No ledger reversal is needed
+      // because installation never posted a credit in the first place.
+      //
+      // The office still has to hand the cash back at the counter. This records
+      // that the collection is no longer good, not that a refund happened.
+      const voidReason =
+        `Application #${applicationId} ${status}` +
+        (reason ? `: ${reason}` : "; installation fee no longer collected");
+      const voidedResult = await client.query(
+        `
+        UPDATE public.payments
+        SET
+          voided_at = CURRENT_TIMESTAMP,
+          voided_by_employee_id = $1,
+          void_reason = $2
+        WHERE application_id = $3
+          AND voided_at IS NULL
+        RETURNING payment_id, amount_paid, receipt_number;
+        `,
+        [employee.employeeId, voidReason, applicationId]
+      );
+      const voidedPayment = voidedResult.rows[0] ?? null;
+
+      if (voidedPayment) {
+        await client.query(
+          `
+          INSERT INTO public.audit_logs (
+            employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason, occurred_at
+          )
+          VALUES ($1, $2, 'Voided installation fee with closed application',
+            'payment', $3, 'payment_status', 'active', 'voided', $4,
+            CURRENT_TIMESTAMP);
+          `,
+          [
+            employee.employeeId,
+            `${employee.firstName} ${employee.lastName}`,
+            String(voidedPayment.payment_id),
+            voidReason,
+          ]
+        );
+      }
+
       await client.query(
         `
         INSERT INTO public.audit_logs (
@@ -1005,7 +1303,7 @@ applicationsRouter.patch(
       );
 
       await client.query("COMMIT");
-      res.json({ applicationId, status });
+      res.json({ applicationId, status, voidedPayment });
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Could not close application:", error);

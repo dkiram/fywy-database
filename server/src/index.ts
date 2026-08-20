@@ -2160,10 +2160,18 @@ app.patch(
       // to that point the assigned billing date is just a plan and moving it
       // costs nothing, but the first charge is a bill the customer has been
       // given, and changing the date it was derived from would contradict it.
+      //
+      // The installation fee collected on their application does not count.
+      // Every newly activated customer carries one from the moment they are
+      // created, so counting it would shut this window before anybody could
+      // use it - and it says nothing about billing, which is what the rule is
+      // actually protecting: it is one-off work, posts nothing to the ledger,
+      // and is dated before the activation date rather than derived from it.
       const historyResult = await client.query(
         `SELECT
             (SELECT count(*) FROM public.payments
-              WHERE customer_id = $1)::INTEGER AS payments,
+              WHERE customer_id = $1
+                AND application_id IS NULL)::INTEGER AS payments,
             (SELECT count(*) FROM public.account_ledger_entries
               WHERE customer_id = $1
                 AND entry_type = 'monthly_charge')::INTEGER AS charges,

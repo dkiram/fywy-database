@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthContext";
+import PaymentReceiptModal, { type PaymentReceipt } from "../components/PaymentReceiptModal";
 import { apiFetch } from "../lib/api";
 
 type ApplicationStatus =
@@ -45,6 +46,13 @@ type ApplicationRecord = {
   closure_reason: string | null;
   match_confirmed_at: string | null;
   match_confirmed_by_name: string | null;
+  // The installation fee collected when this application was taken, if any.
+  // It follows the application: activation moves it onto the new customer's
+  // record, closing the application voids it.
+  installation_payment_id: number | null;
+  installation_amount: string | null;
+  installation_receipt_number: string | null;
+  installation_voided: boolean;
   is_overdue: boolean;
 };
 
@@ -61,6 +69,7 @@ type Package = {
   package_id: number;
   name: string;
   default_monthly_charge: string | null;
+  installation_fee: string | null;
   service_type: "cable" | "internet" | "cable_internet";
   plan_tier: string | null;
   speed_mbps: number | null;
@@ -100,6 +109,9 @@ type NewApplicationForm = {
   idNumber: string;
   packageId: string;
   monthlyFee: string;
+  // Prefilled from the package and editable at the counter. Blank or zero
+  // means nothing was collected, and no payment is recorded.
+  installationFee: string;
   applicationDate: string;
   adultChannel: boolean;
   additionalBox: string;
@@ -147,6 +159,7 @@ function initialNewApplication(): NewApplicationForm {
     idNumber: "",
     packageId: "",
     monthlyFee: "",
+    installationFee: "",
     applicationDate: jamaicaToday(),
     adultChannel: false,
     additionalBox: "0",
@@ -173,6 +186,9 @@ function ApplicationsPage() {
   const [noticeCustomerId, setNoticeCustomerId] = useState<number | null>(null);
 
   const [selected, setSelected] = useState<ApplicationRecord | null>(null);
+  // Shown right after an installation fee is collected, and reprintable from
+  // the application drawer afterwards.
+  const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [newForm, setNewForm] = useState<NewApplicationForm>(
     initialNewApplication
@@ -320,6 +336,20 @@ function ApplicationsPage() {
     setDecision("reopen-match");
   };
 
+  // Reprints the slip for an installation fee already collected. The receipt
+  // route serves applicant-stage payments as well as customer ones.
+  const openInstallationReceipt = async (paymentId: number) => {
+    try {
+      setError("");
+      const response = await apiFetch(`/api/payments/${paymentId}/receipt`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load receipt.");
+      setReceipt(data.payment);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load receipt.");
+    }
+  };
+
   const openCloseDecision = (application: ApplicationRecord) => {
     setSelected(application);
     setCloseStatus("cancelled");
@@ -346,8 +376,16 @@ function ApplicationsPage() {
       setNewForm(initialNewApplication());
       setView("active");
       setPage(1);
-      setNotice(`Application #${data.application.application_id} was created.`);
+      setNotice(
+        data.installationPayment
+          ? `Application #${data.application.application_id} was created and an installation fee of ${formatCurrency(data.installationPayment.amount_paid)} was recorded.`
+          : `Application #${data.application.application_id} was created.`
+      );
       setNoticeCustomerId(null);
+      // The applicant paid cash and is standing at the counter, so put the
+      // receipt on screen straight away rather than making the clerk find the
+      // payment on the daily ledger to print it.
+      if (data.installationPayment) setReceipt(data.installationPayment);
       await loadApplications();
     } catch (saveError) {
       setFormError(
@@ -393,10 +431,13 @@ function ApplicationsPage() {
       }
       setDecision(null);
       setSelected(null);
+      const feeNote = data.installationPayment
+        ? ` The ${formatCurrency(data.installationPayment.amount_paid)} installation fee is now their first payment.`
+        : "";
       setNotice(
-        data.createdCustomer
+        (data.createdCustomer
           ? `Application activated. Customer #${data.customerId} was created.`
-          : `Application linked to existing customer #${data.customerId}.`
+          : `Application linked to existing customer #${data.customerId}.`) + feeNote
       );
       setNoticeCustomerId(data.customerId);
       await loadApplications();
@@ -434,7 +475,10 @@ function ApplicationsPage() {
       setDecision(null);
       setSelected(null);
       setNotice(
-        `Confirmed as customer #${data.customerId}. The application has left the review queue; nothing about the customer was changed.`
+        `Confirmed as customer #${data.customerId}. The application has left the review queue; nothing about the customer was changed.` +
+          (data.installationPayment
+            ? ` The ${formatCurrency(data.installationPayment.amount_paid)} installation fee collected on it moved to their payment history.`
+            : "")
       );
       setNoticeCustomerId(data.customerId);
       await loadApplications();
@@ -501,7 +545,12 @@ function ApplicationsPage() {
       }
       setDecision(null);
       setSelected(null);
-      setNotice(`Application marked ${closeStatus}.`);
+      setNotice(
+        `Application marked ${closeStatus}.` +
+          (data.voidedPayment
+            ? ` The ${formatCurrency(data.voidedPayment.amount_paid)} installation fee was voided — return the cash at the counter.`
+            : "")
+      );
       setNoticeCustomerId(null);
       await loadApplications();
     } catch (saveError) {
@@ -745,7 +794,12 @@ function ApplicationsPage() {
                   onChange={(event) => {
                     const packageId = event.target.value;
                     const selectedPackage = packages.find((item) => String(item.package_id) === packageId);
-                    setNewForm({ ...newForm, packageId, monthlyFee: selectedPackage?.default_monthly_charge ?? newForm.monthlyFee });
+                    setNewForm({
+                      ...newForm,
+                      packageId,
+                      monthlyFee: selectedPackage?.default_monthly_charge ?? newForm.monthlyFee,
+                      installationFee: selectedPackage?.installation_fee ?? newForm.installationFee,
+                    });
                   }}
                   className={inputClass}
                 >
@@ -759,6 +813,20 @@ function ApplicationsPage() {
                 <input type="checkbox" checked={newForm.adultChannel} onChange={(event) => setNewForm({ ...newForm, adultChannel: event.target.checked })} className="h-4 w-4 accent-primary" />
                 Adult channel requested
               </label>
+            </FormSection>
+
+            {/* Money taken at the counter, recorded here so it lands in today's
+                takings instead of waiting for somebody to activate the account
+                days later. Clearing the field records no payment. */}
+            <FormSection title="Installation fee collected">
+              <Field label="Amount received today (J$)">
+                <input min="0" step="0.01" type="number" value={newForm.installationFee} onChange={(event) => setNewForm({ ...newForm, installationFee: event.target.value })} className={inputClass} placeholder="0.00" />
+              </Field>
+              <div className="self-end rounded-lg bg-surface-container-low px-4 py-3 text-xs text-on-surface-variant">
+                {Number(newForm.installationFee) > 0
+                  ? "Recorded as a payment today with a printable receipt. It becomes this customer's first payment on activation, and is voided if the application is cancelled."
+                  : "Nothing is recorded. Clear this only when the applicant has not paid yet."}
+              </div>
             </FormSection>
 
             {formError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{formError}</p>}
@@ -818,6 +886,25 @@ function ApplicationsPage() {
                 <Detail label="Port number" value={activeApplication.port_number} />
               </div>
             </DrawerSection>
+
+            {activeApplication.installation_payment_id !== null && (
+              <DrawerSection title="Installation fee" icon="payments">
+                <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+                  <Detail label="Amount collected" value={formatCurrency(activeApplication.installation_amount)} />
+                  <Detail label="Receipt" value={activeApplication.installation_receipt_number} />
+                </div>
+                <p className="mt-4 text-xs text-on-surface-variant">
+                  {activeApplication.installation_voided
+                    ? "Voided. It no longer counts towards any day's takings."
+                    : activeApplication.customer_id
+                      ? `Now the first payment on customer #${activeApplication.customer_id}.`
+                      : "Held against this application. It moves onto the customer record when this application is activated, and is voided if it is not."}
+                </p>
+                <button type="button" onClick={() => openInstallationReceipt(activeApplication.installation_payment_id!)} className="mt-3 text-sm font-medium text-primary underline">
+                  {activeApplication.installation_voided ? "View voided receipt" : "Reprint receipt"}
+                </button>
+              </DrawerSection>
+            )}
 
             {activeApplication.suggested_customer_id && (
               <div className="rounded-xl border border-secondary/20 bg-secondary-container/50 p-4">
@@ -953,6 +1040,9 @@ function ApplicationsPage() {
               <li className="flex gap-2"><span className="material-symbols-outlined text-base text-tertiary">check</span>It records which customer it turned out to be, and who decided that.</li>
               <li className="flex gap-2"><span className="material-symbols-outlined text-base text-on-surface-variant">block</span>No new customer is created, and nobody is charged anything.</li>
               <li className="flex gap-2"><span className="material-symbols-outlined text-base text-on-surface-variant">block</span>Customer {matchCustomer ? `#${matchCustomer.customer_id}` : "chosen here"} is not modified — same address, package, rate and balance as now.</li>
+              {activeApplication.installation_payment_id !== null && !activeApplication.installation_voided && (
+                <li className="flex gap-2"><span className="material-symbols-outlined text-base text-tertiary">check</span>The {formatCurrency(activeApplication.installation_amount)} already collected on this application moves to their payment history. Their balance does not change — installation fees never post to the ledger.</li>
+              )}
             </ul>
             <Field label="Optional note"><textarea rows={3} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="How you established it is the same person..." /></Field>
             {decisionError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{decisionError}</p>}
@@ -978,6 +1068,17 @@ function ApplicationsPage() {
         <Modal title="Application not serviced" onClose={() => !saving && setDecision(null)}>
           <div className="space-y-5">
             <p className="text-sm text-on-surface-variant">Record why this application should leave the active queue.</p>
+            {/* The money is the part somebody has to act on in the real world,
+                so it is said plainly before the button is pressed rather than
+                reported afterwards. */}
+            {activeApplication.installation_payment_id !== null && !activeApplication.installation_voided && (
+              <div className="rounded-xl border border-error/20 bg-error/5 p-4 text-sm">
+                <p className="font-semibold text-error">This voids the {formatCurrency(activeApplication.installation_amount)} installation fee</p>
+                <p className="mt-1 text-on-surface-variant">
+                  Receipt {activeApplication.installation_receipt_number} drops out of the day&apos;s takings and every report. The receipt stays in history marked voided. Returning the cash at the counter is a separate step.
+                </p>
+              </div>
+            )}
             <Field label="Outcome" required>
               <select value={closeStatus} onChange={(event) => setCloseStatus(event.target.value as "cancelled" | "declined")} className={inputClass}>
                 <option value="cancelled">Cancelled by applicant</option>
@@ -990,6 +1091,8 @@ function ApplicationsPage() {
           </div>
         </Modal>
       )}
+
+      {receipt && <PaymentReceiptModal payment={receipt} onClose={() => setReceipt(null)} onVoided={() => loadApplications()} onDeleted={() => { setReceipt(null); loadApplications(); }} />}
     </div>
   );
 }
