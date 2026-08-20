@@ -64,6 +64,23 @@ function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function jamaicaToday() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Jamaica",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function isValidDateOnly(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 // Reject malformed route IDs before they are passed to PostgreSQL.
 function parseCustomerId(req: Request, res: Response) {
   const value = req.params.customerId;
@@ -514,6 +531,80 @@ accountsRouter.get(
     } catch (error) {
       console.error("Could not load account history:", error);
       res.status(500).json({ error: "Could not load account history." });
+    }
+  }
+);
+
+// Add an immutable, dated note to the customer timeline. The selected date is
+// the business date of the event; created_at separately records when staff
+// entered it into SPCL.
+accountsRouter.post(
+  "/customers/:customerId/notes",
+  requireAuth,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+
+    const note = cleanText(req.body.note);
+    const noteDate = cleanText(req.body.noteDate);
+
+    if (note.length < 3 || note.length > 2000) {
+      return res.status(400).json({
+        error: "A note between 3 and 2,000 characters is required.",
+      });
+    }
+    if (!isValidDateOnly(noteDate)) {
+      return res.status(400).json({ error: "Choose a valid note date." });
+    }
+    if (noteDate > jamaicaToday()) {
+      return res.status(400).json({ error: "The note date cannot be in the future." });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const noteResult = await client.query(
+        `INSERT INTO public.customer_notes (
+           customer_id, note_date, note, created_by_employee_id
+         )
+         SELECT customer_id, $2::DATE, $3, $4
+         FROM public.customers
+         WHERE customer_id = $1
+         RETURNING customer_note_id, customer_id, note_date, note,
+           created_by_employee_id, created_at;`,
+        [customerId, noteDate, note, employee.employeeId]
+      );
+
+      const customerNote = noteResult.rows[0];
+      if (!customerNote) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Customer not found." });
+      }
+
+      await client.query(
+        `INSERT INTO public.audit_logs (
+           employee_id, actor_name, action, entity_type, entity_id,
+           field_name, old_value, new_value, reason, occurred_at
+         ) VALUES ($1, $2, 'Added customer note', 'customer', $3,
+           'note', NULL, $4, $5, CURRENT_TIMESTAMP);`,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(customerId),
+          note,
+          `Note dated ${noteDate}`,
+        ]
+      );
+
+      await client.query("COMMIT");
+      res.status(201).json({ customerNote });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not add customer note:", error);
+      res.status(500).json({ error: "Could not add customer note." });
+    } finally {
+      client.release();
     }
   }
 );

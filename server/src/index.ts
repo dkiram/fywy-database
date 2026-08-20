@@ -497,6 +497,33 @@ app.get("/api/customers/:customerId", requireAuth, async (req, res) => {
         c.activation_date,
         c.deactivation_date,
         c.reactivation_date,
+        GREATEST(
+          c.deactivation_date,
+          (
+            SELECT MAX(history.effective_date)
+            FROM public.account_status_history history
+            WHERE history.customer_id = c.customer_id
+              AND history.from_status = 'active'
+              AND history.to_status = 'disconnected'
+          )
+        ) AS last_disconnected_on,
+        COALESCE(
+          (
+            SELECT MAX(history.effective_date)
+            FROM public.account_status_history history
+            WHERE history.customer_id = c.customer_id
+              AND history.from_status = 'pending_reconnection'
+              AND history.to_status = 'active'
+          ),
+          -- Access filled re_activation_date with the original activation date
+          -- on most accounts. Treat it as a legacy reconnection only when it
+          -- actually follows a recorded disconnection.
+          CASE
+            WHEN c.reactivation_date > c.deactivation_date
+            THEN c.reactivation_date
+            ELSE NULL
+          END
+        ) AS last_reconnected_on,
         CASE
           -- Only active, billable accounts have an upcoming recurring charge.
           WHEN c.status = 'active'
@@ -802,7 +829,7 @@ app.get("/api/audit-logs", requireAuth, async (req, res) => {
  *
  * The shape of each row is deliberately flat and pre-formatted — kind, title,
  * detail, reason, actor — so the client renders a timeline without needing to
- * know which of nine tables a given line came from.
+ * know which source table a given line came from.
  *
  * Paged 25 at a time. Filtering happens HERE rather than in the client: if the
  * client filtered a page it had already been given, asking for "waivers" could
@@ -820,6 +847,7 @@ const ACTIVITY_MAX_PAGE_SIZE = 100;
  */
 const ACTIVITY_FILTERS: Record<string, string[] | null> = {
   all: null,
+  note: ["note"],
   status_change: ["status_change"],
   ticket: ["ticket_opened", "ticket_event"],
   rate_change: ["rate_change"],
@@ -1041,6 +1069,22 @@ app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => 
 
           UNION ALL
 
+          -- Dated manual notes. Interpreting midnight in Jamaica keeps a
+          -- date-only event on its selected day when the browser formats it.
+          SELECT
+              n.note_date::TIMESTAMP AT TIME ZONE 'America/Jamaica',
+              'note',
+              'Customer note',
+              n.note,
+              NULL,
+              CONCAT_WS(' ', e.first_name, e.last_name),
+              n.customer_note_id::TEXT
+          FROM public.customer_notes n
+          LEFT JOIN public.employees e ON e.employee_id = n.created_by_employee_id
+          WHERE n.customer_id = $1
+
+          UNION ALL
+
           -- Staff edits from the audit trail. actor_name is a snapshot taken
           -- at write time, so an old entry still names the right person after
           -- they leave or change their name.
@@ -1073,6 +1117,9 @@ app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => 
           LEFT JOIN public.employees at_e
             ON at_e.employee_id = al.employee_id
           WHERE al.entity_type <> 'payment'
+            -- Notes have their own richer timeline row above. The audit entry
+            -- remains globally searchable without appearing twice here.
+            AND al.action <> 'Added customer note'
             -- An admin editing this customer belongs on the timeline. An admin
             -- doing admin things that merely touch the customer does not.
             AND (

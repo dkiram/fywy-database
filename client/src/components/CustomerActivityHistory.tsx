@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 
 type ActivityKind =
+  | "note"
   | "status_change"
   | "rate_change"
   | "ticket_opened"
@@ -35,6 +36,7 @@ type ActivityEntry = {
  * disconnection actually stands out when someone scans the column.
  */
 const KIND_STYLES: Record<ActivityKind, { label: string; icon: string; tone: string }> = {
+  note:          { label: "Note",         icon: "sticky_note_2",     tone: "bg-primary/10 text-primary" },
   status_change: { label: "Status",       icon: "swap_horiz",        tone: "bg-surface-container text-on-surface-variant" },
   rate_change:   { label: "Rate",         icon: "payments",          tone: "bg-surface-container text-on-surface-variant" },
   ticket_opened: { label: "Ticket",       icon: "build",             tone: "bg-surface-container text-on-surface-variant" },
@@ -53,6 +55,7 @@ const KIND_STYLES: Record<ActivityKind, { label: string; icon: string; tone: str
  */
 type ActivityFilter =
   | "all"
+  | "note"
   | "status_change"
   | "ticket"
   | "rate_change"
@@ -63,6 +66,7 @@ type ActivityFilter =
 
 const FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "all",           label: "Everything" },
+  { value: "note",          label: "Notes" },
   { value: "status_change", label: "Status" },
   { value: "ticket",        label: "Tickets" },
   { value: "rate_change",   label: "Rates" },
@@ -79,6 +83,12 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<ActivityFilter>("all");
+  const [addingNote, setAddingNote] = useState(false);
+  const [note, setNote] = useState("");
+  const [noteDate, setNoteDate] = useState(jamaicaToday());
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Changing the filter throws away the loaded pages and starts again from the
   // top, because the server is paging a different list now.
@@ -112,7 +122,31 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
     return () => {
       cancelled = true;
     };
-  }, [customerId, filter]);
+  }, [customerId, filter, refreshKey]);
+
+  const saveNote = async () => {
+    try {
+      setSavingNote(true);
+      setNoteError("");
+      const response = await apiFetch(`/api/customers/${customerId}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note, noteDate }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not add note.");
+
+      setNote("");
+      setNoteDate(jamaicaToday());
+      setAddingNote(false);
+      setFilter("all");
+      setRefreshKey((current) => current + 1);
+    } catch (saveError) {
+      setNoteError(saveError instanceof Error ? saveError.message : "Could not add note.");
+    } finally {
+      setSavingNote(false);
+    }
+  };
 
   const loadMore = async () => {
     try {
@@ -163,7 +197,7 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
         <div>
           <h2 className="text-lg font-semibold text-on-surface">Account history</h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Status changes, service tickets, rate changes, waivers and staff edits. Payments are on the Payments tab.
+            Notes, status changes, service tickets, rate changes, waivers and staff edits. Payments are on the Payments tab.
           </p>
           {total > 0 && (
             <p className="mt-1 text-xs text-on-surface-variant">
@@ -172,24 +206,92 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1 rounded-lg bg-surface-container p-1">
-          {FILTERS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setFilter(option.value)}
-              aria-pressed={filter === option.value}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-                filter === option.value
-                  ? "bg-surface-container-lowest text-on-surface shadow-sm"
-                  : "text-on-surface-variant"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="flex flex-col items-start gap-3 lg:items-end">
+          <button
+            type="button"
+            onClick={() => {
+              setAddingNote((current) => !current);
+              setNoteError("");
+            }}
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary"
+          >
+            <span className="material-symbols-outlined text-lg">add_notes</span>
+            Add note
+          </button>
+          <div className="flex flex-wrap gap-1 rounded-lg bg-surface-container p-1">
+            {FILTERS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setFilter(option.value)}
+                aria-pressed={filter === option.value}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium ${
+                  filter === option.value
+                    ? "bg-surface-container-lowest text-on-surface shadow-sm"
+                    : "text-on-surface-variant"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {addingNote && (
+        <div className="border-b border-surface-container bg-surface-container-low p-6">
+          <div className="grid gap-4 md:grid-cols-[11rem_1fr]">
+            <label className="text-sm font-semibold text-on-surface">
+              Note date
+              <input
+                type="date"
+                max={jamaicaToday()}
+                value={noteDate}
+                onChange={(event) => setNoteDate(event.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
+              />
+            </label>
+            <label className="text-sm font-semibold text-on-surface">
+              Account note
+              <textarea
+                autoFocus
+                rows={3}
+                minLength={3}
+                maxLength={2000}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="Example: Customer requested account suspension until further notice."
+                className="mt-1.5 w-full resize-y rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
+              />
+            </label>
+          </div>
+          {noteError && (
+            <p className="mt-3 rounded-lg bg-error/10 p-3 text-sm text-error">{noteError}</p>
+          )}
+          <div className="mt-4 flex justify-end gap-3">
+            <button
+              type="button"
+              disabled={savingNote}
+              onClick={() => {
+                setAddingNote(false);
+                setNote("");
+                setNoteError("");
+              }}
+              className="rounded-lg bg-surface-container px-4 py-2 text-sm font-medium text-on-surface-variant disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={savingNote || note.trim().length < 3 || !noteDate}
+              onClick={saveNote}
+              className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-on-primary disabled:opacity-50"
+            >
+              {savingNote ? "Saving..." : "Save note"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {visible.length === 0 ? (
         <p className="p-8 text-sm text-on-surface-variant">
@@ -275,6 +377,17 @@ function formatExact(value: string) {
     timeStyle: "short",
     timeZone: "America/Jamaica",
   });
+}
+
+function jamaicaToday() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Jamaica",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 /**

@@ -30,6 +30,8 @@ type Customer = {
   activation_date: string | null;
   deactivation_date: string | null;
   reactivation_date: string | null;
+  last_disconnected_on: string | null;
+  last_reconnected_on: string | null;
   next_billing_date: string | null;
 
   status: AccountStatus;
@@ -428,6 +430,18 @@ if (error || !customer) {
 
               <div className="flex flex-col gap-4">
                 <DetailRow label="Status" value={customer.status.replace("_", " ")} />
+                {customer.last_disconnected_on && (
+                  <DetailRow
+                    label="Last disconnected"
+                    value={formatDate(customer.last_disconnected_on)}
+                  />
+                )}
+                {customer.last_reconnected_on && (
+                  <DetailRow
+                    label="Last reconnected"
+                    value={formatDate(customer.last_reconnected_on)}
+                  />
+                )}
               
 <div className="flex flex-col gap-2">
   <DetailRow
@@ -523,6 +537,14 @@ if (error || !customer) {
                         status: update.status,
                         deactivation_date: update.deactivation_date,
                         reactivation_date: update.reactivation_date,
+                        last_disconnected_on:
+                          update.status === "disconnected"
+                            ? update.deactivation_date
+                            : current.last_disconnected_on,
+                        last_reconnected_on:
+                          update.status === "active"
+                            ? update.reactivation_date
+                            : current.last_reconnected_on,
                       }
                     : current
                 );
