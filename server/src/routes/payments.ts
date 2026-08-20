@@ -426,11 +426,10 @@ paymentsRouter.post(
         `
         SELECT pay.payment_id, pay.customer_id, pay.application_id,
           pay.payment_type, pay.amount_paid, pay.receipt_number,
-          pay.recorded_by_employee_id, pay.voided_at, c.status AS customer_status
+          pay.recorded_by_employee_id, pay.voided_at
         FROM public.payments pay
-        LEFT JOIN public.customers c ON c.customer_id = pay.customer_id
         WHERE pay.payment_id = $1
-        FOR UPDATE OF pay, c;
+        FOR UPDATE OF pay;
         `,
         [paymentId]
       );
@@ -439,6 +438,22 @@ paymentsRouter.post(
         await client.query("ROLLBACK");
         return res.status(404).json({ error: "Payment not found." });
       }
+
+      // Application installation fees may not have a customer yet. PostgreSQL
+      // cannot lock the nullable side of a LEFT JOIN, so lock the customer in
+      // a second query only when one exists. This preserves the original race
+      // protection for account-status changes without breaking application
+      // payments that legitimately have customer_id = NULL.
+      const customerResult = payment.customer_id === null
+        ? { rows: [] as { status?: string }[] }
+        : await client.query(
+            `SELECT status FROM public.customers
+             WHERE customer_id = $1
+             FOR UPDATE;`,
+            [payment.customer_id]
+          );
+      const customerStatusAtVoid = customerResult.rows[0]?.status ?? null;
+
       // Access imports are historical source evidence and cannot be voided as
       // though they were cashier entries created by this application.
       if (!payment.receipt_number || payment.recorded_by_employee_id === null) {
@@ -487,7 +502,7 @@ paymentsRouter.post(
       // An installation fee still sitting against an application has no
       // customer and therefore no balance to recompute. Everything below this
       // point is about a customer account, so it is skipped for those.
-      let customerStatus = payment.customer_status as string | null;
+      let customerStatus = customerStatusAtVoid as string | null;
       let statusHistory = null;
       const billingResult = payment.customer_id === null
         ? { rows: [] as { outstanding_balance?: string }[] }

@@ -535,7 +535,7 @@ accountsRouter.get(
   }
 );
 
-// Add an immutable, dated note to the customer timeline. The selected date is
+// Add a durable, dated note to the customer timeline. The selected date is
 // the business date of the event; created_at separately records when staff
 // entered it into SPCL.
 accountsRouter.post(
@@ -603,6 +603,105 @@ accountsRouter.post(
       await client.query("ROLLBACK");
       console.error("Could not add customer note:", error);
       res.status(500).json({ error: "Could not add customer note." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// Notes remain permanent, but authenticated staff may correct their date or
+// wording. The original author/creation time stay untouched, edit metadata is
+// stored on the note, and the audit row preserves the before/after content.
+accountsRouter.patch(
+  "/customers/:customerId/notes/:noteId",
+  requireAuth,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+
+    const noteIdText = String(req.params.noteId ?? "");
+    const noteId = Number(noteIdText);
+    if (
+      !/^\d+$/.test(noteIdText) ||
+      !Number.isSafeInteger(noteId) ||
+      noteId <= 0
+    ) {
+      return res.status(400).json({ error: "Invalid note ID." });
+    }
+
+    const note = cleanText(req.body.note);
+    const noteDate = cleanText(req.body.noteDate);
+    if (note.length < 3 || note.length > 2000) {
+      return res.status(400).json({
+        error: "A note between 3 and 2,000 characters is required.",
+      });
+    }
+    if (!isValidDateOnly(noteDate)) {
+      return res.status(400).json({ error: "Choose a valid note date." });
+    }
+    if (noteDate > jamaicaToday()) {
+      return res.status(400).json({ error: "The note date cannot be in the future." });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const currentResult = await client.query(
+        `SELECT customer_note_id, customer_id,
+           TO_CHAR(note_date, 'YYYY-MM-DD') AS note_date, note
+         FROM public.customer_notes
+         WHERE customer_note_id = $1 AND customer_id = $2
+         FOR UPDATE;`,
+        [noteId, customerId]
+      );
+      const currentNote = currentResult.rows[0];
+      if (!currentNote) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Customer note not found." });
+      }
+
+      const currentDate = currentNote.note_date as string;
+      if (currentNote.note === note && currentDate === noteDate) {
+        await client.query("ROLLBACK");
+        return res.json({ customerNote: currentNote, unchanged: true });
+      }
+
+      const updatedResult = await client.query(
+        `UPDATE public.customer_notes
+         SET note_date = $3::DATE,
+             note = $4,
+             updated_by_employee_id = $5,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE customer_note_id = $1 AND customer_id = $2
+         RETURNING customer_note_id, customer_id, note_date, note,
+           created_by_employee_id, created_at,
+           updated_by_employee_id, updated_at;`,
+        [noteId, customerId, noteDate, note, employee.employeeId]
+      );
+
+      await client.query(
+        `INSERT INTO public.audit_logs (
+           employee_id, actor_name, action, entity_type, entity_id,
+           field_name, old_value, new_value, reason, occurred_at
+         ) VALUES ($1, $2, 'Edited customer note', 'customer', $3,
+           'note', $4, $5, $6, CURRENT_TIMESTAMP);`,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(customerId),
+          `${currentDate}: ${currentNote.note}`,
+          `${noteDate}: ${note}`,
+          `Edited customer note #${noteId}`,
+        ]
+      );
+
+      await client.query("COMMIT");
+      res.json({ customerNote: updatedResult.rows[0], unchanged: false });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not edit customer note:", error);
+      res.status(500).json({ error: "Could not edit customer note." });
     } finally {
       client.release();
     }

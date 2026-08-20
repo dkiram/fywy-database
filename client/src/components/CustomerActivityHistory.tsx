@@ -88,6 +88,11 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
   const [noteDate, setNoteDate] = useState(jamaicaToday());
   const [savingNote, setSavingNote] = useState(false);
   const [noteError, setNoteError] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNote, setEditNote] = useState("");
+  const [editNoteDate, setEditNoteDate] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editNoteError, setEditNoteError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Changing the filter throws away the loaded pages and starts again from the
@@ -145,6 +150,35 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
       setNoteError(saveError instanceof Error ? saveError.message : "Could not add note.");
     } finally {
       setSavingNote(false);
+    }
+  };
+
+  const saveNoteEdit = async () => {
+    if (!editingNoteId) return;
+    try {
+      setSavingEdit(true);
+      setEditNoteError("");
+      const response = await apiFetch(
+        `/api/customers/${customerId}/notes/${editingNoteId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note: editNote, noteDate: editNoteDate }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not edit note.");
+
+      setEditingNoteId(null);
+      setEditNote("");
+      setEditNoteDate("");
+      setRefreshKey((current) => current + 1);
+    } catch (saveError) {
+      setEditNoteError(
+        saveError instanceof Error ? saveError.message : "Could not edit note."
+      );
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -211,6 +245,7 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
             type="button"
             onClick={() => {
               setAddingNote((current) => !current);
+              setEditingNoteId(null);
               setNoteError("");
             }}
             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary"
@@ -304,6 +339,8 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
           {visible.map((entry, index) => {
             const style = KIND_STYLES[entry.kind] ?? KIND_STYLES.staff_edit;
             const isLast = index === visible.length - 1;
+            const isEditingNote =
+              entry.kind === "note" && editingNoteId === entry.reference_id;
 
             return (
               <li key={`${entry.kind}-${entry.reference_id}-${entry.occurred_at}-${index}`} className="flex gap-4">
@@ -319,23 +356,98 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
                 <div className={isLast ? "flex-1 pb-1" : "flex-1 pb-6"}>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <p className="font-medium text-on-surface">{entry.title}</p>
-                    <time
-                      dateTime={entry.occurred_at}
-                      className="shrink-0 text-xs text-on-surface-variant"
-                      title={formatExact(entry.occurred_at)}
-                    >
-                      {formatRelative(entry.occurred_at)}
-                    </time>
+                    <div className="flex items-center gap-3">
+                      {entry.kind === "note" && entry.reference_id && !isEditingNote && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddingNote(false);
+                            setEditingNoteId(entry.reference_id);
+                            setEditNote(entry.detail ?? "");
+                            setEditNoteDate(toJamaicaDateInput(entry.occurred_at));
+                            setEditNoteError("");
+                          }}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+                        >
+                          <span className="material-symbols-outlined text-base">edit</span>
+                          Edit
+                        </button>
+                      )}
+                      <time
+                        dateTime={entry.occurred_at}
+                        className="shrink-0 text-xs text-on-surface-variant"
+                        title={formatExact(entry.occurred_at)}
+                      >
+                        {formatRelative(entry.occurred_at)}
+                      </time>
+                    </div>
                   </div>
 
-                  {entry.detail && (
-                    <p className="mt-1 text-sm text-on-surface-variant">{entry.detail}</p>
-                  )}
+                  {isEditingNote ? (
+                    <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                      <div className="grid gap-3 md:grid-cols-[11rem_1fr]">
+                        <label className="text-xs font-semibold text-on-surface">
+                          Note date
+                          <input
+                            type="date"
+                            max={jamaicaToday()}
+                            value={editNoteDate}
+                            onChange={(event) => setEditNoteDate(event.target.value)}
+                            className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="text-xs font-semibold text-on-surface">
+                          Account note
+                          <textarea
+                            autoFocus
+                            rows={3}
+                            minLength={3}
+                            maxLength={2000}
+                            value={editNote}
+                            onChange={(event) => setEditNote(event.target.value)}
+                            className="mt-1.5 w-full resize-y rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
+                      {editNoteError && (
+                        <p className="mt-3 rounded-lg bg-error/10 p-3 text-sm text-error">
+                          {editNoteError}
+                        </p>
+                      )}
+                      <div className="mt-3 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={savingEdit}
+                          onClick={() => {
+                            setEditingNoteId(null);
+                            setEditNoteError("");
+                          }}
+                          className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingEdit || editNote.trim().length < 3 || !editNoteDate}
+                          onClick={saveNoteEdit}
+                          className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-on-primary disabled:opacity-50"
+                        >
+                          {savingEdit ? "Saving..." : "Save changes"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {entry.detail && (
+                        <p className="mt-1 text-sm text-on-surface-variant">{entry.detail}</p>
+                      )}
 
-                  {entry.reason && (
-                    <p className="mt-1.5 border-l-2 border-surface-container-high pl-3 text-sm italic text-on-surface-variant">
-                      {entry.reason}
-                    </p>
+                      {entry.reason && (
+                        <p className="mt-1.5 border-l-2 border-surface-container-high pl-3 text-sm italic text-on-surface-variant">
+                          {entry.reason}
+                        </p>
+                      )}
+                    </>
                   )}
 
                   <p className="mt-1.5 text-xs text-on-surface-variant">
@@ -386,6 +498,17 @@ function jamaicaToday() {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function toJamaicaDateInput(value: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Jamaica",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }

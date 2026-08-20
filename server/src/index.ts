@@ -1074,13 +1074,22 @@ app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => 
           SELECT
               n.note_date::TIMESTAMP AT TIME ZONE 'America/Jamaica',
               'note',
-              'Customer note',
+              CASE WHEN n.updated_at IS NULL
+                   THEN 'Customer note'
+                   ELSE 'Customer note (edited)'
+              END,
               n.note,
-              NULL,
-              CONCAT_WS(' ', e.first_name, e.last_name),
+              CASE WHEN n.updated_at IS NULL THEN NULL
+                   ELSE 'Last edited by '
+                     || COALESCE(NULLIF(CONCAT_WS(' ', editor.first_name, editor.last_name), ''), 'former staff member')
+                     || ' on '
+                     || TO_CHAR(n.updated_at AT TIME ZONE 'America/Jamaica', 'DD Mon YYYY, HH12:MI AM')
+              END,
+              CONCAT_WS(' ', creator.first_name, creator.last_name),
               n.customer_note_id::TEXT
           FROM public.customer_notes n
-          LEFT JOIN public.employees e ON e.employee_id = n.created_by_employee_id
+          LEFT JOIN public.employees creator ON creator.employee_id = n.created_by_employee_id
+          LEFT JOIN public.employees editor ON editor.employee_id = n.updated_by_employee_id
           WHERE n.customer_id = $1
 
           UNION ALL
@@ -1119,7 +1128,7 @@ app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => 
           WHERE al.entity_type <> 'payment'
             -- Notes have their own richer timeline row above. The audit entry
             -- remains globally searchable without appearing twice here.
-            AND al.action <> 'Added customer note'
+            AND al.action NOT IN ('Added customer note', 'Edited customer note')
             -- An admin editing this customer belongs on the timeline. An admin
             -- doing admin things that merely touch the customer does not.
             AND (
