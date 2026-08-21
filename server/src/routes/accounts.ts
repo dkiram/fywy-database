@@ -469,7 +469,7 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
               AND (
                 c2.source_staging_id IS NULL
                 OR billing.scheduled_disconnection_date IS NULL
-                OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+                OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
               )) AS delinquent,
           (SELECT COUNT(*)::INTEGER
             FROM public.customer_billing_status billing
@@ -479,7 +479,7 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
               AND (
                 c2.source_staging_id IS NULL
                 OR billing.scheduled_disconnection_date IS NULL
-                OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+                OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
               )) AS eligible_for_disconnection
         FROM public.customers
         WHERE hidden_from_app = FALSE;

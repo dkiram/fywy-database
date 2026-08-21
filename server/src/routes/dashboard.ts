@@ -67,7 +67,7 @@ dashboardRouter.get("/dashboard", requireAuth, requireAdmin, async (_req, res) =
               AND (
                 c.source_staging_id IS NULL
                 OR billing.scheduled_disconnection_date IS NULL
-                OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+                OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
               )) AS delinquent_customers,
           (SELECT COUNT(*)::INTEGER
             FROM public.customer_billing_status billing
@@ -77,7 +77,7 @@ dashboardRouter.get("/dashboard", requireAuth, requireAdmin, async (_req, res) =
               AND (
                 c.source_staging_id IS NULL
                 OR billing.scheduled_disconnection_date IS NULL
-                OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+                OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
               )) AS eligible_for_disconnection;
       `),
       pool.query(`

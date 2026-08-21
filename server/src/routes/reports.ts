@@ -233,7 +233,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
         // from the rest of the app; chasing a customer with no name is not a
         // thing anyone can act on.
         //
-        // Legacy rows whose displayed Disconnect On date predates 2024 are
+        // Legacy rows whose displayed Disconnect On date predates 2025 are
         // retained in the database and everywhere else in the app, but are no
         // longer actionable delinquency work. New-system customers are never
         // excluded by this historical cutoff.
@@ -248,7 +248,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             AND (
               c.source_staging_id IS NULL
               OR billing.scheduled_disconnection_date IS NULL
-              OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+              OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
             )
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2);`;
@@ -269,7 +269,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             AND (
               c.source_staging_id IS NULL
               OR billing.scheduled_disconnection_date IS NULL
-              OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+              OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
             )
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2)
@@ -295,7 +295,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             AND (
               c.source_staging_id IS NULL
               OR billing.scheduled_disconnection_date IS NULL
-              OR billing.scheduled_disconnection_date >= DATE '2024-01-01'
+              OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
             )
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2);`;
