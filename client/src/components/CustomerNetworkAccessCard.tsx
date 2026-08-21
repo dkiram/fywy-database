@@ -12,15 +12,10 @@ type NetworkAccess = {
   olt_id: number;
   olt_name: string;
   management_ip: string;
-  olt_model: string;
-  olt_site: string | null;
   frame_number: number;
   slot_number: number;
   pon_port_number: number;
   ont_id: number;
-  service_port_id: string | null;
-  ont_serial: string;
-  ont_model: string | null;
   source: "manual" | "u2000_import" | "api_sync";
   mapping_status: "unverified" | "verified" | "mismatch";
   verified_at: string | null;
@@ -31,37 +26,25 @@ type OltOption = {
   olt_id: number;
   name: string;
   management_ip: string;
-  model: string;
-  site: string | null;
 };
 
 type FormState = {
   oltName: string;
   managementIp: string;
-  oltModel: string;
-  oltSite: string;
   frameNumber: string;
   slotNumber: string;
   ponPortNumber: string;
   ontId: string;
-  servicePortId: string;
-  ontSerial: string;
-  ontModel: string;
   reason: string;
 };
 
 const emptyForm: FormState = {
   oltName: "",
   managementIp: "",
-  oltModel: "MA5680T",
-  oltSite: "",
   frameNumber: "0",
   slotNumber: "",
   ponPortNumber: "",
   ontId: "",
-  servicePortId: "",
-  ontSerial: "",
-  ontModel: "",
   reason: "",
 };
 
@@ -70,15 +53,10 @@ function formFromAssignment(value: NetworkAccess | null): FormState {
   return {
     oltName: value.olt_name,
     managementIp: value.management_ip,
-    oltModel: value.olt_model,
-    oltSite: value.olt_site ?? "",
     frameNumber: String(value.frame_number),
     slotNumber: String(value.slot_number),
     ponPortNumber: String(value.pon_port_number),
     ontId: String(value.ont_id),
-    servicePortId: value.service_port_id ?? "",
-    ontSerial: value.ont_serial,
-    ontModel: value.ont_model ?? "",
     reason: "",
   };
 }
@@ -205,8 +183,6 @@ export default function CustomerNetworkAccessCard({
       ...(match
         ? {
             managementIp: match.management_ip,
-            oltModel: match.model,
-            oltSite: match.site ?? "",
           }
         : {}),
     }));
@@ -243,8 +219,6 @@ export default function CustomerNetworkAccessCard({
             olt_id: data.networkAccess.olt_id,
             name: data.networkAccess.olt_name,
             management_ip: data.networkAccess.management_ip,
-            model: data.networkAccess.olt_model,
-            site: data.networkAccess.olt_site,
           },
         ]);
       }
@@ -320,15 +294,10 @@ export default function CustomerNetworkAccessCard({
           <div className="grid grid-cols-2 gap-x-8 gap-y-5 md:grid-cols-4">
             <Value label="OLT name" value={networkAccess.olt_name} />
             <Value label="Management IP" value={networkAccess.management_ip} />
-            <Value label="OLT model" value={networkAccess.olt_model} />
-            <Value label="Site / location" value={networkAccess.olt_site} />
             <Value label="Frame" value={networkAccess.frame_number} />
             <Value label="Card / slot" value={networkAccess.slot_number} />
             <Value label="PON port" value={networkAccess.pon_port_number} />
             <Value label="Virtual port / ONT ID" value={networkAccess.ont_id} />
-            <Value label="Huawei service-port ID" value={networkAccess.service_port_id} />
-            <Value label="ONT serial" value={networkAccess.ont_serial} />
-            <Value label="ONT model" value={networkAccess.ont_model} />
             <Value
               label="Source"
               value={networkAccess.source === "u2000_import" ? "U2000 import" : networkAccess.source === "api_sync" ? "API sync" : "Manual entry"}
@@ -354,21 +323,14 @@ export default function CustomerNetworkAccessCard({
             {olts.map((olt) => <option key={olt.olt_id} value={olt.name} />)}
           </datalist>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             <Field label="OLT name" value={form.oltName} onChange={selectOlt} required list={oltListId} placeholder="Example: MANDEVILLE" />
             <Field label="OLT management IP" value={form.managementIp} onChange={(value) => updateForm("managementIp", value)} required placeholder="Example: 192.168.1.211" />
-            <Field label="OLT model" value={form.oltModel} onChange={(value) => updateForm("oltModel", value)} required />
-            <Field label="OLT site / location" value={form.oltSite} onChange={(value) => updateForm("oltSite", value)} placeholder="Optional" />
-
             <Field label="Frame" value={form.frameNumber} onChange={(value) => updateForm("frameNumber", value)} required type="number" />
             <Field label="Card / slot" value={form.slotNumber} onChange={(value) => updateForm("slotNumber", value)} required type="number" />
             <Field label="PON port" value={form.ponPortNumber} onChange={(value) => updateForm("ponPortNumber", value)} required type="number" />
             <Field label="Virtual port / ONT ID" value={form.ontId} onChange={(value) => updateForm("ontId", value)} required type="number" />
-
-            <Field label="Huawei service-port ID" value={form.servicePortId} onChange={(value) => updateForm("servicePortId", value)} type="number" placeholder="Optional" help="This is not the same as the PON port." />
-            <Field label="ONT serial number" value={form.ontSerial} onChange={(value) => updateForm("ontSerial", value.toUpperCase())} required placeholder="Example: HWTC..." />
-            <Field label="ONT model" value={form.ontModel} onChange={(value) => updateForm("ontModel", value)} placeholder="Example: HG8245W5" />
-            <Field label="Reason for change" value={form.reason} onChange={(value) => updateForm("reason", value)} required placeholder="New install, corrected mapping..." />
+            <Field label="Change note" value={form.reason} onChange={(value) => updateForm("reason", value)} placeholder="Optional" />
           </div>
 
           <div className="mt-6 rounded-lg bg-secondary-container p-3 text-sm text-on-secondary-container">

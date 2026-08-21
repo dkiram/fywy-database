@@ -55,15 +55,11 @@ const currentAssignmentSelect = `
     assignment.olt_id,
     olt.name AS olt_name,
     host(olt.management_ip) AS management_ip,
-    olt.model AS olt_model,
-    olt.site AS olt_site,
     assignment.frame_number,
     assignment.slot_number,
     assignment.pon_port_number,
     assignment.ont_id,
-    assignment.service_port_id,
     assignment.ont_serial,
-    assignment.ont_model,
     assignment.source,
     assignment.mapping_status,
     assignment.verified_at,
@@ -87,9 +83,7 @@ networkAccessRouter.get("/olts", requireAuth, async (_req, res) => {
       SELECT
         olt_id,
         name,
-        host(management_ip) AS management_ip,
-        model,
-        site
+        host(management_ip) AS management_ip
       FROM public.olts
       WHERE is_active = TRUE
       ORDER BY name;
@@ -126,7 +120,7 @@ async function insertAudit(
     action: string;
     oldValue: unknown;
     newValue: unknown;
-    reason: string;
+    reason: string | null;
   }
 ) {
   await client.query(
@@ -159,11 +153,7 @@ networkAccessRouter.put(
 
     const oltName = cleanText(req.body.oltName);
     const managementIp = cleanText(req.body.managementIp);
-    const oltModel = cleanText(req.body.oltModel) || "MA5680T";
-    const oltSite = cleanText(req.body.oltSite);
-    const ontSerial = cleanText(req.body.ontSerial).toUpperCase();
-    const ontModel = cleanText(req.body.ontModel);
-    const reason = cleanText(req.body.reason);
+    const reason = cleanText(req.body.reason) || null;
 
     if (oltName.length < 2 || oltName.length > 120) {
       return res.status(400).json({ error: "OLT name must be 2–120 characters." });
@@ -171,41 +161,20 @@ networkAccessRouter.put(
     if (isIP(managementIp) === 0) {
       return res.status(400).json({ error: "Enter a valid OLT management IP address." });
     }
-    if (oltModel.length < 2 || oltModel.length > 120) {
-      return res.status(400).json({ error: "OLT model must be 2–120 characters." });
-    }
-    if (oltSite && (oltSite.length < 2 || oltSite.length > 160)) {
-      return res.status(400).json({
-        error: "OLT site must be 2–160 characters when provided.",
-      });
-    }
-    if (ontSerial.length < 4 || ontSerial.length > 120) {
-      return res.status(400).json({ error: "ONT serial must be 4–120 characters." });
-    }
-    if (ontModel.length > 120) {
-      return res.status(400).json({ error: "ONT model must be 120 characters or fewer." });
-    }
-    if (reason.length < 3 || reason.length > 500) {
-      return res.status(400).json({ error: "A reason between 3 and 500 characters is required." });
+    if (reason && reason.length > 500) {
+      return res.status(400).json({ error: "The optional change note must be 500 characters or fewer." });
     }
 
     const frame = parseWholeNumber(req.body.frameNumber, "Frame", 255);
     const slot = parseWholeNumber(req.body.slotNumber, "Card / slot", 255);
     const ponPort = parseWholeNumber(req.body.ponPortNumber, "PON port", 255);
     const ontId = parseWholeNumber(req.body.ontId, "Virtual port / ONT ID", 4095);
-    const servicePortText = String(req.body.servicePortId ?? "").trim();
-    const servicePort = servicePortText
-      ? parseWholeNumber(servicePortText, "Service-port ID", 2147483647)
-      : { value: null };
     // Check each parsed value separately so TypeScript can safely narrow the
     // result before the values are passed to PostgreSQL below.
     if ("error" in frame) return res.status(400).json({ error: frame.error });
     if ("error" in slot) return res.status(400).json({ error: slot.error });
     if ("error" in ponPort) return res.status(400).json({ error: ponPort.error });
     if ("error" in ontId) return res.status(400).json({ error: ontId.error });
-    if ("error" in servicePort) {
-      return res.status(400).json({ error: servicePort.error });
-    }
 
     const employee = req.session.employee!;
     const client = await pool.connect();
@@ -224,7 +193,7 @@ networkAccessRouter.put(
       // existing row, but refuse a conflicting address instead of silently
       // changing every customer's target.
       let oltResult = await client.query(
-        `SELECT olt_id, name, host(management_ip) AS management_ip, model, site
+        `SELECT olt_id, name, host(management_ip) AS management_ip
          FROM public.olts WHERE normalized_name = UPPER(TRIM($1)) FOR UPDATE;`,
         [oltName]
       );
@@ -238,11 +207,11 @@ networkAccessRouter.put(
         oltResult = await client.query(
           `
           INSERT INTO public.olts (
-            name, management_ip, model, site, created_by_employee_id
-          ) VALUES ($1, $2::INET, $3, NULLIF($4, ''), $5)
-          RETURNING olt_id, name, host(management_ip) AS management_ip, model, site;
+            name, management_ip, created_by_employee_id
+          ) VALUES ($1, $2::INET, $3)
+          RETURNING olt_id, name, host(management_ip) AS management_ip;
           `,
-          [oltName, managementIp, oltModel, oltSite, employee.employeeId]
+          [oltName, managementIp, employee.employeeId]
         );
       }
       const olt = oltResult.rows[0];
@@ -274,11 +243,11 @@ networkAccessRouter.put(
         `
         INSERT INTO public.customer_ont_assignments (
           customer_id, olt_id, frame_number, slot_number, pon_port_number,
-          ont_id, service_port_id, ont_serial, ont_model, source,
+          ont_id, source,
           mapping_status, created_by_employee_id, updated_by_employee_id
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), 'manual',
-          'unverified', $10, $10
+          $1, $2, $3, $4, $5, $6, 'manual',
+          'unverified', $7, $7
         );
         `,
         [
@@ -288,9 +257,6 @@ networkAccessRouter.put(
           slot.value,
           ponPort.value,
           ontId.value,
-          servicePort.value,
-          ontSerial,
-          ontModel,
           employee.employeeId,
         ]
       );
@@ -313,7 +279,7 @@ networkAccessRouter.put(
       await client.query("ROLLBACK");
       if (typeof error === "object" && error && "code" in error && error.code === "23505") {
         return res.status(409).json({
-          error: "That OLT location or ONT serial is already assigned to another customer.",
+          error: "That OLT location is already assigned to another customer.",
         });
       }
       console.error("Could not save customer OLT information:", error);
