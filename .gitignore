@@ -7,6 +7,8 @@ dist/
 # The template in deploy/env-production.template holds no real values and is
 # the only version that may ever be committed.
 .env.*
+.env.gmail
+server/.env.gmail
 
 # Real company data - NEVER COMMIT
 database/imports/*.csv

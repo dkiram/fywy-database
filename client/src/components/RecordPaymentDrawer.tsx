@@ -7,6 +7,7 @@ import type { PaymentReceipt } from "./PaymentReceiptModal";
 type PaymentCustomer = {
   customer_id: number;
   name: string | null;
+  email: string | null;
   monthly_fee: string | null;
   installation_fee: string | null;
   reconnection_fee: string | null;
@@ -48,6 +49,9 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
   const [amount, setAmount] = useState(customer.monthly_fee ?? "");
   const [monthPaid, setMonthPaid] = useState(jamaicaCurrentMonth());
   const [note, setNote] = useState("");
+  const [receiptDeliveryMethod, setReceiptDeliveryMethod] = useState<"" | "email" | "physical">("");
+  const [useDifferentEmail, setUseDifferentEmail] = useState(!customer.email);
+  const [alternateEmail, setAlternateEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -73,13 +77,29 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
   const submitPayment = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
+      if (!receiptDeliveryMethod) {
+        setError("Ask the customer to choose email or physical receipt delivery.");
+        return;
+      }
+
+      const receiptEmail = receiptDeliveryMethod === "email"
+        ? (useDifferentEmail || !customer.email ? alternateEmail.trim() : customer.email)
+        : "";
+
       // The server stamps cashier, branch, date, receipt number, and audit information.
       setSaving(true);
       setError("");
       const response = await apiFetch(`/api/customers/${customer.customer_id}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentType, amount, monthPaid: paymentType === "Monthly Fee" ? monthPaid : "", note }),
+        body: JSON.stringify({
+          paymentType,
+          amount,
+          monthPaid: paymentType === "Monthly Fee" ? monthPaid : "",
+          note,
+          receiptDeliveryMethod,
+          receiptEmail,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not record payment.");
@@ -128,6 +148,82 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
               </Field>
             )}
 
+            <fieldset>
+              <legend className="text-sm font-semibold text-on-surface">Receipt delivery<span className="ml-1 text-error">*</span></legend>
+              <p className="mt-1 text-xs text-on-surface-variant">Ask the customer before completing the payment.</p>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <DeliveryOption
+                  icon="email"
+                  label="Email receipt"
+                  description="Send electronically and use no paper"
+                  selected={receiptDeliveryMethod === "email"}
+                  onSelect={() => {
+                    setReceiptDeliveryMethod("email");
+                    setError("");
+                  }}
+                />
+                <DeliveryOption
+                  icon="receipt_long"
+                  label="Physical receipt"
+                  description="Print a paper receipt at the counter"
+                  selected={receiptDeliveryMethod === "physical"}
+                  onSelect={() => {
+                    setReceiptDeliveryMethod("physical");
+                    setError("");
+                  }}
+                />
+              </div>
+
+              {receiptDeliveryMethod === "email" && (
+                <div className="mt-4 rounded-xl border border-primary/15 bg-primary/5 p-4">
+                  {customer.email && (
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="radio"
+                        name="receipt-email-source"
+                        checked={!useDifferentEmail}
+                        onChange={() => setUseDifferentEmail(false)}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-on-surface">Use account email</span>
+                        <span className="mt-0.5 block break-all text-sm text-on-surface-variant">{customer.email}</span>
+                      </span>
+                    </label>
+                  )}
+
+                  <label className={`flex cursor-pointer items-start gap-3 ${customer.email ? "mt-4" : ""}`}>
+                    {customer.email && (
+                      <input
+                        type="radio"
+                        name="receipt-email-source"
+                        checked={useDifferentEmail}
+                        onChange={() => setUseDifferentEmail(true)}
+                        className="mt-1"
+                      />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-on-surface">
+                        {customer.email ? "Use a different email for this receipt" : "Customer email"}
+                      </span>
+                      {(useDifferentEmail || !customer.email) && (
+                        <input
+                          required
+                          type="email"
+                          maxLength={254}
+                          value={alternateEmail}
+                          onChange={(event) => setAlternateEmail(event.target.value)}
+                          className={inputClass}
+                          placeholder="customer@example.com"
+                        />
+                      )}
+                    </span>
+                  </label>
+                  <p className="mt-3 text-xs text-on-surface-variant">A different address is used only for this receipt. It does not change the customer profile.</p>
+                </div>
+              )}
+            </fieldset>
+
             {/* The place to record that the money came in on a different day
                 from the receipt, which is why the payment date itself stays
                 fixed and uneditable. */}
@@ -149,7 +245,11 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
             <button type="button" disabled={saving} onClick={onClose} className="rounded-lg bg-surface-container px-5 py-2.5 text-sm font-medium text-on-surface-variant disabled:opacity-40">Cancel</button>
             <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary disabled:opacity-50">
               <span className="material-symbols-outlined text-lg">payments</span>
-              {saving ? "Recording..." : "Record & Create Receipt"}
+              {saving
+                ? receiptDeliveryMethod === "email" ? "Recording & emailing..." : "Recording..."
+                : receiptDeliveryMethod === "email" ? "Record & Email Receipt"
+                  : receiptDeliveryMethod === "physical" ? "Record & Create Physical Receipt"
+                    : "Choose Receipt Delivery"}
             </button>
           </footer>
         </form>
@@ -166,6 +266,23 @@ function Field({ label, required = false, children }: { label: string; required?
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return <div><p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p><p className="mt-1 text-sm font-semibold text-on-surface">{value}</p></div>;
+}
+
+function DeliveryOption({ icon, label, description, selected, onSelect }: { icon: string; label: string; description: string; selected: boolean; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onSelect}
+      className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${selected ? "border-primary bg-primary/10" : "border-outline-variant bg-white hover:border-primary/50"}`}
+    >
+      <span className={`material-symbols-outlined ${selected ? "text-primary" : "text-on-surface-variant"}`}>{icon}</span>
+      <span>
+        <span className="block text-sm font-semibold text-on-surface">{label}</span>
+        <span className="mt-1 block text-xs text-on-surface-variant">{description}</span>
+      </span>
+    </button>
+  );
 }
 
 export default RecordPaymentDrawer;

@@ -3,6 +3,7 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
+import { isEmail, sendReceiptEmail } from "../email/receiptEmail.js";
 import { insertStatusHistory } from "./accounts.js";
 
 const paymentsRouter = Router();
@@ -94,6 +95,7 @@ export async function loadReceipt(client: PoolClient, paymentId: number) {
       pay.location,
       pay.cashier_name,
       pay.note,
+      pay.receipt_delivery_method,
       (pay.voided_at IS NOT NULL) AS is_voided,
       pay.voided_at,
       pay.void_reason,
@@ -102,7 +104,14 @@ export async function loadReceipt(client: PoolClient, paymentId: number) {
       pay.application_id,
       COALESCE(c.name, app.name) AS customer_name,
       COALESCE(c.address, app.address) AS customer_address,
-      COALESCE(c.telephone, app.telephone) AS customer_telephone
+      COALESCE(c.telephone, app.telephone) AS customer_telephone,
+      COALESCE(c.email, app.email) AS customer_email,
+      delivery.receipt_email_delivery_id,
+      delivery.recipient_email AS receipt_email,
+      delivery.status AS receipt_email_status,
+      delivery.attempt_count AS receipt_email_attempt_count,
+      delivery.last_error AS receipt_email_error,
+      delivery.sent_at AS receipt_email_sent_at
     FROM public.payments pay
     LEFT JOIN public.customers c
       ON pay.customer_id = c.customer_id
@@ -110,6 +119,13 @@ export async function loadReceipt(client: PoolClient, paymentId: number) {
       ON pay.application_id = app.application_id
     LEFT JOIN public.employees voider
       ON voider.employee_id = pay.voided_by_employee_id
+    LEFT JOIN LATERAL (
+      SELECT attempt.*
+      FROM public.receipt_email_deliveries attempt
+      WHERE attempt.payment_id = pay.payment_id
+      ORDER BY attempt.receipt_email_delivery_id DESC
+      LIMIT 1
+    ) delivery ON TRUE
     WHERE pay.payment_id = $1
       AND pay.receipt_number IS NOT NULL
       AND (c.customer_id IS NOT NULL OR app.application_id IS NOT NULL);
@@ -118,6 +134,87 @@ export async function loadReceipt(client: PoolClient, paymentId: number) {
   );
 
   return result.rows[0] ?? null;
+}
+
+async function queueReceiptEmail(
+  client: PoolClient,
+  paymentId: number,
+  recipientEmail: string,
+  employeeId: number,
+) {
+  const result = await client.query(
+    `
+    INSERT INTO public.receipt_email_deliveries (
+      payment_id, recipient_email, requested_by_employee_id
+    ) VALUES ($1, $2, $3)
+    RETURNING receipt_email_delivery_id;
+    `,
+    [paymentId, recipientEmail, employeeId],
+  );
+
+  return Number(result.rows[0].receipt_email_delivery_id);
+}
+
+/**
+ * Sends only after the payment transaction commits. A mail outage therefore
+ * produces a failed delivery and a print option, never a rolled-back payment.
+ */
+async function deliverQueuedReceiptEmail(
+  client: PoolClient,
+  deliveryId: number,
+) {
+  const deliveryResult = await client.query(
+    `
+    UPDATE public.receipt_email_deliveries
+    SET status = 'sending',
+        attempt_count = attempt_count + 1,
+        last_attempted_at = CURRENT_TIMESTAMP,
+        last_error = NULL
+    WHERE receipt_email_delivery_id = $1
+      AND status IN ('pending', 'failed')
+    RETURNING payment_id, recipient_email;
+    `,
+    [deliveryId],
+  );
+
+  const delivery = deliveryResult.rows[0];
+  if (!delivery) return;
+
+  try {
+    const receipt = await loadReceipt(client, Number(delivery.payment_id));
+    if (!receipt) throw new Error("The payment receipt could not be loaded.");
+
+    const sent = await sendReceiptEmail(delivery.recipient_email, receipt);
+    await client.query(
+      `
+      UPDATE public.receipt_email_deliveries
+      SET status = 'sent', provider_message_id = $2,
+          sent_at = CURRENT_TIMESTAMP, last_error = NULL
+      WHERE receipt_email_delivery_id = $1;
+      `,
+      [deliveryId, sent.providerMessageId],
+    );
+  } catch (error) {
+    const publicMessage = receiptDeliveryError(error);
+    console.error(`Could not email receipt delivery #${deliveryId}:`, publicMessage);
+    await client.query(
+      `
+      UPDATE public.receipt_email_deliveries
+      SET status = 'failed', last_error = $2
+      WHERE receipt_email_delivery_id = $1;
+      `,
+      [deliveryId, publicMessage],
+    );
+  }
+}
+
+function receiptDeliveryError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "Receipt email is not configured on this server.") return message;
+  if (/invalid_grant|unauthorized|authentication|credentials/i.test(message)) {
+    return "Receipt email authorization needs attention. Retry after an administrator reconnects Gmail.";
+  }
+  return "Gmail could not send the receipt. Check the address, retry, or print it before the customer leaves.";
 }
 
 paymentsRouter.post(
@@ -134,6 +231,8 @@ paymentsRouter.post(
     const amountText = String(req.body.amount ?? "").trim();
     const monthPaid = cleanText(req.body.monthPaid);
     const note = cleanText(req.body.note);
+    const receiptDeliveryMethod = cleanText(req.body.receiptDeliveryMethod) || "physical";
+    const receiptEmail = cleanText(req.body.receiptEmail).toLowerCase();
 
     if (!recordablePaymentTypes.includes(paymentType as (typeof recordablePaymentTypes)[number])) {
       return res.status(400).json({ error: "Choose a valid payment type." });
@@ -155,6 +254,12 @@ paymentsRouter.post(
     if (note.length > 500) {
       return res.status(400).json({ error: "Payment note must be 500 characters or fewer." });
     }
+    if (receiptDeliveryMethod !== "physical" && receiptDeliveryMethod !== "email") {
+      return res.status(400).json({ error: "Choose email or physical receipt delivery." });
+    }
+    if (receiptDeliveryMethod === "email" && !isEmail(receiptEmail)) {
+      return res.status(400).json({ error: "Enter a valid receipt email address." });
+    }
 
     const employee = req.session.employee!;
     if (employee.role === "branch" && employee.locationId === null) {
@@ -170,7 +275,7 @@ paymentsRouter.post(
 
       const customerResult = await client.query(
         `
-        SELECT customer_id
+        SELECT customer_id, email
         FROM public.customers
         WHERE customer_id = $1
         FOR SHARE;
@@ -196,7 +301,8 @@ paymentsRouter.post(
           recorded_by_employee_id,
           location_id,
           note,
-          recorded_at
+          recorded_at,
+          receipt_delivery_method
         )
         VALUES (
           $1,
@@ -209,7 +315,8 @@ paymentsRouter.post(
           $7,
           $8,
           NULLIF($9, ''),
-          CURRENT_TIMESTAMP
+          CURRENT_TIMESTAMP,
+          $10
         )
         RETURNING payment_id;
         `,
@@ -223,10 +330,14 @@ paymentsRouter.post(
           employee.employeeId,
           employee.locationId,
           note,
+          receiptDeliveryMethod,
         ]
       );
 
       const paymentId = Number(paymentResult.rows[0].payment_id);
+      const emailDeliveryId = receiptDeliveryMethod === "email"
+        ? await queueReceiptEmail(client, paymentId, receiptEmail, employee.employeeId)
+        : null;
       // The generated database ID makes the receipt identifier deterministic and unique.
       await client.query(
         `
@@ -361,8 +472,13 @@ paymentsRouter.post(
         ]
       );
 
-      const receipt = await loadReceipt(client, paymentId);
       await client.query("COMMIT");
+
+      if (emailDeliveryId !== null) {
+        await deliverQueuedReceiptEmail(client, emailDeliveryId);
+      }
+
+      const receipt = await loadReceipt(client, paymentId);
 
       res.status(201).json({ payment: receipt, reconnectionPending });
     } catch (error) {
@@ -402,6 +518,86 @@ paymentsRouter.get(
       client.release();
     }
   }
+);
+
+paymentsRouter.post(
+  "/payments/:paymentId/email-receipt",
+  requireAuth,
+  async (req, res) => {
+    const paymentId = parsePositiveId(req.params.paymentId);
+    if (paymentId === null) {
+      return res.status(400).json({ error: "Invalid payment ID." });
+    }
+
+    const recipientEmail = cleanText(req.body.email).toLowerCase();
+    if (!isEmail(recipientEmail)) {
+      return res.status(400).json({ error: "Enter a valid receipt email address." });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const paymentResult = await client.query(
+        `
+        SELECT payment_id, receipt_number, voided_at
+        FROM public.payments
+        WHERE payment_id = $1
+        FOR UPDATE;
+        `,
+        [paymentId],
+      );
+      const payment = paymentResult.rows[0];
+
+      if (!payment?.receipt_number) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "An emailable receipt is not available for this payment." });
+      }
+      if (payment.voided_at) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "A voided receipt cannot be emailed as a valid payment receipt." });
+      }
+
+      await client.query(
+        `UPDATE public.payments SET receipt_delivery_method = 'email' WHERE payment_id = $1;`,
+        [paymentId],
+      );
+      const deliveryId = await queueReceiptEmail(
+        client,
+        paymentId,
+        recipientEmail,
+        employee.employeeId,
+      );
+
+      await client.query(
+        `
+        INSERT INTO public.audit_logs (
+          employee_id, actor_name, action, entity_type, entity_id,
+          field_name, old_value, new_value, occurred_at
+        ) VALUES ($1, $2, 'Requested receipt email', 'payment', $3,
+          'receipt_email', NULL, $4, CURRENT_TIMESTAMP);
+        `,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(paymentId),
+          recipientEmail,
+        ],
+      );
+
+      await client.query("COMMIT");
+      await deliverQueuedReceiptEmail(client, deliveryId);
+
+      const receipt = await loadReceipt(client, paymentId);
+      res.json({ payment: receipt });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not request receipt email:", error);
+      res.status(500).json({ error: "Could not request receipt email." });
+    } finally {
+      client.release();
+    }
+  },
 );
 
 paymentsRouter.post(

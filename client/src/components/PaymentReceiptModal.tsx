@@ -104,6 +104,14 @@ export type PaymentReceipt = {
   customer_name: string | null;
   customer_address: string | null;
   customer_telephone: string | null;
+  customer_email: string | null;
+  receipt_delivery_method: "physical" | "email";
+  receipt_email_delivery_id: number | null;
+  receipt_email: string | null;
+  receipt_email_status: "pending" | "sending" | "sent" | "failed" | null;
+  receipt_email_attempt_count: number | null;
+  receipt_email_error: string | null;
+  receipt_email_sent_at: string | null;
   is_voided: boolean;
   voided_at: string | null;
   void_reason: string | null;
@@ -120,11 +128,19 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
   const [showDeleteForm, setShowDeleteForm] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState(
+    payment.receipt_email || payment.customer_email || "",
+  );
+  const [emailError, setEmailError] = useState("");
   // Voiding and permanent deletion are both Admin-only. Head Office lost the
   // void button in Aug 2026; the server enforces the same rule, so hiding it
   // here is presentation, not the control.
   const canVoid = employee?.role === "admin";
   const canDelete = employee?.role === "admin";
+  const emailFailed = displayPayment.receipt_delivery_method === "email"
+    && displayPayment.receipt_email_status === "failed";
+  const canPrint = displayPayment.receipt_delivery_method === "physical" || emailFailed;
 
   const [printFormat, setPrintFormat] = useState<PrintFormat>(
     () => readStoredFormat() ?? defaultFormatForRole(employee?.role),
@@ -146,6 +162,7 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
     let pageStyle: HTMLStyleElement | null = null;
 
     const enterPrintMode = () => {
+      if (!canPrint) return;
       const receipt = document.querySelector<HTMLElement>(".payment-receipt-print");
       const thermal = printFormat === "thermal" && receipt !== null;
 
@@ -187,7 +204,28 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
     };
     // Re-bound when the format changes so beforeprint always reads the
     // current choice rather than the one captured at mount.
-  }, [printFormat]);
+  }, [canPrint, printFormat]);
+
+  const emailReceipt = async () => {
+    try {
+      setSaving(true);
+      setEmailError("");
+      const response = await apiFetch(`/api/payments/${displayPayment.payment_id}/email-receipt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailRecipient }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not email receipt.");
+      setDisplayPayment(data.payment);
+      setEmailRecipient(data.payment.receipt_email || emailRecipient);
+      setShowEmailForm(data.payment.receipt_email_status === "failed");
+    } catch (sendError) {
+      setEmailError(sendError instanceof Error ? sendError.message : "Could not email receipt.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Voiding preserves the receipt and posts a separate balance reversal.
   const voidPayment = async () => {
@@ -242,6 +280,16 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
         {/* Keep long receipts and destructive confirmations inside a dedicated
             scroll region while the main action bar remains reachable. */}
         <div className="receipt-modal-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <ReceiptDeliveryStatus
+          payment={displayPayment}
+          emailRecipient={emailRecipient}
+          setEmailRecipient={setEmailRecipient}
+          showEmailForm={showEmailForm}
+          setShowEmailForm={setShowEmailForm}
+          emailError={emailError}
+          saving={saving}
+          onSend={emailReceipt}
+        />
         {/* Print CSS drops the rest of the app and reflows this section into a
             single 72mm column. The hook classes below are print-only; they
             carry no screen styling. */}
@@ -348,20 +396,110 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
           )}
           {/* Counters print the 80mm slip, head office prints a full sheet.
               Defaults by role, then remembers whatever this machine last used. */}
-          <div className="flex items-center gap-0.5 rounded-lg bg-surface-container p-0.5" role="group" aria-label="Print format">
-            <PrintFormatOption label="Slip" description="Print as an 80mm thermal slip" active={printFormat === "thermal"} onSelect={() => choosePrintFormat("thermal")} />
-            <PrintFormatOption label="A4" description="Print on A4 paper" active={printFormat === "a4"} onSelect={() => choosePrintFormat("a4")} />
-          </div>
+          {canPrint && (
+            <div className="flex items-center gap-0.5 rounded-lg bg-surface-container p-0.5" role="group" aria-label="Print format">
+              <PrintFormatOption label="Slip" description="Print as an 80mm thermal slip" active={printFormat === "thermal"} onSelect={() => choosePrintFormat("thermal")} />
+              <PrintFormatOption label="A4" description="Print on A4 paper" active={printFormat === "a4"} onSelect={() => choosePrintFormat("a4")} />
+            </div>
+          )}
           <button type="button" onClick={onClose} className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant sm:px-5">Close</button>
-          <button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary sm:px-5">
-            <span className="material-symbols-outlined text-lg">print</span>
-            {printFormat === "thermal" ? "Print Slip" : "Print A4"}
-          </button>
+          {canPrint && (
+            <button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary sm:px-5">
+              <span className="material-symbols-outlined text-lg">print</span>
+              {emailFailed ? "Print After Email Failure" : printFormat === "thermal" ? "Print Slip" : "Print A4"}
+            </button>
+          )}
         </div>
       </div>
     </div>,
     document.body,
   );
+}
+
+function ReceiptDeliveryStatus({ payment, emailRecipient, setEmailRecipient, showEmailForm, setShowEmailForm, emailError, saving, onSend }: {
+  payment: PaymentReceipt;
+  emailRecipient: string;
+  setEmailRecipient: (value: string) => void;
+  showEmailForm: boolean;
+  setShowEmailForm: (value: boolean) => void;
+  emailError: string;
+  saving: boolean;
+  onSend: () => void;
+}) {
+  const status = payment.receipt_email_status;
+  const sent = payment.receipt_delivery_method === "email" && status === "sent";
+  const failed = payment.receipt_delivery_method === "email" && status === "failed";
+  const inProgress = payment.receipt_delivery_method === "email" && (status === "pending" || status === "sending");
+
+  return (
+    <div className="no-print border-b border-surface-container px-4 py-4 sm:px-6">
+      {sent && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-primary/10 p-4 text-sm text-primary">
+          <span className="material-symbols-outlined">mark_email_read</span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Receipt emailed successfully</p>
+            <p className="mt-0.5 break-all text-xs">{maskEmail(payment.receipt_email)}</p>
+          </div>
+          {!payment.is_voided && <button type="button" onClick={() => setShowEmailForm(!showEmailForm)} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-primary">Send Again</button>}
+        </div>
+      )}
+
+      {inProgress && (
+        <div className="flex items-center gap-3 rounded-xl bg-primary/10 p-4 text-sm text-primary">
+          <span className="material-symbols-outlined animate-pulse">outgoing_mail</span>
+          <p className="font-semibold">Sending receipt email…</p>
+        </div>
+      )}
+
+      {failed && (
+        <div className="rounded-xl border border-error/25 bg-error/5 p-4 text-sm">
+          <div className="flex gap-3 text-error">
+            <span className="material-symbols-outlined">mark_email_unread</span>
+            <div>
+              <p className="font-semibold">Email failed — the payment is still recorded</p>
+              <p className="mt-1 text-xs">{payment.receipt_email_error || "Check the address and retry. Print only if the customer is still present and email cannot be sent."}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {payment.receipt_delivery_method === "physical" && !payment.is_voided && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+          <span className="material-symbols-outlined">receipt_long</span>
+          <p className="min-w-0 flex-1 font-semibold">Physical receipt selected</p>
+          <button type="button" onClick={() => setShowEmailForm(!showEmailForm)} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-primary">Email Instead</button>
+        </div>
+      )}
+
+      {(showEmailForm || failed) && !payment.is_voided && (
+        <div className="mt-3 rounded-xl bg-surface-container-low p-4">
+          <label className="block text-sm font-semibold text-on-surface">Receipt email address
+            <input
+              type="email"
+              maxLength={254}
+              value={emailRecipient}
+              onChange={(event) => setEmailRecipient(event.target.value)}
+              className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm focus:border-primary"
+              placeholder="customer@example.com"
+            />
+          </label>
+          <p className="mt-2 text-xs text-on-surface-variant">Changing this address applies only to this send and does not update the customer profile.</p>
+          {emailError && <p className="mt-3 rounded-lg bg-error/10 p-3 text-sm text-error">{emailError}</p>}
+          <div className="mt-3 flex justify-end gap-3">
+            {!failed && <button type="button" disabled={saving} onClick={() => setShowEmailForm(false)} className="rounded-lg bg-white px-4 py-2 text-sm font-medium">Cancel</button>}
+            <button type="button" disabled={saving || !emailRecipient.trim()} onClick={onSend} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary disabled:opacity-50">{saving ? "Sending…" : failed ? "Retry Email" : "Send Email"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function maskEmail(value: string | null) {
+  if (!value) return "Email address unavailable";
+  const [local, domain] = value.split("@");
+  if (!domain) return value;
+  return `${local.slice(0, 1)}${"*".repeat(Math.min(Math.max(local.length - 1, 2), 6))}@${domain}`;
 }
 
 function PrintFormatOption({ label, description, active, onSelect }: { label: string; description: string; active: boolean; onSelect: () => void }) {

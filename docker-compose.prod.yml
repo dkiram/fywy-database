@@ -67,6 +67,16 @@ services:
 
       SESSION_SECRET: ${SESSION_SECRET}
 
+      # Gmail API credentials are generated once with
+      # `npm run authorize:gmail` and kept only in .env.production on the NAS.
+      # The paid mailbox is spc@fywycable.com; the free Workspace send-as alias
+      # is what customers see on receipts and later automated reminders.
+      GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID:-}
+      GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
+      GMAIL_REFRESH_TOKEN: ${GMAIL_REFRESH_TOKEN:-}
+      GMAIL_SENDER_ADDRESS: ${GMAIL_SENDER_ADDRESS:-receipts@fywycable.com}
+      GMAIL_SENDER_NAME: ${GMAIL_SENDER_NAME:-SPCL/FYWY Cable - Do Not Reply}
+
       # auto | true | false. "auto" decides per request, so branch offices
       # arriving over HTTPS through the tunnel get a protected cookie while
       # the home office on the plain-HTTP LAN address keeps working. Only move
