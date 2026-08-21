@@ -20,6 +20,7 @@ import serviceTicketsRouter from "./routes/serviceTickets.js";
 import poleBoxesRouter from "./routes/poleBoxes.js";
 import reportsRouter from "./routes/reports.js";
 import dashboardRouter from "./routes/dashboard.js";
+import networkAccessRouter from "./routes/networkAccess.js";
 
 import type {
   Request,
@@ -223,6 +224,9 @@ app.use("/api", serviceTicketsRouter);
 app.use("/api", poleBoxesRouter);
 app.use("/api", reportsRouter);
 app.use("/api", dashboardRouter);
+// Customer-to-OLT inventory. Actual Huawei commands will be added only after
+// a verified worker/service account is available on the management network.
+app.use("/api", networkAccessRouter);
 
 // Shared guards cover the older routes that still live in this entry file.
 function requireAuth(

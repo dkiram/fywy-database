@@ -11,6 +11,7 @@ import AccountOperationsPanel, {
 } from "../components/AccountOperationsPanel";
 import CustomerServiceHistory from "../components/CustomerServiceHistory";
 import CustomerActivityHistory from "../components/CustomerActivityHistory";
+import CustomerNetworkAccessCard from "../components/CustomerNetworkAccessCard";
 
 type Customer = {
   customer_id: number;
@@ -413,7 +414,9 @@ if (error || !customer) {
                  label="Pole Box"
                  value={customer.pole_box_number || "—"} />
 
-                <DetailRow label="Port" value={customer.port_number || "—"} />
+                {/* The pole-box port is a field-service value. It is not the
+                    Huawei PON port shown in the OLT card below. */}
+                <DetailRow label="Pole Box Port" value={customer.port_number || "—"} />
               </div>
             </section>
 
@@ -521,6 +524,11 @@ if (error || !customer) {
               </div>
             </section>
           </div>
+
+          <CustomerNetworkAccessCard
+            customerId={customer.customer_id}
+            canEdit={canManageSubscription}
+          />
 
           {employee && (
             // Keep operational controls in the wider profile column so status,
