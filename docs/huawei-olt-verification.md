@@ -35,6 +35,8 @@ The verifier appends `diffie-hellman-group-exchange-sha1` after all modern
 defaults because that is the algorithm the existing PuTTY client negotiates.
 It does not enable the weaker fixed-group `diffie-hellman-group1-sha1` option,
 and production still requires the OLT's SHA-256 host-key fingerprint.
+The same server offers only legacy CBC encryption, so `aes128-cbc` is appended
+after every modern cipher. Blowfish, 3DES, and DES remain disabled.
 
 ## One controlled test session
 

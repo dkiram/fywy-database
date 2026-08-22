@@ -249,6 +249,13 @@ function openHuaweiShell(target: OntVerificationTarget) {
             prepend: [],
             remove: [],
           },
+          // The same server offers AES/Blowfish/3DES/DES only in CBC mode.
+          // Append the AES option and keep the weaker alternatives disabled.
+          cipher: {
+            append: ["aes128-cbc"],
+            prepend: [],
+            remove: [],
+          },
         },
       } satisfies ConnectConfig);
   });
