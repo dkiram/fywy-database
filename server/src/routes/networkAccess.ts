@@ -4,6 +4,11 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
+import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
+import {
+  OltVerificationError,
+  readOntFromOlt,
+} from "../huawei/verifyOnt.js";
 
 const networkAccessRouter = Router();
 
@@ -60,6 +65,7 @@ const currentAssignmentSelect = `
     assignment.pon_port_number,
     assignment.ont_id,
     assignment.ont_serial,
+    customer.name AS customer_name,
     assignment.source,
     assignment.mapping_status,
     assignment.verified_at,
@@ -68,12 +74,17 @@ const currentAssignmentSelect = `
     verifier.first_name AS verified_by_first_name,
     verifier.last_name AS verified_by_last_name
   FROM public.customer_ont_assignments assignment
+  JOIN public.customers customer ON customer.customer_id = assignment.customer_id
   JOIN public.olts olt ON olt.olt_id = assignment.olt_id
   LEFT JOIN public.employees verifier
     ON verifier.employee_id = assignment.verified_by_employee_id
   WHERE assignment.customer_id = $1
     AND assignment.ended_at IS NULL
 `;
+
+// Avoid running two interactive CLI sessions for the same imported mapping.
+// This is process-local; PostgreSQL row checks below remain the final guard.
+const verificationsInProgress = new Set<number>();
 
 // The profile card uses this small list to reuse an existing OLT instead of
 // making staff retype a shared management address for every customer.
@@ -286,6 +297,171 @@ networkAccessRouter.put(
       res.status(500).json({ error: "Could not save OLT information." });
     } finally {
       client.release();
+    }
+  }
+);
+
+networkAccessRouter.post(
+  "/customers/:customerId/network-access/verify",
+  requireAuth,
+  requireNetworkManager,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+    const employee = req.session.employee!;
+
+    const initialResult = await pool.query(`${currentAssignmentSelect};`, [customerId]);
+    const initial = initialResult.rows[0] ?? null;
+    if (!initial) {
+      return res.status(404).json({ error: "No current OLT mapping exists for this customer." });
+    }
+    const assignmentId = Number(initial.customer_ont_assignment_id);
+    if (verificationsInProgress.has(assignmentId)) {
+      return res.status(409).json({ error: "This OLT mapping is already being verified." });
+    }
+
+    verificationsInProgress.add(assignmentId);
+    try {
+      const liveOnt = await readOntFromOlt({
+        managementIp: initial.management_ip,
+        frameNumber: Number(initial.frame_number),
+        slotNumber: Number(initial.slot_number),
+        ponPortNumber: Number(initial.pon_port_number),
+        ontId: Number(initial.ont_id),
+      });
+
+      const serialMatches =
+        !initial.ont_serial ||
+        String(initial.ont_serial).trim().toUpperCase() === liveOnt?.ontSerial;
+      const descriptionMatches =
+        !!liveOnt?.description &&
+        normalizeExactCustomerName(liveOnt.description) ===
+          normalizeExactCustomerName(initial.customer_name ?? "");
+      let verified = !!liveOnt && serialMatches && descriptionMatches;
+      const mismatchReasons: string[] = [];
+      if (!liveOnt) mismatchReasons.push("ONT ID was not found at the saved location");
+      if (liveOnt && !serialMatches) mismatchReasons.push("ONT serial does not match");
+      if (liveOnt && !descriptionMatches) mismatchReasons.push("customer description does not match");
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const lockResult = await client.query(
+          `SELECT * FROM public.customer_ont_assignments
+           WHERE customer_ont_assignment_id = $1
+             AND customer_id = $2
+             AND ended_at IS NULL
+           FOR UPDATE;`,
+          [assignmentId, customerId]
+        );
+        const locked = lockResult.rows[0];
+        if (
+          !locked ||
+          Number(locked.olt_id) !== Number(initial.olt_id) ||
+          Number(locked.frame_number) !== Number(initial.frame_number) ||
+          Number(locked.slot_number) !== Number(initial.slot_number) ||
+          Number(locked.pon_port_number) !== Number(initial.pon_port_number) ||
+          Number(locked.ont_id) !== Number(initial.ont_id)
+        ) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            error: "The OLT mapping changed while verification was running. Please try again.",
+          });
+        }
+
+        if (verified && liveOnt) {
+          const serialConflict = await client.query(
+            `SELECT customer_ont_assignment_id
+             FROM public.customer_ont_assignments
+             WHERE ended_at IS NULL
+               AND customer_ont_assignment_id <> $1
+               AND ont_serial IS NOT NULL
+               AND UPPER(TRIM(ont_serial)) = UPPER(TRIM($2))
+             LIMIT 1
+             FOR UPDATE;`,
+            [assignmentId, liveOnt.ontSerial]
+          );
+          if (serialConflict.rows.length > 0) {
+            verified = false;
+            mismatchReasons.push("ONT serial is already assigned to another customer");
+          }
+        }
+
+        await client.query(
+          `UPDATE public.customer_ont_assignments
+           SET mapping_status = $2,
+               ont_serial = CASE
+                 WHEN $2 = 'verified' THEN COALESCE(ont_serial, $3)
+                 ELSE ont_serial
+               END,
+               verified_at = CASE WHEN $2 = 'verified' THEN CURRENT_TIMESTAMP ELSE NULL END,
+               verified_by_employee_id = CASE WHEN $2 = 'verified' THEN $4 ELSE NULL END,
+               updated_by_employee_id = $4,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE customer_ont_assignment_id = $1;`,
+          [
+            assignmentId,
+            verified ? "verified" : "mismatch",
+            liveOnt?.ontSerial ?? null,
+            employee.employeeId,
+          ]
+        );
+
+        const savedResult = await client.query(`${currentAssignmentSelect};`, [customerId]);
+        const saved = savedResult.rows[0];
+        await insertAudit(client, {
+          employeeId: employee.employeeId,
+          actorName: `${employee.firstName} ${employee.lastName}`,
+          customerId,
+          action: verified ? "Verified customer OLT information" : "OLT mapping mismatch",
+          oldValue: initial,
+          newValue: {
+            ...saved,
+            liveControlFlag: liveOnt?.controlFlag ?? null,
+            liveRunState: liveOnt?.runState ?? null,
+            mismatchReasons,
+          },
+          reason: verified
+            ? "Read-only live OLT verification"
+            : mismatchReasons.join("; "),
+        });
+        await client.query("COMMIT");
+
+        return res.json({
+          verification: {
+            status: verified ? "verified" : "mismatch",
+            message: verified
+              ? "The saved customer mapping matches the live OLT."
+              : mismatchReasons.join("; "),
+            checkedAt: new Date().toISOString(),
+            live: liveOnt
+              ? {
+                  controlFlag: liveOnt.controlFlag,
+                  runState: liveOnt.runState,
+                  description: liveOnt.description,
+                }
+              : null,
+          },
+          networkAccess: saved,
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      if (error instanceof OltVerificationError) {
+        console.warn(`OLT verification ${error.kind} error for customer ${customerId}.`);
+        return res.status(error.kind === "configuration" ? 503 : 502).json({
+          error: error.message,
+          code: `olt_${error.kind}_error`,
+        });
+      }
+      console.error("Could not verify customer OLT information:", error);
+      return res.status(500).json({ error: "Could not verify OLT information." });
+    } finally {
+      verificationsInProgress.delete(assignmentId);
     }
   }
 );

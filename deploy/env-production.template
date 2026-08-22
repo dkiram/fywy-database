@@ -26,6 +26,12 @@ GMAIL_REFRESH_TOKEN=
 GMAIL_SENDER_ADDRESS=receipts@fywycable.com
 GMAIL_SENDER_NAME=SPCL/FYWY Cable - Do Not Reply
 
+# --- Huawei OLT read-only verification --------------------------------------
+# Keep this blank until the controlled OLT test. The real value belongs only
+# in .env.production on the NAS. Example shape (never commit real values):
+# {"192.168.1.3":{"protocol":"ssh","port":22,"username":"...","password":"...","hostKeySha256":"SHA256:..."}}
+HUAWEI_OLT_CONNECTIONS_JSON=
+
 # Port staff computers on the home-office LAN connect to,
 # e.g. http://192.168.1.8:8090
 # Avoid 8181 and 8443 - TOS itself uses those.

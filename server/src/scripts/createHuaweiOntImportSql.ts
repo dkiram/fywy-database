@@ -30,7 +30,8 @@ function showUsage(): never {
   console.error(
     "Usage: npm run create:ont-import-sql -- " +
       "--file <log.txt> [--file <log.txt>] --access-db <legacy.accdb> " +
-      "--olt-name <name> --management-ip <ip> --output-dir <private-directory>"
+      "--olt-name <name> --management-ip <ip> --output-dir <private-directory> " +
+      "[--two-year-expected-count <reviewed-count>]"
   );
   process.exit(1);
 }
@@ -322,16 +323,296 @@ COMMIT;
 `;
 }
 
+function twoYearReviewSql(matches: ExactOntMatch[], oltName: string) {
+  const deactivatedMatches = matches.filter(
+    (match) => match.ont.controlFlag === "deactivated"
+  );
+  const values = deactivatedMatches
+    .map((match) => `  (${[
+      match.customer.customerId,
+      match.ont.frameNumber,
+      match.ont.slotNumber,
+      match.ont.ponPortNumber,
+      match.ont.ontId,
+      sqlText(match.ont.ontSerial),
+    ].join(", ")})`)
+    .join(",\n");
+  const oltNameSql = sqlText(oltName);
+
+  return `-- READ ONLY / PRIVATE: candidates for the father's two-year rule.
+-- U2000 provides the current "deactivated" flag but no deactivation date.
+-- Therefore this report uses customers.deactivation_date as a visible proxy;
+-- it does not end, delete, or update any OLT mapping.
+WITH u2000_deactivated (
+  customer_id, frame_number, slot_number, pon_port_number, ont_id, ont_serial
+) AS (
+  VALUES
+${values}
+), evaluated AS (
+  SELECT
+    source.customer_id,
+    customer.name AS customer_name,
+    customer.status AS app_status,
+    customer.deactivation_date,
+    source.frame_number,
+    source.slot_number,
+    source.pon_port_number,
+    source.ont_id,
+    assignment.customer_ont_assignment_id,
+    CASE
+      WHEN assignment.customer_ont_assignment_id IS NULL
+        THEN 'not_currently_imported'
+      WHEN customer.status <> 'disconnected'
+        THEN 'app_status_is_not_disconnected'
+      WHEN customer.deactivation_date IS NULL
+        THEN 'missing_deactivation_date'
+      WHEN customer.deactivation_date < CURRENT_DATE - INTERVAL '2 years'
+        THEN 'candidate_over_two_years'
+      ELSE 'deactivated_within_two_years'
+    END AS review_status
+  FROM u2000_deactivated source
+  JOIN public.customers customer ON customer.customer_id = source.customer_id
+  LEFT JOIN public.olts olt
+    ON olt.normalized_name = UPPER(TRIM(${oltNameSql}))
+  LEFT JOIN public.customer_ont_assignments assignment
+    ON assignment.customer_id = source.customer_id
+   AND assignment.olt_id = olt.olt_id
+   AND assignment.frame_number = source.frame_number
+   AND assignment.slot_number = source.slot_number
+   AND assignment.pon_port_number = source.pon_port_number
+   AND assignment.ont_id = source.ont_id
+   AND UPPER(TRIM(assignment.ont_serial)) = UPPER(TRIM(source.ont_serial))
+   AND assignment.source = 'u2000_import'
+   AND assignment.ended_at IS NULL
+)
+SELECT review_status, COUNT(*) AS customer_count
+FROM evaluated
+GROUP BY review_status
+ORDER BY review_status;
+
+WITH u2000_deactivated (
+  customer_id, frame_number, slot_number, pon_port_number, ont_id, ont_serial
+) AS (
+  VALUES
+${values}
+)
+SELECT
+  customer.customer_id,
+  customer.name AS customer_name,
+  customer.status AS app_status,
+  customer.deactivation_date,
+  source.frame_number AS frame,
+  source.slot_number AS card,
+  source.pon_port_number AS pon_port,
+  source.ont_id
+FROM u2000_deactivated source
+JOIN public.customers customer ON customer.customer_id = source.customer_id
+JOIN public.olts olt ON olt.normalized_name = UPPER(TRIM(${oltNameSql}))
+JOIN public.customer_ont_assignments assignment
+  ON assignment.customer_id = source.customer_id
+ AND assignment.olt_id = olt.olt_id
+ AND assignment.frame_number = source.frame_number
+ AND assignment.slot_number = source.slot_number
+ AND assignment.pon_port_number = source.pon_port_number
+ AND assignment.ont_id = source.ont_id
+ AND UPPER(TRIM(assignment.ont_serial)) = UPPER(TRIM(source.ont_serial))
+ AND assignment.source = 'u2000_import'
+ AND assignment.ended_at IS NULL
+WHERE customer.status = 'disconnected'
+  AND customer.deactivation_date < CURRENT_DATE - INTERVAL '2 years'
+ORDER BY customer.deactivation_date, customer.name;
+`;
+}
+
+/**
+ * Builds a guarded write script only after staff have reviewed the read-only
+ * two-year report. The expected count makes the transaction fail closed if
+ * customer status, dates, or current OLT mappings changed since that review.
+ */
+function twoYearApplySql(
+  matches: ExactOntMatch[],
+  oltName: string,
+  expectedCount: number
+) {
+  const deactivatedMatches = matches.filter(
+    (match) => match.ont.controlFlag === "deactivated"
+  );
+  const values = deactivatedMatches
+    .map((match) => `  (${[
+      match.customer.customerId,
+      match.ont.frameNumber,
+      match.ont.slotNumber,
+      match.ont.ponPortNumber,
+      match.ont.ontId,
+      sqlText(match.ont.ontSerial),
+    ].join(", ")})`)
+    .join(",\n");
+  const oltNameSql = sqlText(oltName);
+
+  return `-- WRITE / PRIVATE: ends exactly the reviewed, over-two-year OLT mappings.
+-- This preserves customers, billing, payments, and assignment history.
+-- It does not contact U2000 and does not activate/deactivate/delete an ONT.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+SELECT pg_advisory_xact_lock(hashtext('spcl-u2000-two-year-exclusion'));
+
+CREATE TEMP TABLE spcl_u2000_deactivated_stage (
+  customer_id INTEGER NOT NULL,
+  frame_number SMALLINT NOT NULL,
+  slot_number SMALLINT NOT NULL,
+  pon_port_number SMALLINT NOT NULL,
+  ont_id INTEGER NOT NULL,
+  ont_serial TEXT NOT NULL,
+  PRIMARY KEY (customer_id, frame_number, slot_number, pon_port_number, ont_id)
+) ON COMMIT DROP;
+
+INSERT INTO spcl_u2000_deactivated_stage (
+  customer_id, frame_number, slot_number, pon_port_number, ont_id, ont_serial
+) VALUES
+${values};
+
+CREATE TEMP TABLE spcl_two_year_olt_candidates ON COMMIT DROP AS
+SELECT
+  assignment.customer_ont_assignment_id,
+  customer.customer_id,
+  customer.name AS customer_name,
+  customer.deactivation_date,
+  source.frame_number,
+  source.slot_number,
+  source.pon_port_number,
+  source.ont_id,
+  source.ont_serial
+FROM spcl_u2000_deactivated_stage source
+JOIN public.customers customer ON customer.customer_id = source.customer_id
+JOIN public.olts olt ON olt.normalized_name = UPPER(TRIM(${oltNameSql}))
+JOIN public.customer_ont_assignments assignment
+  ON assignment.customer_id = source.customer_id
+ AND assignment.olt_id = olt.olt_id
+ AND assignment.frame_number = source.frame_number
+ AND assignment.slot_number = source.slot_number
+ AND assignment.pon_port_number = source.pon_port_number
+ AND assignment.ont_id = source.ont_id
+ AND UPPER(TRIM(assignment.ont_serial)) = UPPER(TRIM(source.ont_serial))
+ AND assignment.source = 'u2000_import'
+ AND assignment.ended_at IS NULL
+WHERE customer.status = 'disconnected'
+  AND customer.deactivation_date < CURRENT_DATE - INTERVAL '2 years';
+
+DO $$
+DECLARE
+  candidate_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO candidate_count FROM spcl_two_year_olt_candidates;
+  IF candidate_count <> ${expectedCount} THEN
+    RAISE EXCEPTION
+      'Safety stop: expected ${expectedCount} reviewed mappings, found %. Rerun the dry-run report.',
+      candidate_count;
+  END IF;
+END $$;
+
+CREATE TEMP TABLE spcl_two_year_olt_ended (
+  customer_ont_assignment_id BIGINT PRIMARY KEY,
+  customer_id INTEGER NOT NULL,
+  ended_at TIMESTAMPTZ NOT NULL
+) ON COMMIT DROP;
+
+WITH updated AS (
+  UPDATE public.customer_ont_assignments assignment
+  SET ended_at = CURRENT_TIMESTAMP,
+      updated_at = CURRENT_TIMESTAMP
+  FROM spcl_two_year_olt_candidates candidate
+  WHERE assignment.customer_ont_assignment_id = candidate.customer_ont_assignment_id
+    AND assignment.ended_at IS NULL
+  RETURNING
+    assignment.customer_ont_assignment_id,
+    assignment.customer_id,
+    assignment.ended_at
+)
+INSERT INTO spcl_two_year_olt_ended (
+  customer_ont_assignment_id, customer_id, ended_at
+)
+SELECT customer_ont_assignment_id, customer_id, ended_at FROM updated;
+
+DO $$
+DECLARE
+  ended_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO ended_count FROM spcl_two_year_olt_ended;
+  IF ended_count <> ${expectedCount} THEN
+    RAISE EXCEPTION
+      'Safety stop: expected to end ${expectedCount} mappings, ended %. Transaction will roll back.',
+      ended_count;
+  END IF;
+END $$;
+
+INSERT INTO public.audit_logs (
+  employee_id, actor_name, action, entity_type, entity_id, field_name,
+  old_value, new_value, reason, source_key
+)
+SELECT
+  NULL,
+  'U2000 two-year exclusion',
+  'Ended customer OLT information',
+  'customer',
+  candidate.customer_id::TEXT,
+  'network_access',
+  json_build_object(
+    'customerOntAssignmentId', candidate.customer_ont_assignment_id,
+    'oltName', ${oltNameSql},
+    'frameNumber', candidate.frame_number,
+    'slotNumber', candidate.slot_number,
+    'ponPortNumber', candidate.pon_port_number,
+    'ontId', candidate.ont_id,
+    'source', 'u2000_import'
+  )::TEXT,
+  json_build_object('endedAt', ended.ended_at)::TEXT,
+  'U2000 currently deactivated; app deactivation date is more than two years old',
+  'u2000-two-year-exclusion:' || candidate.customer_ont_assignment_id
+FROM spcl_two_year_olt_candidates candidate
+JOIN spcl_two_year_olt_ended ended
+  ON ended.customer_ont_assignment_id = candidate.customer_ont_assignment_id
+ON CONFLICT (source_key) DO NOTHING;
+
+SELECT
+  candidate.customer_id,
+  candidate.customer_name,
+  candidate.deactivation_date,
+  candidate.frame_number AS frame,
+  candidate.slot_number AS card,
+  candidate.pon_port_number AS pon_port,
+  candidate.ont_id,
+  ended.ended_at,
+  'ended_this_run' AS result
+FROM spcl_two_year_olt_candidates candidate
+JOIN spcl_two_year_olt_ended ended
+  ON ended.customer_ont_assignment_id = candidate.customer_ont_assignment_id
+ORDER BY candidate.deactivation_date, candidate.customer_name;
+
+COMMIT;
+`;
+}
+
 async function main() {
   const files = optionValues("--file");
   const accessDb = optionValue("--access-db");
   const oltName = optionValue("--olt-name")?.trim();
   const managementIp = optionValue("--management-ip")?.trim();
   const outputDirectory = optionValue("--output-dir");
+  const expectedTwoYearCountText = optionValue("--two-year-expected-count")?.trim();
   if (files.length === 0 || !accessDb || !oltName || !managementIp || !outputDirectory) {
     showUsage();
   }
   if (isIP(managementIp) === 0) throw new Error("Invalid --management-ip.");
+  const expectedTwoYearCount = expectedTwoYearCountText == null
+    ? null
+    : Number(expectedTwoYearCountText);
+  if (
+    expectedTwoYearCount != null &&
+    (!Number.isInteger(expectedTwoYearCount) || expectedTwoYearCount < 0)
+  ) {
+    throw new Error("--two-year-expected-count must be a non-negative integer.");
+  }
 
   const onts = await readHuaweiOntLogs(files);
   const customers = await readAccessCustomers(accessDb);
@@ -339,6 +620,13 @@ async function main() {
   const outputDir = path.resolve(outputDirectory);
   const dryRunPath = path.join(outputDir, "newport-safe-matches-tableplus-dry-run.sql");
   const applyPath = path.join(outputDir, "newport-safe-matches-tableplus-apply.sql");
+  const twoYearReviewPath = path.join(
+    outputDir,
+    "newport-over-two-years-tableplus-dry-run.sql"
+  );
+  const twoYearApplyPath = expectedTwoYearCount == null
+    ? null
+    : path.join(outputDir, "newport-over-two-years-tableplus-apply.sql");
 
   await Promise.all([
     writeFile(dryRunPath, dryRunSql(matching.safeMatches, oltName, managementIp), {
@@ -347,6 +635,16 @@ async function main() {
     writeFile(applyPath, applySql(matching.safeMatches, oltName, managementIp), {
       encoding: "utf8", mode: 0o600,
     }),
+    writeFile(twoYearReviewPath, twoYearReviewSql(matching.safeMatches, oltName), {
+      encoding: "utf8", mode: 0o600,
+    }),
+    ...(twoYearApplyPath == null
+      ? []
+      : [writeFile(
+          twoYearApplyPath,
+          twoYearApplySql(matching.safeMatches, oltName, expectedTwoYearCount!),
+          { encoding: "utf8", mode: 0o600 }
+        )]),
   ]);
 
   console.log(JSON.stringify({
@@ -355,6 +653,8 @@ async function main() {
     needsReview: matching.review.length,
     dryRunPath,
     applyPath,
+    twoYearReviewPath,
+    twoYearApplyPath,
   }, null, 2));
 }
 

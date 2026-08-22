@@ -77,6 +77,10 @@ services:
       GMAIL_SENDER_ADDRESS: ${GMAIL_SENDER_ADDRESS:-receipts@fywycable.com}
       GMAIL_SENDER_NAME: ${GMAIL_SENDER_NAME:-SPCL/FYWY Cable - Do Not Reply}
 
+      # Private per-OLT SSH credentials and pinned host fingerprints used only
+      # by the backend's read-only "Verify with OLT" action.
+      HUAWEI_OLT_CONNECTIONS_JSON: ${HUAWEI_OLT_CONNECTIONS_JSON:-}
+
       # auto | true | false. "auto" decides per request, so branch offices
       # arriving over HTTPS through the tunnel get a protected cookie while
       # the home office on the plain-HTTP LAN address keeps working. Only move

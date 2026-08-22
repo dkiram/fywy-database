@@ -19,7 +19,20 @@ type NetworkAccess = {
   source: "manual" | "u2000_import" | "api_sync";
   mapping_status: "unverified" | "verified" | "mismatch";
   verified_at: string | null;
+  verified_by_first_name: string | null;
+  verified_by_last_name: string | null;
   updated_at: string;
+};
+
+type VerificationResult = {
+  status: "verified" | "mismatch";
+  message: string;
+  checkedAt: string;
+  live: {
+    controlFlag: "active" | "deactivated";
+    runState: "online" | "offline";
+    description: string | null;
+  } | null;
 };
 
 type OltOption = {
@@ -130,6 +143,8 @@ export default function CustomerNetworkAccessCard({
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verification, setVerification] = useState<VerificationResult | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -196,6 +211,35 @@ export default function CustomerNetworkAccessCard({
     setExpanded(true);
   }
 
+  async function verifyWithOlt() {
+    try {
+      setVerifying(true);
+      setError("");
+      setNotice("");
+      setVerification(null);
+      const response = await apiFetch(
+        `/api/customers/${customerId}/network-access/verify`,
+        { method: "POST" }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not verify this mapping with the OLT.");
+      }
+      setNetworkAccess(data.networkAccess);
+      setVerification(data.verification);
+      setExpanded(true);
+      setNotice(data.verification.message);
+    } catch (verifyError) {
+      setError(
+        verifyError instanceof Error
+          ? verifyError.message
+          : "Could not verify this mapping with the OLT."
+      );
+    } finally {
+      setVerifying(false);
+    }
+  }
+
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
@@ -210,6 +254,7 @@ export default function CustomerNetworkAccessCard({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save OLT information.");
       setNetworkAccess(data.networkAccess);
+      setVerification(null);
       setEditing(false);
       setNotice("OLT information saved. This mapping is unverified until it is checked against the OLT.");
       if (!olts.some((olt) => olt.olt_id === data.networkAccess.olt_id)) {
@@ -267,6 +312,16 @@ export default function CustomerNetworkAccessCard({
               {expanded ? "Hide details" : "View OLT information"}
             </button>
           )}
+          {canEdit && networkAccess && !editing && !loading && (
+            <button
+              type="button"
+              disabled={verifying}
+              onClick={verifyWithOlt}
+              className="rounded-lg bg-tertiary px-3 py-2 text-sm font-medium text-on-tertiary transition hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+            >
+              {verifying ? "Checking live OLT..." : "Verify with OLT"}
+            </button>
+          )}
           {canEdit && !editing && !loading && (
             <button
               type="button"
@@ -289,6 +344,18 @@ export default function CustomerNetworkAccessCard({
         <p className="mt-5 rounded-lg bg-tertiary-container p-3 text-sm text-on-tertiary-container">{notice}</p>
       )}
 
+      {verification?.live && (
+        <div className={`mt-5 rounded-lg p-3 text-sm ${verification.status === "verified" ? "bg-green-100 text-green-900" : "bg-error-container text-on-error-container"}`}>
+          <p className="font-semibold">
+            Live OLT: {verification.live.controlFlag === "active" ? "Active" : "Deactivated"}
+            {" · "}{verification.live.runState === "online" ? "Online" : "Offline"}
+          </p>
+          <p className="mt-1">
+            Checked {new Date(verification.checkedAt).toLocaleString()}.
+          </p>
+        </div>
+      )}
+
       {!loading && expanded && networkAccess && !editing && (
         <div className="mt-6 border-t border-surface-container pt-6">
           <div className="grid grid-cols-2 gap-x-8 gap-y-5 md:grid-cols-4">
@@ -301,6 +368,22 @@ export default function CustomerNetworkAccessCard({
             <Value
               label="Source"
               value={networkAccess.source === "u2000_import" ? "U2000 import" : networkAccess.source === "api_sync" ? "API sync" : "Manual entry"}
+            />
+            <Value
+              label="Last verified"
+              value={
+                networkAccess.verified_at
+                  ? new Date(networkAccess.verified_at).toLocaleString()
+                  : "Not verified"
+              }
+            />
+            <Value
+              label="Verified by"
+              value={
+                networkAccess.verified_by_first_name
+                  ? `${networkAccess.verified_by_first_name} ${networkAccess.verified_by_last_name ?? ""}`.trim()
+                  : "—"
+              }
             />
           </div>
           <p className="mt-5 text-xs text-on-surface-variant">
