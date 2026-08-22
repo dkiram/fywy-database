@@ -411,13 +411,26 @@ export async function changeOntActivationState(
     writeStarted = true;
     await shell.command(command, 30_000);
 
-    // The administrative flag normally changes immediately, but tolerate a
-    // short propagation delay before classifying the outcome as uncertain.
+    // The older MA5680T can acknowledge the write several seconds before its
+    // paginated display output reflects the new flag. Retry both stale reads
+    // and transient parser/read failures for a bounded period.
     let after: ParsedOnt | null = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (attempt > 0) await pause(750);
-      after = await readTargetOnt(shell, target);
-      if (after?.controlFlag === desiredControlFlag) break;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      if (attempt > 0) await pause(1_000);
+      try {
+        after = await readTargetOnt(shell, target);
+        if (after?.controlFlag === desiredControlFlag) break;
+      } catch (error) {
+        // An incomplete first paginated table can be retried. Connection
+        // closure and command timeouts must escape immediately instead of
+        // multiplying a 45-second timeout across every retry.
+        if (
+          !(error instanceof Error) ||
+          !error.message.includes("No Huawei ONT status rows")
+        ) {
+          throw error;
+        }
+      }
     }
 
     if (!after || after.controlFlag !== desiredControlFlag) {

@@ -410,6 +410,7 @@ networkAccessRouter.post(
           });
         }
 
+        let reconciledAttemptIds: number[] = [];
         if (verified && liveOnt) {
           const serialConflict = await client.query(
             `SELECT customer_ont_assignment_id
@@ -426,6 +427,32 @@ networkAccessRouter.post(
             verified = false;
             mismatchReasons.push("ONT serial is already assigned to another customer");
           }
+        }
+
+        if (verified && liveOnt) {
+          // If an earlier write reached Huawei but its immediate confirmation
+          // timed out, a later read-only verification can safely resolve that
+          // journal entry only when the requested state now matches live data.
+          const reconciledResult = await client.query(
+            `UPDATE public.olt_action_attempts
+             SET outcome = 'succeeded',
+                 after_control_flag = $2,
+                 after_run_state = $3,
+                 result_message =
+                   'Resolved by a subsequent read-only live OLT verification.',
+                 completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+             WHERE customer_ont_assignment_id = $1
+               AND outcome = 'uncertain'
+               AND (
+                 (action = 'deactivate' AND $2 = 'deactivated')
+                 OR (action = 'activate' AND $2 = 'active')
+               )
+             RETURNING olt_action_attempt_id;`,
+            [assignmentId, liveOnt.controlFlag, liveOnt.runState]
+          );
+          reconciledAttemptIds = reconciledResult.rows.map((row) =>
+            Number(row.olt_action_attempt_id)
+          );
         }
 
         await client.query(
@@ -466,6 +493,7 @@ networkAccessRouter.post(
             liveControlFlag: liveOnt?.controlFlag ?? null,
             liveRunState: liveOnt?.runState ?? null,
             mismatchReasons,
+            reconciledAttemptIds,
           },
           reason: verified
             ? "Read-only live OLT verification"
@@ -487,6 +515,7 @@ networkAccessRouter.post(
                   description: liveOnt.description,
                 }
               : null,
+            reconciledAttemptIds,
           },
           networkAccess: saved,
         });
