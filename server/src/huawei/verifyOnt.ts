@@ -239,6 +239,17 @@ function openHuaweiShell(target: OntVerificationTarget) {
         keepaliveInterval: 5_000,
         keepaliveCountMax: 2,
         hostVerifier: (key: Buffer) => verifyHostKey(secret.fingerprint, key),
+        // Newport's 2014 DOPRA SSH server offers only the SHA-1 group-exchange
+        // KEX and the much weaker fixed 1024-bit group1 KEX. Keep every modern
+        // default first, append only the option PuTTY is known to negotiate,
+        // and deliberately leave diffie-hellman-group1-sha1 disabled.
+        algorithms: {
+          kex: {
+            append: ["diffie-hellman-group-exchange-sha1"],
+            prepend: [],
+            remove: [],
+          },
+        },
       } satisfies ConnectConfig);
   });
 }

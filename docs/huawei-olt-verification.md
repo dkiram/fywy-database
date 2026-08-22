@@ -30,6 +30,12 @@ The fingerprint can use the usual OpenSSH `SHA256:...` base64 form or a
 firmware supports command authorization. Do not reuse an administrator's
 personal login if a restricted account can be created.
 
+Newport's legacy `SSH-1.99-DOPRA-1.5` server offers only SHA-1 key exchange.
+The verifier appends `diffie-hellman-group-exchange-sha1` after all modern
+defaults because that is the algorithm the existing PuTTY client negotiates.
+It does not enable the weaker fixed-group `diffie-hellman-group1-sha1` option,
+and production still requires the OLT's SHA-256 host-key fingerprint.
+
 ## One controlled test session
 
 Before setting the secret, confirm in PuTTY whether Newport uses SSH and which
