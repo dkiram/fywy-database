@@ -395,8 +395,13 @@ networkAccessRouter.post(
                  ELSE ont_serial
                END,
                verified_at = CASE WHEN $2 = 'verified' THEN CURRENT_TIMESTAMP ELSE NULL END,
-               verified_by_employee_id = CASE WHEN $2 = 'verified' THEN $4 ELSE NULL END,
-               updated_by_employee_id = $4,
+               -- Cast the shared parameter explicitly: inside a CASE,
+               -- PostgreSQL can otherwise infer an untyped staff ID as TEXT.
+               verified_by_employee_id = CASE
+                 WHEN $2 = 'verified' THEN $4::BIGINT
+                 ELSE NULL::BIGINT
+               END,
+               updated_by_employee_id = $4::BIGINT,
                updated_at = CURRENT_TIMESTAMP
            WHERE customer_ont_assignment_id = $1;`,
           [
