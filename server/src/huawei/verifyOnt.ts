@@ -366,8 +366,10 @@ export async function readOntFromOlt(
 
 /**
  * Change one ONT's administrative state after re-reading its live identity in
- * the SAME CLI session. The command vocabulary is deliberately closed: no
- * caller-provided text is ever interpolated as a Huawei command.
+ * the SAME CLI session as the write. The command vocabulary is deliberately
+ * closed: no caller-provided text is ever interpolated as a Huawei command.
+ * Post-write confirmation uses a fresh session because this older MA5680T
+ * stops returning reliable display output after a state-changing command.
  */
 export async function changeOntActivationState(
   target: OntVerificationTarget,
@@ -376,6 +378,7 @@ export async function changeOntActivationState(
 ) {
   const { connection, shell } = await openHuaweiShell(target);
   let writeStarted = false;
+  let writeSessionClosed = false;
 
   try {
     await enterTargetGponInterface(shell, target);
@@ -409,41 +412,69 @@ export async function changeOntActivationState(
     // module. Numeric fields were validated and loaded from PostgreSQL.
     const command = `ont ${action} ${target.ponPortNumber} ${target.ontId}`;
     writeStarted = true;
-    await shell.command(command, 30_000);
+    let writeResponseError: Error | null = null;
+    try {
+      await shell.command(command, 30_000);
+    } catch (error) {
+      // Both supervised Newport writes changed the ONT but did not return a
+      // prompt this client could recognize. A missing response is therefore
+      // not success or failure; close this session and let a fresh read decide.
+      writeResponseError =
+        error instanceof Error ? error : new Error("Unknown OLT write response error.");
+    }
 
-    // The older MA5680T can acknowledge the write several seconds before its
-    // paginated display output reflects the new flag. Retry both stale reads
-    // and transient parser/read failures for a bounded period.
+    // Close the write session deliberately. Standalone Verify consistently
+    // works, while both supervised tests proved that a display command issued
+    // after a write in the same legacy SSH session is unreliable.
+    shell.close();
+    connection.end();
+    writeSessionClosed = true;
+
+    // Open a clean read-only session for each bounded confirmation attempt.
+    // This also tolerates the OLT taking a few seconds to publish the flag.
     let after: ParsedOnt | null = null;
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      if (attempt > 0) await pause(1_000);
+    let lastReadError: Error | null = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await pause(attempt === 0 ? 1_000 : 1_500);
       try {
-        after = await readTargetOnt(shell, target);
+        after = await readOntFromOlt(target);
+        lastReadError = null;
+        if (after) {
+          const postSerialMatches =
+            after.ontSerial === identity.ontSerial.trim().toUpperCase();
+          const postDescriptionMatches =
+            !!after.description &&
+            normalizeCustomerName(after.description) ===
+              normalizeCustomerName(identity.customerName);
+          if (!postSerialMatches || !postDescriptionMatches) {
+            throw new OltControlError(
+              "uncertain",
+              "The command was sent, but the ONT identity at that location changed during confirmation. Check PuTTY before retrying."
+            );
+          }
+        }
         if (after?.controlFlag === desiredControlFlag) break;
       } catch (error) {
-        // An incomplete first paginated table can be retried. Connection
-        // closure and command timeouts must escape immediately instead of
-        // multiplying a 45-second timeout across every retry.
-        if (
-          !(error instanceof Error) ||
-          !error.message.includes("No Huawei ONT status rows")
-        ) {
-          throw error;
-        }
+        if (error instanceof OltControlError) throw error;
+        lastReadError = error instanceof Error ? error : new Error("Unknown OLT read error.");
       }
     }
 
     if (!after || after.controlFlag !== desiredControlFlag) {
       throw new OltControlError(
         "uncertain",
-        "The command was sent, but the expected ONT state could not be confirmed. Check the ONT in PuTTY before retrying."
+        lastReadError
+          ? "The command was sent, but a fresh OLT connection could not confirm its result. Check PuTTY before retrying."
+          : writeResponseError
+            ? "The OLT did not acknowledge the command, and a fresh read did not show the requested state. Check PuTTY before retrying."
+            : "The command was sent, but the expected ONT state could not be confirmed. Check PuTTY before retrying."
       );
     }
 
     return { changed: true, before, after };
   } catch (error) {
     if (error instanceof OltControlError) throw error;
-    if (error instanceof OltVerificationError) throw error;
+    if (error instanceof OltVerificationError && !writeStarted) throw error;
     throw new OltControlError(
       writeStarted ? "uncertain" : "failed",
       writeStarted
@@ -451,7 +482,9 @@ export async function changeOntActivationState(
         : "The ONT could not be checked safely, so no command was sent."
     );
   } finally {
-    shell.close();
-    connection.end();
+    if (!writeSessionClosed) {
+      shell.close();
+      connection.end();
+    }
   }
 }
