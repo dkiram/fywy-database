@@ -122,9 +122,11 @@ function verifyHostKey(expectedFingerprint: Buffer | null, key: Buffer | string)
  */
 class HuaweiShell {
   private output = "";
+  private pagerSearchFrom = 0;
   private waiting:
     | {
         start: number;
+        expectedEcho: string;
         resolve: (value: string) => void;
         reject: (error: Error) => void;
         timer: NodeJS.Timeout;
@@ -142,9 +144,14 @@ class HuaweiShell {
         return;
       }
 
-      // The MA5680T pager waits for a literal space before printing the next
-      // page. The parser later removes the marker from the captured output.
-      if (chunk.includes("---- More")) stream.write(" ");
+      // The pager marker can be divided between SSH packets. Search the full
+      // accumulated output from the previous boundary so split markers are
+      // still detected, then send one literal space for each new page.
+      let markerAt: number;
+      while ((markerAt = this.output.indexOf("---- More", this.pagerSearchFrom)) !== -1) {
+        this.pagerSearchFrom = markerAt + "---- More".length;
+        stream.write(" ");
+      }
       this.checkPrompt();
     });
     stream.on("close", () => {
@@ -159,6 +166,15 @@ class HuaweiShell {
   private checkPrompt() {
     if (!this.waiting) return;
     const commandOutput = this.output.slice(this.waiting.start);
+    // Old MA5680T software can deliver the previous command's prompt after
+    // the next wait begins. Do not accept a prompt until the current command
+    // has been echoed back by the OLT.
+    if (
+      this.waiting.expectedEcho &&
+      !commandOutput.toLowerCase().includes(this.waiting.expectedEcho)
+    ) {
+      return;
+    }
     // Examples: MA5680T>, MA5680T#, MA5680T(config)#,
     // MA5680T(config-if-gpon-0/11)#
     if (!/(?:^|[\r\n])[^\r\n]{1,200}[>#]\s*$/.test(commandOutput)) return;
@@ -168,15 +184,20 @@ class HuaweiShell {
     resolve(commandOutput);
   }
 
-  waitForPrompt(timeoutMs = 20_000, includeBufferedOutput = false) {
+  waitForPrompt(
+    timeoutMs = 20_000,
+    includeBufferedOutput = false,
+    expectedCommand = ""
+  ) {
     if (this.waiting) return Promise.reject(new Error("Another OLT command is still running."));
     const start = includeBufferedOutput ? 0 : this.output.length;
+    const expectedEcho = expectedCommand.trim().toLowerCase();
     return new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.waiting = undefined;
         reject(new Error("Timed out waiting for the OLT command prompt."));
       }, timeoutMs);
-      this.waiting = { start, resolve, reject, timer };
+      this.waiting = { start, expectedEcho, resolve, reject, timer };
       // The initial prompt can already be buffered before the shell callback
       // finishes, so its caller opts into checking the existing buffer.
       this.checkPrompt();
@@ -184,7 +205,7 @@ class HuaweiShell {
   }
 
   async command(command: string, timeoutMs = 20_000) {
-    const response = this.waitForPrompt(timeoutMs);
+    const response = this.waitForPrompt(timeoutMs, false, command);
     this.stream.write(`${command}\r`);
     return response;
   }
