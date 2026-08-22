@@ -3,6 +3,13 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
+import { getAccountOntControlPolicy } from "../huawei/controlPolicy.js";
+import {
+  changeOntActivationState,
+  OltControlError,
+  OltVerificationError,
+  type OntControlAction,
+} from "../huawei/verifyOnt.js";
 
 // MVP 3 account-operations API.
 //
@@ -156,44 +163,41 @@ async function insertStatusHistory(
   return result.rows[0];
 }
 
-// Apply one permitted account-status transition atomically. Endpoint wrappers
-// below provide the allowed starting states, destination, and audit wording.
-async function transitionAccount(
-  req: Request,
-  res: Response,
-  options: {
-    action: string;
-    allowedFrom: AccountStatus[];
-    toStatus: AccountStatus;
-    updateDateColumn?: "deactivation_date" | "reactivation_date";
-    requireClearedBalance?: boolean;
-    chargeReconnectionFee?: boolean;
+type TransitionOptions = {
+  action: string;
+  allowedFrom: AccountStatus[];
+  toStatus: AccountStatus;
+  updateDateColumn?: "deactivation_date" | "reactivation_date";
+  requireClearedBalance?: boolean;
+  chargeReconnectionFee?: boolean;
+};
+
+class AccountTransitionError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "AccountTransitionError";
+  }
+}
+
+type TransitionEmployee = NonNullable<Request["session"]["employee"]>;
+
+// This is the database half of an account transition. Keeping it separate
+// lets the Huawei-integrated workflow run and confirm the physical ONT action
+// first, then reuse the exact same locked status/history/fee/audit transaction.
+async function applyAccountTransition(
+  client: PoolClient,
+  values: {
+    customerId: number;
+    reason: string;
+    employee: TransitionEmployee;
+    options: TransitionOptions;
   }
 ) {
-  const customerId = parseCustomerId(req, res);
-  if (customerId === null) return;
-
-  const reason = cleanText(req.body.reason);
-  if (reason.length < 3) {
-    return res.status(400).json({
-      error: "A reason of at least 3 characters is required.",
-    });
-  }
-  if (reason.length > 500) {
-    return res.status(400).json({
-      error: "The reason must be 500 characters or fewer.",
-    });
-  }
-
-  const employee = req.session.employee!;
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
+  const { customerId, reason, employee, options } = values;
 
     // Lock the customer so two employees cannot transition the same account
     // from a stale status at the same time.
-    const customerResult = await client.query(
+  const customerResult = await client.query(
       `
       SELECT customer_id, status
       FROM public.customers
@@ -202,19 +206,18 @@ async function transitionAccount(
       `,
       [customerId]
     );
-    const customer = customerResult.rows[0];
+  const customer = customerResult.rows[0];
 
-    if (!customer) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Customer not found." });
-    }
+  if (!customer) {
+    throw new AccountTransitionError(404, "Customer not found.");
+  }
 
-    if (!options.allowedFrom.includes(customer.status as AccountStatus)) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        error: `This account cannot move from ${customer.status} to ${options.toStatus}.`,
-      });
-    }
+  if (!options.allowedFrom.includes(customer.status as AccountStatus)) {
+    throw new AccountTransitionError(
+      409,
+      `This account cannot move from ${customer.status} to ${options.toStatus}.`
+    );
+  }
 
     // Reconnection can be requested or approved only after the full recurring
     // balance and reconnection fee have been paid or waived.
@@ -230,10 +233,10 @@ async function transitionAccount(
       );
       const outstandingBalance = Number(balanceResult.rows[0]?.outstanding_balance ?? 0);
       if (outstandingBalance > 0) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({
-          error: `Reconnection requires the full outstanding balance. J$${outstandingBalance.toFixed(2)} remains unpaid.`,
-        });
+        throw new AccountTransitionError(
+          409,
+          `Reconnection requires the full outstanding balance. J$${outstandingBalance.toFixed(2)} remains unpaid.`
+        );
       }
     }
 
@@ -324,18 +327,381 @@ async function transitionAccount(
       ]
     );
 
-    await client.query("COMMIT");
-    res.json({
+    return {
       customer: updatedResult.rows[0],
       statusHistory: history,
+    };
+}
+
+// Apply one permitted account-status transition atomically. Endpoint wrappers
+// below provide the allowed starting states, destination, and audit wording.
+async function transitionAccount(
+  req: Request,
+  res: Response,
+  options: TransitionOptions
+) {
+  const customerId = parseCustomerId(req, res);
+  if (customerId === null) return;
+
+  const reason = cleanText(req.body.reason);
+  if (reason.length < 3) {
+    return res.status(400).json({
+      error: "A reason of at least 3 characters is required.",
     });
+  }
+  if (reason.length > 500) {
+    return res.status(400).json({
+      error: "The reason must be 500 characters or fewer.",
+    });
+  }
+
+  const employee = req.session.employee!;
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    const result = await applyAccountTransition(client, {
+      customerId,
+      reason,
+      employee,
+      options,
+    });
+    await client.query("COMMIT");
+    res.json(result);
   } catch (error) {
     await client.query("ROLLBACK");
+    if (error instanceof AccountTransitionError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error(`Could not ${options.action.toLowerCase()}:`, error);
     res.status(500).json({ error: `Could not ${options.action.toLowerCase()}.` });
   } finally {
     client.release();
   }
+}
+
+type AccountOntContext = {
+  customer_id: number;
+  customer_name: string;
+  customer_status: AccountStatus;
+  customer_ont_assignment_id: number | null;
+  management_ip: string | null;
+  frame_number: number | null;
+  slot_number: number | null;
+  pon_port_number: number | null;
+  ont_id: number | null;
+  ont_serial: string | null;
+  mapping_status: string | null;
+};
+
+const accountOntActionsInProgress = new Set<number>();
+
+async function loadAccountOntContext(customerId: number) {
+  const result = await pool.query<AccountOntContext>(
+    `SELECT
+       customer.customer_id,
+       customer.name AS customer_name,
+       customer.status AS customer_status,
+       assignment.customer_ont_assignment_id,
+       host(olt.management_ip) AS management_ip,
+       assignment.frame_number,
+       assignment.slot_number,
+       assignment.pon_port_number,
+       assignment.ont_id,
+       assignment.ont_serial,
+       assignment.mapping_status
+     FROM public.customers customer
+     LEFT JOIN public.customer_ont_assignments assignment
+       ON assignment.customer_id = customer.customer_id
+      AND assignment.ended_at IS NULL
+     LEFT JOIN public.olts olt ON olt.olt_id = assignment.olt_id
+     WHERE customer.customer_id = $1;`,
+    [customerId]
+  );
+  return result.rows[0] ?? null;
+}
+
+function mappingReadyForAccountAction(context: AccountOntContext | null) {
+  return Boolean(
+    context?.customer_ont_assignment_id &&
+      context.mapping_status === "verified" &&
+      context.ont_serial &&
+      context.management_ip
+  );
+}
+
+/**
+ * Perform the physical ONT action as a durable saga: confirm the Huawei state
+ * first, then commit the database account transition. If either half is
+ * uncertain, the other half is never falsely reported as successful.
+ */
+async function transitionAccountWithOnt(
+  req: Request,
+  res: Response,
+  options: TransitionOptions,
+  ontAction: OntControlAction,
+  confirmationVerb: "DEACTIVATE" | "RECONNECT"
+) {
+  const customerId = parseCustomerId(req, res);
+  if (customerId === null) return;
+
+  const reason = cleanText(req.body.reason);
+  if (reason.length < 3 || reason.length > 500) {
+    return res.status(400).json({
+      error: "A reason between 3 and 500 characters is required.",
+    });
+  }
+  const requiredConfirmation = `${confirmationVerb} ${customerId}`;
+  if (cleanText(req.body.confirmation) !== requiredConfirmation) {
+    return res.status(400).json({
+      error: `Type ${requiredConfirmation} exactly to confirm.`,
+    });
+  }
+  if (accountOntActionsInProgress.has(customerId)) {
+    return res.status(409).json({ error: "This customer already has an OLT account action in progress." });
+  }
+
+  const context = await loadAccountOntContext(customerId);
+  if (!context) return res.status(404).json({ error: "Customer not found." });
+  if (!options.allowedFrom.includes(context.customer_status)) {
+    return res.status(409).json({
+      error: `This account cannot move from ${context.customer_status} to ${options.toStatus}.`,
+    });
+  }
+  if (!mappingReadyForAccountAction(context)) {
+    return res.status(409).json({
+      error: "This account needs a verified OLT mapping and ONT serial before service can be changed.",
+    });
+  }
+
+  // Avoid cutting service before discovering that a reconnecting customer
+  // still owes money. applyAccountTransition repeats this check under lock.
+  if (options.requireClearedBalance) {
+    await pool.query(
+      `SELECT public.spcl_generate_monthly_charges(
+        (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+      );`
+    );
+    const balanceResult = await pool.query(
+      `SELECT outstanding_balance FROM public.customer_billing_status WHERE customer_id = $1;`,
+      [customerId]
+    );
+    const outstandingBalance = Number(balanceResult.rows[0]?.outstanding_balance ?? 0);
+    if (outstandingBalance > 0) {
+      return res.status(409).json({
+        error: `Reconnection requires the full outstanding balance. J$${outstandingBalance.toFixed(2)} remains unpaid.`,
+      });
+    }
+  }
+
+  const assignmentId = Number(context.customer_ont_assignment_id);
+  const unresolved = await pool.query(
+    `SELECT olt_action_attempt_id, outcome
+     FROM public.olt_action_attempts
+     WHERE customer_ont_assignment_id = $1
+       AND outcome IN ('requested', 'uncertain')
+     ORDER BY requested_at DESC
+     LIMIT 1;`,
+    [assignmentId]
+  );
+  if (unresolved.rows.length > 0) {
+    return res.status(409).json({
+      error: `ONT action #${unresolved.rows[0].olt_action_attempt_id} must be resolved before another account action.`,
+    });
+  }
+
+  const employee = req.session.employee!;
+  let attemptId: number;
+  try {
+    const attempt = await pool.query(
+      `INSERT INTO public.olt_action_attempts (
+         customer_id, customer_ont_assignment_id, requested_by_employee_id,
+         action, reason, management_ip, frame_number, slot_number,
+         pon_port_number, ont_id, expected_ont_serial, workflow,
+         account_status_before, account_status_after
+       ) VALUES (
+         $1, $2, $3::BIGINT, $4, $5, $6::INET, $7, $8, $9, $10, $11,
+         'account_transition', $12, $13
+       )
+       RETURNING olt_action_attempt_id;`,
+      [
+        customerId,
+        assignmentId,
+        employee.employeeId,
+        ontAction,
+        reason,
+        context.management_ip,
+        context.frame_number,
+        context.slot_number,
+        context.pon_port_number,
+        context.ont_id,
+        context.ont_serial,
+        context.customer_status,
+        options.toStatus,
+      ]
+    );
+    attemptId = Number(attempt.rows[0].olt_action_attempt_id);
+  } catch (error: unknown) {
+    if (typeof error === "object" && error && "code" in error && error.code === "23505") {
+      return res.status(409).json({ error: "An ONT action is already in progress." });
+    }
+    throw error;
+  }
+
+  accountOntActionsInProgress.add(customerId);
+  let liveResult: Awaited<ReturnType<typeof changeOntActivationState>> | undefined;
+  try {
+    liveResult = await changeOntActivationState(
+      {
+        managementIp: String(context.management_ip),
+        frameNumber: Number(context.frame_number),
+        slotNumber: Number(context.slot_number),
+        ponPortNumber: Number(context.pon_port_number),
+        ontId: Number(context.ont_id),
+      },
+      {
+        ontSerial: String(context.ont_serial),
+        customerName: context.customer_name,
+      },
+      ontAction
+    );
+
+    const outcome = liveResult.changed ? "succeeded" : "no_change";
+    const resultMessage = liveResult.changed
+      ? `ONT ${ontAction} completed, was confirmed live, and the account status was updated.`
+      : `ONT was already ${ontAction === "deactivate" ? "deactivated" : "active"}; the account status was updated.`;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await applyAccountTransition(client, {
+        customerId,
+        reason,
+        employee,
+        options,
+      });
+
+      // Ensure staff did not edit the mapping between live preflight and the
+      // database commit. A mismatch rolls back the account change and leaves
+      // an uncertain journal entry for deliberate reconciliation.
+      const assignmentLock = await client.query(
+        `SELECT customer_ont_assignment_id
+         FROM public.customer_ont_assignments
+         WHERE customer_ont_assignment_id = $1
+           AND customer_id = $2
+           AND ended_at IS NULL
+           AND mapping_status = 'verified'
+           AND ont_serial = $3
+         FOR UPDATE;`,
+        [assignmentId, customerId, context.ont_serial]
+      );
+      if (assignmentLock.rows.length === 0) {
+        throw new Error("The verified customer OLT mapping changed during the live action.");
+      }
+
+      await client.query(
+        `UPDATE public.olt_action_attempts
+         SET outcome = $2,
+             before_control_flag = $3,
+             before_run_state = $4,
+             after_control_flag = $5,
+             after_run_state = $6,
+             result_message = $7,
+             account_status_applied_at = CURRENT_TIMESTAMP,
+             completed_at = CURRENT_TIMESTAMP
+         WHERE olt_action_attempt_id = $1
+           AND outcome = 'requested';`,
+        [
+          attemptId,
+          outcome,
+          liveResult.before.controlFlag,
+          liveResult.before.runState,
+          liveResult.after.controlFlag,
+          liveResult.after.runState,
+          resultMessage,
+        ]
+      );
+      await client.query("COMMIT");
+      return res.json({
+        ...result,
+        ontAction: {
+          attemptId,
+          action: ontAction,
+          outcome,
+          message: resultMessage,
+          before: liveResult.before,
+          after: liveResult.after,
+        },
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const physicalStateWasConfirmed = Boolean(liveResult);
+    const outcome = physicalStateWasConfirmed
+      ? "uncertain"
+      : error instanceof OltControlError
+        ? error.outcome
+        : "failed";
+    const message = physicalStateWasConfirmed
+      ? "The ONT reached the requested state, but the account database update did not commit. Do not retry; an administrator must reconcile this attempt."
+      : error instanceof OltVerificationError
+        ? error.message
+        : "The ONT account action failed before it could be completed.";
+
+    try {
+      await pool.query(
+        `UPDATE public.olt_action_attempts
+         SET outcome = $2,
+             before_control_flag = $3,
+             before_run_state = $4,
+             after_control_flag = $5,
+             after_run_state = $6,
+             result_message = $7,
+             completed_at = CURRENT_TIMESTAMP
+         WHERE olt_action_attempt_id = $1
+           AND outcome = 'requested';`,
+        [
+          attemptId,
+          outcome,
+          liveResult?.before.controlFlag ?? null,
+          liveResult?.before.runState ?? null,
+          liveResult?.after.controlFlag ?? null,
+          liveResult?.after.runState ?? null,
+          message,
+        ]
+      );
+    } catch (journalError) {
+      console.error("Could not finalize integrated OLT action journal:", journalError);
+    }
+
+    console.error(`Integrated OLT account attempt ${attemptId} ended as ${outcome}.`);
+    return res.status(outcome === "blocked" || physicalStateWasConfirmed ? 409 : 502).json({
+      error: message,
+      code: `olt_account_action_${outcome}`,
+      attemptId,
+    });
+  } finally {
+    accountOntActionsInProgress.delete(customerId);
+  }
+}
+
+function transitionAccountWithOptionalOnt(
+  req: Request,
+  res: Response,
+  options: TransitionOptions,
+  ontAction: OntControlAction,
+  confirmationVerb: "DEACTIVATE" | "RECONNECT"
+) {
+  const rawId = req.params.customerId;
+  const customerId = typeof rawId === "string" && /^\d+$/.test(rawId) ? Number(rawId) : -1;
+  if (!getAccountOntControlPolicy(customerId).integrated) {
+    return transitionAccount(req, res, options);
+  }
+  return transitionAccountWithOnt(req, res, options, ontAction, confirmationVerb);
 }
 
 // Paginated work queue used by the Account Operations page. The default
@@ -1317,18 +1683,58 @@ accountsRouter.post(
   }
 );
 
-// Management action: active -> disconnected.
+// The profile uses this read-only capability response to clearly tell staff
+// whether an account action will also change the customer's physical ONT.
+accountsRouter.get(
+  "/customers/:customerId/account-action-capabilities",
+  requireAuth,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+    try {
+      const policy = getAccountOntControlPolicy(customerId);
+      const context = await loadAccountOntContext(customerId);
+      if (!context) return res.status(404).json({ error: "Customer not found." });
+      const mappingReady = mappingReadyForAccountAction(context);
+      res.json({
+        oltAccountActions: {
+          enabled: policy.enabled,
+          allowlisted: policy.allowlisted,
+          integrated: policy.integrated,
+          ready: policy.integrated && mappingReady,
+          reason: !policy.integrated
+            ? "This customer uses the existing account-only workflow."
+            : !mappingReady
+              ? "Verify this customer's OLT mapping before changing service."
+              : null,
+        },
+      });
+    } catch (error) {
+      console.error("Could not load account action capabilities:", error);
+      res.status(500).json({ error: "Could not load account action capabilities." });
+    }
+  }
+);
+
+// Management action: active -> disconnected. When the separate production
+// rollout gate includes this customer, the ONT is confirmed first.
 accountsRouter.post(
   "/customers/:customerId/deactivate",
   requireAuth,
   requireAccountManager,
   (req, res) =>
-    transitionAccount(req, res, {
-      action: "Deactivated customer account",
-      allowedFrom: ["active"],
-      toStatus: "disconnected",
-      updateDateColumn: "deactivation_date",
-    })
+    transitionAccountWithOptionalOnt(
+      req,
+      res,
+      {
+        action: "Deactivated customer account",
+        allowedFrom: ["active"],
+        toStatus: "disconnected",
+        updateDateColumn: "deactivation_date",
+      },
+      "deactivate",
+      "DEACTIVATE"
+    )
 );
 
 // A cleared account enters the queue immediately. An unpaid account creates an
@@ -1667,13 +2073,19 @@ accountsRouter.post(
   requireAuth,
   requireAccountManager,
   (req, res) =>
-    transitionAccount(req, res, {
-      action: "Reconnected customer account",
-      allowedFrom: ["pending_reconnection"],
-      toStatus: "active",
-      updateDateColumn: "reactivation_date",
-      requireClearedBalance: true,
-    })
+    transitionAccountWithOptionalOnt(
+      req,
+      res,
+      {
+        action: "Reconnected customer account",
+        allowedFrom: ["pending_reconnection"],
+        toStatus: "active",
+        updateDateColumn: "reactivation_date",
+        requireClearedBalance: true,
+      },
+      "activate",
+      "RECONNECT"
+    )
 );
 
 export { insertStatusHistory };

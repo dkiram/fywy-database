@@ -12,26 +12,12 @@ import {
   readOntFromOlt,
   type OntControlAction,
 } from "../huawei/verifyOnt.js";
+import { getTestOntControlPolicy } from "../huawei/controlPolicy.js";
 
 const networkAccessRouter = Router();
 
-function oltWritesEnabled() {
-  return process.env.HUAWEI_OLT_WRITES_ENABLED?.trim().toLowerCase() === "true";
-}
-
-function oltWriteCustomerIds() {
-  return new Set(
-    (process.env.HUAWEI_OLT_WRITE_CUSTOMER_IDS ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter((value) => /^\d+$/.test(value))
-      .map(Number)
-  );
-}
-
 function getOntControlAvailability(customerId: number, assignment: any) {
-  const enabled = oltWritesEnabled();
-  const allowlisted = oltWriteCustomerIds().has(customerId);
+  const { enabled, allowlisted } = getTestOntControlPolicy(customerId);
   const mappingReady =
     assignment?.mapping_status === "verified" && !!assignment?.ont_serial;
   return {
@@ -443,6 +429,10 @@ networkAccessRouter.post(
                  completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
              WHERE customer_ont_assignment_id = $1
                AND outcome = 'uncertain'
+               -- Account-transition uncertainty also includes an uncommitted
+               -- customer status and must be reconciled by an administrator,
+               -- not silently cleared by an equipment-only verification.
+               AND workflow = 'test_control'
                AND (
                  (action = 'deactivate' AND $2 = 'deactivated')
                  OR (action = 'activate' AND $2 = 'active')

@@ -83,6 +83,10 @@ services:
       HUAWEI_OLT_CONNECTIONS_JSON: ${HUAWEI_OLT_CONNECTIONS_JSON:-}
       HUAWEI_OLT_WRITES_ENABLED: ${HUAWEI_OLT_WRITES_ENABLED:-false}
       HUAWEI_OLT_WRITE_CUSTOMER_IDS: ${HUAWEI_OLT_WRITE_CUSTOMER_IDS:-}
+      # Separate rollout gate for the normal account deactivate/reconnect flow.
+      # Both values default closed and must be deliberately configured.
+      HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED: ${HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED:-false}
+      HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS: ${HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS:-}
 
       # auto | true | false. "auto" decides per request, so branch offices
       # arriving over HTTPS through the tunnel get a protected cookie while

@@ -35,6 +35,15 @@ SPCL_HTTP_PORT=
 #           included, even when they arrive over HTTPS.
 SESSION_COOKIE_SECURE=auto
 
+# --- Huawei OLT backend integration -----------------------------------------
+# Credentials/fingerprints belong only on the NAS. Keep both write workflows
+# disabled unless a supervised rollout is actively in progress.
+HUAWEI_OLT_CONNECTIONS_JSON=
+HUAWEI_OLT_WRITES_ENABLED=false
+HUAWEI_OLT_WRITE_CUSTOMER_IDS=
+HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED=false
+HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS=
+
 # --- Backups -----------------------------------------------------------------
 # Hour of the day, Jamaica time, for the nightly dump.
 BACKUP_HOUR=2

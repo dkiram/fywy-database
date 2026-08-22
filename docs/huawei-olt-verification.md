@@ -81,3 +81,30 @@ Every requested action:
 During this test phase the ONT control does **not** change billing or customer
 account status. That integration is enabled only after deactivate and activate
 both succeed on the spare/company ONT.
+
+## Account Operations integration
+
+Normal account deactivation and reconnection use a separate, closed-by-default
+rollout gate:
+
+```dotenv
+HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED=false
+HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS=
+```
+
+When both the switch and a customer's allowlist entry are present, the regular
+Account Operations dialog clearly states that it will contact Huawei and
+requires `DEACTIVATE <customer-id>` or `RECONNECT <customer-id>`.
+
+The backend performs the change as a durable two-system workflow:
+
+1. Validate account state, payment eligibility, verified mapping, serial, and
+   customer description.
+2. Record the requested action before contacting the OLT.
+3. Change the ONT and confirm its state in a fresh read-only SSH session.
+4. Only then commit the account status, date, fee, history, and audit record.
+
+If Huawei cannot be confirmed, the account database is not changed. If Huawei
+is confirmed but the database commit fails, the journal remains `uncertain`
+and blocks retries until an administrator reconciles both systems. Read-only
+equipment verification deliberately cannot clear that account-level warning.

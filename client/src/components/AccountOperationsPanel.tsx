@@ -79,6 +79,14 @@ type ReconnectionRequest = {
   reviewed_by_name: string | null;
 };
 
+type OltAccountActions = {
+  enabled: boolean;
+  allowlisted: boolean;
+  integrated: boolean;
+  ready: boolean;
+  reason: string | null;
+};
+
 type AccountAction = "deactivate" | "request-reconnection" | "reconnect" | "cancel-reconnection";
 
 // Centralizing labels and endpoints keeps the modal generic while each action
@@ -138,6 +146,7 @@ function AccountOperationsPanel({
   const [notice, setNotice] = useState("");
   const [action, setAction] = useState<AccountAction | null>(null);
   const [reason, setReason] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [saving, setSaving] = useState(false);
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
@@ -147,6 +156,7 @@ function AccountOperationsPanel({
   const [waiverRequests, setWaiverRequests] = useState<WaiverRequest[]>([]);
   const [reconnectionRequests, setReconnectionRequests] = useState<ReconnectionRequest[]>([]);
   const [reversingWaiverId, setReversingWaiverId] = useState<number | null>(null);
+  const [oltAccountActions, setOltAccountActions] = useState<OltAccountActions | null>(null);
 
   // This mirrors server authorization. The server remains the final authority;
   // this check only prevents presenting actions the employee cannot perform.
@@ -157,28 +167,31 @@ function AccountOperationsPanel({
       try {
         setLoading(true);
         setError("");
-        const [historyResponse, billingResponse, waiverResponse, reconnectionResponse] = await Promise.all([
+        const [historyResponse, billingResponse, waiverResponse, reconnectionResponse, capabilityResponse] = await Promise.all([
           apiFetch(`/api/customers/${customerId}/account-history`),
           apiFetch(`/api/customers/${customerId}/billing-status`),
           canManage
             ? apiFetch(`/api/customers/${customerId}/waiver-requests`)
             : Promise.resolve(null),
           apiFetch(`/api/customers/${customerId}/reconnection-requests`),
+          apiFetch(`/api/customers/${customerId}/account-action-capabilities`),
         ]);
-        const [historyData, billingData, waiverData, reconnectionData] = await Promise.all([
+        const [historyData, billingData, waiverData, reconnectionData, capabilityData] = await Promise.all([
           historyResponse.json(),
           billingResponse.json(),
           waiverResponse ? waiverResponse.json() : Promise.resolve({ waiverRequests: [] }),
           reconnectionResponse.json(),
+          capabilityResponse.json(),
         ]);
-        if (!historyResponse.ok || !billingResponse.ok || (waiverResponse && !waiverResponse.ok) || !reconnectionResponse.ok) {
-          throw new Error(historyData.error || billingData.error || waiverData.error || reconnectionData.error || "Could not load account information.");
+        if (!historyResponse.ok || !billingResponse.ok || (waiverResponse && !waiverResponse.ok) || !reconnectionResponse.ok || !capabilityResponse.ok) {
+          throw new Error(historyData.error || billingData.error || waiverData.error || reconnectionData.error || capabilityData.error || "Could not load account information.");
         }
         setHistory(historyData.statusHistory);
         setBilling(billingData.billing);
         setLedger(billingData.ledger);
         setWaiverRequests(waiverData.waiverRequests);
         setReconnectionRequests(reconnectionData.reconnectionRequests);
+        setOltAccountActions(capabilityData.oltAccountActions);
       } catch (loadError) {
         setError(
           loadError instanceof Error
@@ -206,7 +219,7 @@ function AccountOperationsPanel({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason }),
+          body: JSON.stringify({ reason, confirmation }),
         }
       );
       const data = await response.json();
@@ -223,9 +236,11 @@ function AccountOperationsPanel({
         onStatusChanged(data.customer);
         // Update the visible timeline immediately without another round trip.
         setHistory((current) => [data.statusHistory, ...current]);
+        if (data.ontAction?.message) setNotice(data.ontAction.message);
       }
       setAction(null);
       setReason("");
+      setConfirmation("");
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -239,10 +254,18 @@ function AccountOperationsPanel({
 
   const startAction = (nextAction: AccountAction) => {
     setReason("");
+    setConfirmation("");
     setError("");
     setNotice("");
     setAction(nextAction);
   };
+
+  const actionUsesOlt =
+    oltAccountActions?.integrated === true &&
+    (action === "deactivate" || action === "reconnect");
+  const requiredConfirmation = action === "deactivate"
+    ? `DEACTIVATE ${customerId}`
+    : `RECONNECT ${customerId}`;
 
   // Management passes require an exact date or amount plus a permanent reason.
   const submitException = async () => {
@@ -331,6 +354,10 @@ function AccountOperationsPanel({
                 label="Deactivate"
                 icon="link_off"
                 destructive
+                disabled={oltAccountActions?.integrated === true && !oltAccountActions.ready}
+                title={oltAccountActions?.integrated === true && !oltAccountActions.ready
+                  ? oltAccountActions.reason || "Verify the OLT mapping first."
+                  : undefined}
                 onClick={() => startAction("deactivate")}
               />
             )}
@@ -346,10 +373,12 @@ function AccountOperationsPanel({
                 <ActionButton
                   label={billing && Number(billing.outstanding_balance) <= 0 ? "Confirm Reconnection" : "Balance Outstanding"}
                   icon="sync"
-                  disabled={!billing || Number(billing.outstanding_balance) > 0}
+                  disabled={!billing || Number(billing.outstanding_balance) > 0 || (oltAccountActions?.integrated === true && !oltAccountActions.ready)}
                   title={billing && Number(billing.outstanding_balance) > 0
                     ? "The outstanding balance must be cleared before service can be reconnected."
-                    : undefined}
+                    : oltAccountActions?.integrated === true && !oltAccountActions.ready
+                      ? oltAccountActions.reason || "Verify the OLT mapping first."
+                      : undefined}
                   onClick={() => startAction("reconnect")}
                 />
                 <ActionButton
@@ -517,8 +546,9 @@ function AccountOperationsPanel({
               {actionDetails[action].title}
             </h2>
             <p className="mt-2 text-sm text-on-surface-variant">
-              This change becomes permanent account history and is recorded in
-              Activity History.
+              {actionUsesOlt
+                ? "The backend will re-check the saved customer, ONT serial, and OLT location. It will confirm the physical ONT state before updating the account database."
+                : "This change becomes permanent account history and is recorded in Activity History."}
             </p>
             <label className="mt-5 block text-sm font-semibold text-on-surface">
               Reason <span className="text-error">*</span>
@@ -532,6 +562,17 @@ function AccountOperationsPanel({
                 className="mt-1.5 w-full resize-none rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm focus:border-primary"
               />
             </label>
+            {actionUsesOlt && (
+              <label className="mt-4 block text-sm font-semibold text-on-surface">
+                Type <span className="font-mono text-error">{requiredConfirmation}</span> to confirm
+                <input
+                  value={confirmation}
+                  onChange={(event) => setConfirmation(event.target.value)}
+                  autoComplete="off"
+                  className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 font-mono text-sm focus:border-primary"
+                />
+              </label>
+            )}
             {error && (
               <p className="mt-3 rounded-lg bg-error/10 p-3 text-sm text-error">
                 {error}
@@ -544,6 +585,7 @@ function AccountOperationsPanel({
                 onClick={() => {
                   setAction(null);
                   setReason("");
+                  setConfirmation("");
                   setError("");
                 }}
                 className="rounded-lg bg-surface-container px-5 py-2.5 text-sm font-medium text-on-surface-variant disabled:opacity-50"
@@ -552,7 +594,7 @@ function AccountOperationsPanel({
               </button>
               <button
                 type="button"
-                disabled={saving || reason.trim().length < 3}
+                disabled={saving || reason.trim().length < 3 || (actionUsesOlt && confirmation !== requiredConfirmation)}
                 onClick={submitAction}
                 className={`rounded-lg px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50 ${
                   actionDetails[action].destructive ? "bg-error" : "bg-primary"
