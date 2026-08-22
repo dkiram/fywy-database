@@ -1,4 +1,4 @@
-# Huawei OLT read-only verification
+# Huawei OLT verification and controlled ONT actions
 
 The customer profile's **Verify with OLT** action is intentionally separate
 from account status and network disconnection. It reads the saved
@@ -11,8 +11,8 @@ the saved assignment.
 - OLT credentials exist only in `.env.production` on the NAS.
 - Production refuses the SSH connection unless its host key is pinned.
 - The browser receives no OLT password or raw CLI response.
-- The verifier contains no activate, deactivate, delete, or state-changing
-  configuration action.
+- Live activate/deactivate is disabled unless both a global switch and an
+  explicit customer-ID allowlist are configured on the NAS.
 - A network/CLI failure leaves the existing mapping status unchanged.
 - A serial or customer-description difference marks the mapping `mismatch`.
 - A successful comparison records who verified it, when, and an audit entry.
@@ -26,9 +26,10 @@ HUAWEI_OLT_CONNECTIONS_JSON={"192.168.1.3":{"protocol":"ssh","port":22,"username
 ```
 
 The fingerprint can use the usual OpenSSH `SHA256:...` base64 form or a
-64-character SHA-256 hex value. Use a dedicated read-only OLT account if the
-firmware supports command authorization. Do not reuse an administrator's
-personal login if a restricted account can be created.
+64-character SHA-256 hex value. If the firmware supports command authorization,
+use a dedicated service account limited to display plus ONT activate/deactivate.
+Do not reuse an administrator's personal login if that restricted account can
+be created.
 
 Newport's legacy `SSH-1.99-DOPRA-1.5` server offers only SHA-1 key exchange.
 The verifier appends `diffie-hellman-group-exchange-sha1` after all modern
@@ -50,3 +51,33 @@ legacy compatibility set.
 
 Actual deactivate/reactivate work starts only after this read-only test returns
 `Verified` and the result agrees with PuTTY for the same test ONT.
+
+## Test-only ONT controls
+
+Keep the write switch off for normal deployments:
+
+```dotenv
+HUAWEI_OLT_WRITES_ENABLED=false
+HUAWEI_OLT_WRITE_CUSTOMER_IDS=
+```
+
+For the first supervised test, set `HUAWEI_OLT_WRITES_ENABLED=true` and put
+exactly one spare/company customer ID in `HUAWEI_OLT_WRITE_CUSTOMER_IDS`.
+The profile then exposes test controls only for that allowlisted assignment.
+
+Every requested action:
+
+- requires Admin or Head Office authorization, a reason, and an exact typed
+  confirmation containing the customer ID;
+- re-reads and matches the live ONT serial and customer Description in the
+  same SSH session immediately before the command;
+- accepts only the fixed `ont activate` or `ont deactivate` command with
+  numeric location values loaded from PostgreSQL;
+- re-reads the ONT afterward and records the before/after state in
+  `olt_action_attempts` plus Activity History;
+- blocks another command after an uncertain result until a technician checks
+  the ONT in PuTTY.
+
+During this test phase the ONT control does **not** change billing or customer
+account status. That integration is enabled only after deactivate and activate
+both succeed on the spare/company ONT.

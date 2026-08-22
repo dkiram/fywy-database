@@ -1,8 +1,9 @@
 /**
  * Displays and edits the identifiers that locate one customer's ONT.
  *
- * This card only records the mapping. It intentionally does not send commands
- * to the OLT; command execution will be a separate, audited backend service.
+ * Production users normally use this card for read-only mapping verification.
+ * A separately gated test section can request audited backend ONT actions for
+ * one explicitly allowlisted spare/company customer.
  */
 import { useEffect, useId, useState } from "react";
 import { apiFetch } from "../lib/api";
@@ -40,6 +41,15 @@ type OltOption = {
   name: string;
   management_ip: string;
 };
+
+type OntControlAvailability = {
+  enabled: boolean;
+  allowlisted: boolean;
+  available: boolean;
+  reason: string | null;
+};
+
+type OntControlAction = "deactivate" | "activate";
 
 type FormState = {
   oltName: string;
@@ -145,6 +155,11 @@ export default function CustomerNetworkAccessCard({
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verification, setVerification] = useState<VerificationResult | null>(null);
+  const [ontControl, setOntControl] = useState<OntControlAvailability | null>(null);
+  const [controlAction, setControlAction] = useState<OntControlAction | null>(null);
+  const [controlReason, setControlReason] = useState("");
+  const [controlConfirmation, setControlConfirmation] = useState("");
+  const [controlling, setControlling] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -168,6 +183,7 @@ export default function CustomerNetworkAccessCard({
         }
         if (!cancelled) {
           setNetworkAccess(assignmentData.networkAccess);
+          setOntControl(assignmentData.ontControl ?? null);
           setOlts(oltsData.olts);
         }
       } catch (loadError) {
@@ -226,6 +242,18 @@ export default function CustomerNetworkAccessCard({
         throw new Error(data.error || "Could not verify this mapping with the OLT.");
       }
       setNetworkAccess(data.networkAccess);
+      setOntControl((current) =>
+        current
+          ? {
+              ...current,
+              available: current.enabled && current.allowlisted,
+              reason:
+                current.enabled && current.allowlisted
+                  ? null
+                  : current.reason,
+            }
+          : current
+      );
       setVerification(data.verification);
       setExpanded(true);
       setNotice(data.verification.message);
@@ -237,6 +265,63 @@ export default function CustomerNetworkAccessCard({
       );
     } finally {
       setVerifying(false);
+    }
+  }
+
+  function beginOntControl(action: OntControlAction) {
+    setControlAction(action);
+    setControlReason("");
+    setControlConfirmation("");
+    setError("");
+    setNotice("");
+  }
+
+  async function submitOntControl() {
+    if (!controlAction) return;
+    try {
+      setControlling(true);
+      setError("");
+      setNotice("");
+      const response = await apiFetch(
+        `/api/customers/${customerId}/network-access/ont-control`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: controlAction,
+            reason: controlReason,
+            confirmation: controlConfirmation,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not complete the live ONT action.");
+      }
+
+      setVerification({
+        status: "verified",
+        message: data.action.message,
+        checkedAt: new Date().toISOString(),
+        live: {
+          controlFlag: data.action.after.controlFlag,
+          runState: data.action.after.runState,
+          description: null,
+        },
+      });
+      setNotice(data.action.message);
+      setControlAction(null);
+      setControlReason("");
+      setControlConfirmation("");
+      setExpanded(true);
+    } catch (controlError) {
+      setError(
+        controlError instanceof Error
+          ? controlError.message
+          : "Could not complete the live ONT action."
+      );
+    } finally {
+      setControlling(false);
     }
   }
 
@@ -254,6 +339,15 @@ export default function CustomerNetworkAccessCard({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save OLT information.");
       setNetworkAccess(data.networkAccess);
+      setOntControl((current) =>
+        current
+          ? {
+              ...current,
+              available: false,
+              reason: "Verify this mapping and ONT serial before using live controls.",
+            }
+          : current
+      );
       setVerification(null);
       setEditing(false);
       setNotice("OLT information saved. This mapping is unverified until it is checked against the OLT.");
@@ -277,6 +371,9 @@ export default function CustomerNetworkAccessCard({
   const location = networkAccess
     ? `${networkAccess.frame_number}/${networkAccess.slot_number}/${networkAccess.pon_port_number}/${networkAccess.ont_id}`
     : null;
+  const requiredControlConfirmation = controlAction
+    ? `${controlAction.toUpperCase()} ${customerId}`
+    : "";
 
   return (
     <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
@@ -388,8 +485,40 @@ export default function CustomerNetworkAccessCard({
           </div>
           <p className="mt-5 text-xs text-on-surface-variant">
             Location format: Frame / Card or Slot / PON Port / Virtual Port (ONT ID).
-            A future disconnect action must verify this mapping before contacting the OLT.
+            Live controls re-check the ONT serial and customer description before every command.
           </p>
+
+          {canEdit && ontControl?.allowlisted && (
+            <div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+              <p className="text-sm font-semibold">Test-only live ONT controls</p>
+              <p className="mt-1 text-xs">
+                This changes the allowlisted ONT only. It does not update billing or the
+                customer&apos;s account status during the test phase.
+              </p>
+              {ontControl.available ? (
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    disabled={controlling}
+                    onClick={() => beginOntControl("deactivate")}
+                    className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    Deactivate test ONT
+                  </button>
+                  <button
+                    type="button"
+                    disabled={controlling}
+                    onClick={() => beginOntControl("activate")}
+                    className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    Activate test ONT
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs font-semibold">{ontControl.reason}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -446,6 +575,83 @@ export default function CustomerNetworkAccessCard({
             </button>
           </div>
         </form>
+      )}
+
+      {controlAction && networkAccess && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${controlAction} test ONT`}
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
+            <h3 className="text-xl font-semibold capitalize">
+              {controlAction} test ONT
+            </h3>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              The backend will first re-check customer {customerId}, serial, and location
+              {` ${location}`}. If anything differs, no command will be sent.
+            </p>
+
+            <label className="mt-5 block text-sm font-semibold">
+              Reason <span className="text-error">*</span>
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={controlReason}
+                onChange={(event) => setControlReason(event.target.value)}
+                className="mt-1.5 w-full resize-none rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
+                placeholder="Test account and technician present..."
+              />
+            </label>
+
+            <label className="mt-4 block text-sm font-semibold">
+              Type <strong>{requiredControlConfirmation}</strong> to confirm
+              <input
+                value={controlConfirmation}
+                onChange={(event) => setControlConfirmation(event.target.value)}
+                autoComplete="off"
+                className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 font-mono text-sm"
+              />
+            </label>
+
+            {error && (
+              <p className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={controlling}
+                onClick={() => {
+                  setControlAction(null);
+                  setControlReason("");
+                  setControlConfirmation("");
+                  setError("");
+                }}
+                className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  controlling ||
+                  controlReason.trim().length < 3 ||
+                  controlConfirmation !== requiredControlConfirmation
+                }
+                onClick={submitOntControl}
+                className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${
+                  controlAction === "deactivate" ? "bg-error" : "bg-green-700"
+                }`}
+              >
+                {controlling ? "Checking and applying..." : `${controlAction === "deactivate" ? "Deactivate" : "Activate"} ONT`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );

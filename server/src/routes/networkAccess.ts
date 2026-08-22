@@ -6,11 +6,47 @@ import type { PoolClient } from "pg";
 import { pool } from "../db.js";
 import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
 import {
+  changeOntActivationState,
+  OltControlError,
   OltVerificationError,
   readOntFromOlt,
+  type OntControlAction,
 } from "../huawei/verifyOnt.js";
 
 const networkAccessRouter = Router();
+
+function oltWritesEnabled() {
+  return process.env.HUAWEI_OLT_WRITES_ENABLED?.trim().toLowerCase() === "true";
+}
+
+function oltWriteCustomerIds() {
+  return new Set(
+    (process.env.HUAWEI_OLT_WRITE_CUSTOMER_IDS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => /^\d+$/.test(value))
+      .map(Number)
+  );
+}
+
+function getOntControlAvailability(customerId: number, assignment: any) {
+  const enabled = oltWritesEnabled();
+  const allowlisted = oltWriteCustomerIds().has(customerId);
+  const mappingReady =
+    assignment?.mapping_status === "verified" && !!assignment?.ont_serial;
+  return {
+    enabled,
+    allowlisted,
+    available: enabled && allowlisted && mappingReady,
+    reason: !enabled
+      ? "Live ONT controls are disabled."
+      : !allowlisted
+        ? "This customer is not allowlisted for the test phase."
+        : !mappingReady
+          ? "Verify this mapping and ONT serial before using live controls."
+          : null,
+  };
+}
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.employee) {
@@ -85,6 +121,7 @@ const currentAssignmentSelect = `
 // Avoid running two interactive CLI sessions for the same imported mapping.
 // This is process-local; PostgreSQL row checks below remain the final guard.
 const verificationsInProgress = new Set<number>();
+const ontActionsInProgress = new Set<number>();
 
 // The profile card uses this small list to reuse an existing OLT instead of
 // making staff retype a shared management address for every customer.
@@ -114,7 +151,11 @@ networkAccessRouter.get(
     if (customerId === null) return;
     try {
       const result = await pool.query(`${currentAssignmentSelect};`, [customerId]);
-      res.json({ networkAccess: result.rows[0] ?? null });
+      const networkAccess = result.rows[0] ?? null;
+      res.json({
+        networkAccess,
+        ontControl: getOntControlAvailability(customerId, networkAccess),
+      });
     } catch (error) {
       console.error("Could not load customer OLT information:", error);
       res.status(500).json({ error: "Could not load OLT information." });
@@ -467,6 +508,276 @@ networkAccessRouter.post(
       return res.status(500).json({ error: "Could not verify OLT information." });
     } finally {
       verificationsInProgress.delete(assignmentId);
+    }
+  }
+);
+
+networkAccessRouter.post(
+  "/customers/:customerId/network-access/ont-control",
+  requireAuth,
+  requireNetworkManager,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+
+    const action = cleanText(req.body.action) as OntControlAction;
+    if (!(["deactivate", "activate"] as string[]).includes(action)) {
+      return res.status(400).json({ error: "Choose activate or deactivate." });
+    }
+    const reason = cleanText(req.body.reason);
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({
+        error: "A reason between 3 and 500 characters is required.",
+      });
+    }
+    const requiredConfirmation = `${action.toUpperCase()} ${customerId}`;
+    if (cleanText(req.body.confirmation) !== requiredConfirmation) {
+      return res.status(400).json({
+        error: `Type ${requiredConfirmation} exactly to confirm.`,
+      });
+    }
+
+    const initialResult = await pool.query(`${currentAssignmentSelect};`, [customerId]);
+    const initial = initialResult.rows[0] ?? null;
+    if (!initial) {
+      return res.status(404).json({ error: "No current OLT mapping exists for this customer." });
+    }
+    const availability = getOntControlAvailability(customerId, initial);
+    if (!availability.enabled) {
+      return res.status(503).json({ error: availability.reason });
+    }
+    if (!availability.allowlisted) {
+      return res.status(403).json({ error: availability.reason });
+    }
+    if (!availability.available) {
+      return res.status(409).json({ error: availability.reason });
+    }
+
+    const assignmentId = Number(initial.customer_ont_assignment_id);
+    const unresolvedResult = await pool.query(
+      `SELECT olt_action_attempt_id, outcome
+       FROM public.olt_action_attempts
+       WHERE customer_ont_assignment_id = $1
+         AND outcome IN ('requested', 'uncertain')
+       ORDER BY requested_at DESC
+       LIMIT 1;`,
+      [assignmentId]
+    );
+    if (unresolvedResult.rows.length > 0) {
+      const unresolved = unresolvedResult.rows[0];
+      return res.status(409).json({
+        error:
+          unresolved.outcome === "uncertain"
+            ? `ONT action #${unresolved.olt_action_attempt_id} has an uncertain outcome. Check PuTTY before another command.`
+            : `ONT action #${unresolved.olt_action_attempt_id} is still in progress.`,
+      });
+    }
+    if (
+      verificationsInProgress.has(assignmentId) ||
+      ontActionsInProgress.has(assignmentId)
+    ) {
+      return res.status(409).json({
+        error: "This OLT mapping already has an operation in progress.",
+      });
+    }
+
+    const employee = req.session.employee!;
+    let attemptId: number;
+    try {
+      const attemptResult = await pool.query(
+        `INSERT INTO public.olt_action_attempts (
+           customer_id, customer_ont_assignment_id, requested_by_employee_id,
+           action, reason, management_ip, frame_number, slot_number,
+           pon_port_number, ont_id, expected_ont_serial
+         ) VALUES ($1, $2, $3::BIGINT, $4, $5, $6::INET, $7, $8, $9, $10, $11)
+         RETURNING olt_action_attempt_id;`,
+        [
+          customerId,
+          assignmentId,
+          employee.employeeId,
+          action,
+          reason,
+          initial.management_ip,
+          initial.frame_number,
+          initial.slot_number,
+          initial.pon_port_number,
+          initial.ont_id,
+          initial.ont_serial,
+        ]
+      );
+      attemptId = Number(attemptResult.rows[0].olt_action_attempt_id);
+    } catch (error: unknown) {
+      if (typeof error === "object" && error && "code" in error && error.code === "23505") {
+        return res.status(409).json({ error: "An ONT action is already in progress." });
+      }
+      throw error;
+    }
+    let liveResult:
+      | Awaited<ReturnType<typeof changeOntActivationState>>
+      | undefined;
+
+    ontActionsInProgress.add(assignmentId);
+    try {
+      liveResult = await changeOntActivationState(
+        {
+          managementIp: initial.management_ip,
+          frameNumber: Number(initial.frame_number),
+          slotNumber: Number(initial.slot_number),
+          ponPortNumber: Number(initial.pon_port_number),
+          ontId: Number(initial.ont_id),
+        },
+        {
+          ontSerial: String(initial.ont_serial),
+          customerName: String(initial.customer_name ?? ""),
+        },
+        action
+      );
+
+      const outcome = liveResult.changed ? "succeeded" : "no_change";
+      const resultMessage = liveResult.changed
+        ? `ONT ${action} completed and was confirmed by a live read.`
+        : `ONT was already ${action === "deactivate" ? "deactivated" : "active"}; no command was needed.`;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const lockResult = await client.query(
+          `SELECT customer_ont_assignment_id
+           FROM public.customer_ont_assignments
+           WHERE customer_ont_assignment_id = $1
+             AND customer_id = $2
+             AND ended_at IS NULL
+           FOR UPDATE;`,
+          [assignmentId, customerId]
+        );
+        if (lockResult.rows.length === 0) {
+          throw new Error("The customer OLT mapping changed during the live operation.");
+        }
+
+        // The live preflight re-verified the saved serial and customer name.
+        await client.query(
+          `UPDATE public.customer_ont_assignments
+           SET mapping_status = 'verified',
+               verified_at = CURRENT_TIMESTAMP,
+               verified_by_employee_id = $2::BIGINT,
+               updated_by_employee_id = $2::BIGINT,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE customer_ont_assignment_id = $1;`,
+          [assignmentId, employee.employeeId]
+        );
+        await client.query(
+          `UPDATE public.olt_action_attempts
+           SET outcome = $2,
+               before_control_flag = $3,
+               before_run_state = $4,
+               after_control_flag = $5,
+               after_run_state = $6,
+               result_message = $7,
+               completed_at = CURRENT_TIMESTAMP
+           WHERE olt_action_attempt_id = $1;`,
+          [
+            attemptId,
+            outcome,
+            liveResult.before.controlFlag,
+            liveResult.before.runState,
+            liveResult.after.controlFlag,
+            liveResult.after.runState,
+            resultMessage,
+          ]
+        );
+        await insertAudit(client, {
+          employeeId: employee.employeeId,
+          actorName: `${employee.firstName} ${employee.lastName}`,
+          customerId,
+          action: liveResult.changed
+            ? action === "deactivate"
+              ? "Deactivated customer ONT"
+              : "Activated customer ONT"
+            : action === "deactivate"
+              ? "Confirmed customer ONT already deactivated"
+              : "Confirmed customer ONT already active",
+          oldValue: {
+            controlFlag: liveResult.before.controlFlag,
+            runState: liveResult.before.runState,
+            attemptId,
+          },
+          newValue: {
+            controlFlag: liveResult.after.controlFlag,
+            runState: liveResult.after.runState,
+            attemptId,
+          },
+          reason,
+        });
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      return res.json({
+        action: {
+          action,
+          outcome,
+          message: resultMessage,
+          before: {
+            controlFlag: liveResult.before.controlFlag,
+            runState: liveResult.before.runState,
+          },
+          after: {
+            controlFlag: liveResult.after.controlFlag,
+            runState: liveResult.after.runState,
+          },
+          attemptId,
+        },
+      });
+    } catch (error) {
+      const outcome = liveResult
+        ? "uncertain"
+        : error instanceof OltControlError
+          ? error.outcome
+          : "failed";
+      const message = liveResult
+        ? "The ONT state changed, but the app could not finish recording the result. Check PuTTY before retrying."
+        : error instanceof OltVerificationError
+          ? error.message
+          : "The ONT action failed before it could be completed.";
+
+      try {
+        await pool.query(
+          `UPDATE public.olt_action_attempts
+           SET outcome = $2,
+               before_control_flag = $3,
+               before_run_state = $4,
+               after_control_flag = $5,
+               after_run_state = $6,
+               result_message = $7,
+               completed_at = CURRENT_TIMESTAMP
+           WHERE olt_action_attempt_id = $1
+             AND outcome = 'requested';`,
+          [
+            attemptId,
+            outcome,
+            liveResult?.before.controlFlag ?? null,
+            liveResult?.before.runState ?? null,
+            liveResult?.after.controlFlag ?? null,
+            liveResult?.after.runState ?? null,
+            message,
+          ]
+        );
+      } catch (journalError) {
+        console.error("Could not finalize OLT action journal:", journalError);
+      }
+
+      console.error(`OLT ${action} attempt ${attemptId} ended as ${outcome}.`);
+      return res.status(outcome === "blocked" ? 409 : 502).json({
+        error: message,
+        code: `olt_action_${outcome}`,
+        attemptId,
+      });
+    } finally {
+      ontActionsInProgress.delete(assignmentId);
     }
   }
 );

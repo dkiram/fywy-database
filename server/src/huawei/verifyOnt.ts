@@ -32,6 +32,23 @@ export class OltVerificationError extends Error {
   }
 }
 
+export type OntControlAction = "deactivate" | "activate";
+
+/**
+ * Distinguishes a safely blocked write from an uncertain device outcome. The
+ * route persists this classification so a technician knows whether PuTTY
+ * verification is required instead of blindly retrying a command.
+ */
+export class OltControlError extends OltVerificationError {
+  constructor(
+    public readonly outcome: "blocked" | "failed" | "uncertain",
+    message: string
+  ) {
+    super("command", message);
+    this.name = "OltControlError";
+  }
+}
+
 function getConnectionSecret(managementIp: string) {
   const raw = process.env.HUAWEI_OLT_CONNECTIONS_JSON?.trim();
   if (!raw) {
@@ -282,6 +299,48 @@ function openHuaweiShell(target: OntVerificationTarget) {
   });
 }
 
+function normalizeCustomerName(value: string) {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("en-US");
+}
+
+async function enterTargetGponInterface(
+  shell: HuaweiShell,
+  target: OntVerificationTarget
+) {
+  const initialPrompt = await shell.waitForPrompt(20_000, true);
+  if (initialPrompt.trim().endsWith(">")) await shell.command("enable");
+  await shell.command("config");
+  await shell.command(`interface gpon ${target.frameNumber}/${target.slotNumber}`);
+}
+
+async function readTargetOnt(
+  shell: HuaweiShell,
+  target: OntVerificationTarget
+) {
+  const displayOutput = await shell.command(
+    `display ont info ${target.ponPortNumber} all`,
+    45_000
+  );
+  const parsed = parseHuaweiOntLog(displayOutput);
+  return (
+    parsed.onts.find(
+      (ont) =>
+        ont.frameNumber === target.frameNumber &&
+        ont.slotNumber === target.slotNumber &&
+        ont.ponPortNumber === target.ponPortNumber &&
+        ont.ontId === target.ontId
+    ) ?? null
+  );
+}
+
+function pause(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
 /**
  * Read one PON port and return only the requested ONT. No configuration or
  * service-changing command is accepted by this module.
@@ -291,29 +350,92 @@ export async function readOntFromOlt(
 ): Promise<ParsedOnt | null> {
   const { connection, shell } = await openHuaweiShell(target);
   try {
-    const initialPrompt = await shell.waitForPrompt(20_000, true);
-    if (initialPrompt.trim().endsWith(">")) await shell.command("enable");
-    await shell.command("config");
-    await shell.command(`interface gpon ${target.frameNumber}/${target.slotNumber}`);
-    const displayOutput = await shell.command(
-      `display ont info ${target.ponPortNumber} all`,
-      45_000
-    );
-    const parsed = parseHuaweiOntLog(displayOutput);
-    return (
-      parsed.onts.find(
-        (ont) =>
-          ont.frameNumber === target.frameNumber &&
-          ont.slotNumber === target.slotNumber &&
-          ont.ponPortNumber === target.ponPortNumber &&
-          ont.ontId === target.ontId
-      ) ?? null
-    );
+    await enterTargetGponInterface(shell, target);
+    return await readTargetOnt(shell, target);
   } catch (error) {
     if (error instanceof OltVerificationError) throw error;
     throw new OltVerificationError(
       "command",
       "The OLT connected, but its read-only ONT response could not be verified."
+    );
+  } finally {
+    shell.close();
+    connection.end();
+  }
+}
+
+/**
+ * Change one ONT's administrative state after re-reading its live identity in
+ * the SAME CLI session. The command vocabulary is deliberately closed: no
+ * caller-provided text is ever interpolated as a Huawei command.
+ */
+export async function changeOntActivationState(
+  target: OntVerificationTarget,
+  identity: { ontSerial: string; customerName: string },
+  action: OntControlAction
+) {
+  const { connection, shell } = await openHuaweiShell(target);
+  let writeStarted = false;
+
+  try {
+    await enterTargetGponInterface(shell, target);
+    const before = await readTargetOnt(shell, target);
+    if (!before) {
+      throw new OltControlError(
+        "blocked",
+        "The ONT was not found at the saved location. No command was sent."
+      );
+    }
+
+    const serialMatches =
+      before.ontSerial === identity.ontSerial.trim().toUpperCase();
+    const descriptionMatches =
+      !!before.description &&
+      normalizeCustomerName(before.description) ===
+        normalizeCustomerName(identity.customerName);
+    if (!serialMatches || !descriptionMatches) {
+      throw new OltControlError(
+        "blocked",
+        "The live ONT identity no longer matches this customer. No command was sent."
+      );
+    }
+
+    const desiredControlFlag = action === "deactivate" ? "deactivated" : "active";
+    if (before.controlFlag === desiredControlFlag) {
+      return { changed: false, before, after: before };
+    }
+
+    // These are the two and only two state-changing commands accepted by this
+    // module. Numeric fields were validated and loaded from PostgreSQL.
+    const command = `ont ${action} ${target.ponPortNumber} ${target.ontId}`;
+    writeStarted = true;
+    await shell.command(command, 30_000);
+
+    // The administrative flag normally changes immediately, but tolerate a
+    // short propagation delay before classifying the outcome as uncertain.
+    let after: ParsedOnt | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await pause(750);
+      after = await readTargetOnt(shell, target);
+      if (after?.controlFlag === desiredControlFlag) break;
+    }
+
+    if (!after || after.controlFlag !== desiredControlFlag) {
+      throw new OltControlError(
+        "uncertain",
+        "The command was sent, but the expected ONT state could not be confirmed. Check the ONT in PuTTY before retrying."
+      );
+    }
+
+    return { changed: true, before, after };
+  } catch (error) {
+    if (error instanceof OltControlError) throw error;
+    if (error instanceof OltVerificationError) throw error;
+    throw new OltControlError(
+      writeStarted ? "uncertain" : "failed",
+      writeStarted
+        ? "The ONT command may have been sent, but its result could not be confirmed. Check PuTTY before retrying."
+        : "The ONT could not be checked safely, so no command was sent."
     );
   } finally {
     shell.close();
