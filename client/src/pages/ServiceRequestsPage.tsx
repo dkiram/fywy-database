@@ -7,7 +7,7 @@ import { apiFetch } from "../lib/api";
 // an employee is assigned, and the technician records the completed work.
 type TicketStatus = "open" | "assigned" | "in_progress" | "completed" | "cancelled";
 type TicketPriority = "low" | "normal" | "high" | "urgent";
-type TicketView = "attention" | "open" | "in_progress" | "completed" | "cancelled" | "all";
+type TicketView = "attention" | "open" | "assigned" | "in_progress" | "completed" | "cancelled" | "all";
 
 type ServiceTicket = {
   service_ticket_id: number; customer_id: number | null; legacy_customer_id: number | null;
@@ -174,7 +174,7 @@ function ServiceRequestsPage() {
       {error && <div className="rounded-lg bg-error/10 p-4 text-sm text-error">{error}</div>}
 
       <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex flex-wrap gap-2">{([['attention', 'Needs Attention'], ['open', 'Open / Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => { setView(value); setPage(1); }} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search ticket, customer, phone, issue..." /></div>
+        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex flex-wrap gap-2">{([['attention', 'Needs Attention'], ['open', 'Open'], ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => { setView(value); setPage(1); }} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search ticket, customer, phone, issue..." /></div>
         <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-surface-container-low"><tr><Heading>Ticket</Heading><Heading>Customer</Heading><Heading>Problem</Heading><Heading>Priority</Heading><Heading>Status</Heading><Heading>Technician</Heading><Heading>Reported</Heading><th className="px-5 py-4" /></tr></thead><tbody className="divide-y divide-surface-container">{!loading && tickets.map((ticket) => <tr key={ticket.service_ticket_id} className="cursor-pointer transition hover:bg-surface-container-low/60" onClick={() => openEdit(ticket)}><td className="px-5 py-4 font-mono text-sm font-medium text-primary">#{ticket.service_ticket_id}</td><td className="px-5 py-4"><p className="font-semibold text-on-surface">{ticket.customer_name || (ticket.legacy_customer_id ? "Legacy Customer" : "Customer unavailable")}</p>{/* The address is on the row because a technician reading this queue
        is deciding where to drive, and making them open each profile to
        find that out is the slowest possible way to answer it. */}

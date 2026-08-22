@@ -10,7 +10,10 @@
     "authorize:gmail": "tsx src/scripts/authorizeGmail.ts",
     "seed:employee": "tsx src/scripts/seedDevEmployee.ts",
     "import:applications": "tsx src/scripts/importLegacyApplications.ts",
-    "import:operations": "tsx src/scripts/importLegacyOperations.ts"
+    "import:operations": "tsx src/scripts/importLegacyOperations.ts",
+    "parse:ont-log": "tsx src/scripts/parseHuaweiOntLog.ts",
+    "import:ont-matches": "tsx src/scripts/importHuaweiOntMatches.ts",
+    "create:ont-import-sql": "tsx src/scripts/createHuaweiOntImportSql.ts"
   },
   "keywords": [],
   "author": "",

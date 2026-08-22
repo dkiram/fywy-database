@@ -115,7 +115,8 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
 
   const viewClauses: Record<string, string> = {
     attention: "t.status IN ('open', 'assigned', 'in_progress')",
-    open: "t.status IN ('open', 'assigned')",
+    open: "t.status = 'open'",
+    assigned: "t.status = 'assigned'",
     in_progress: "t.status = 'in_progress'",
     completed: "t.status = 'completed'",
     cancelled: "t.status = 'cancelled'",

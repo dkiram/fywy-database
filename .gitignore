@@ -14,6 +14,10 @@ server/.env.gmail
 database/imports/*.csv
 database/imports/*.xlsx
 database/imports/*.xls
+*.putty.log
+*ont-sample*.txt
+*ports*.txt
+*olt-review*.json
 
 # Legacy SPCL source data stored locally for migration only
 /SPCL 2018 acco.accdb
