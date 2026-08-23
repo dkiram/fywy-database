@@ -147,3 +147,13 @@ are counted without printing customer identity data.
 Automatic disconnection additionally requires `unverified_entries = 0` in the
 billing view. Legacy estimated ledger entries remain visible to staff but can
 never be used as the basis for an unattended service cutoff.
+
+### Explicit same-day continuation
+
+The normal scheduler permits only one automatic run per Jamaica billing date.
+An operator may launch an additional, explicitly confirmed batch through the
+NAS-only maintenance script when a small pilot should be continued that same
+day. The server records a separate run and excludes every customer already
+journaled in any earlier run for that billing date. The advisory lock, payment
+row lock, live identity verification, durable action journal, and post-command
+confirmation remain mandatory for every customer.

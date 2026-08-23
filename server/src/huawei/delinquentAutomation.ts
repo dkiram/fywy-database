@@ -29,6 +29,16 @@ type Candidate = {
 
 type ItemResult = "disconnected" | "skipped" | "failed";
 
+type AutomaticRunOptions = {
+  /**
+   * Allows an explicitly confirmed one-time continuation after today's normal
+   * scheduled run. The candidate query still excludes every customer already
+   * journaled today, so this can never retry the same account in another batch.
+   */
+  allowAdditionalRunToday?: boolean;
+  maxPerRunOverride?: number;
+};
+
 function isEnabled() {
   return process.env.HUAWEI_OLT_AUTOMATION_ENABLED?.trim().toLowerCase() === "true";
 }
@@ -403,7 +413,7 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
   }
 }
 
-export async function runAutomaticDelinquentDisconnect() {
+export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOptions = {}) {
   if (!isEnabled()) return { ran: false, reason: "disabled" };
 
   const lockClient = await pool.connect();
@@ -423,13 +433,18 @@ export async function runAutomaticDelinquentDisconnect() {
        LIMIT 1;`,
       [clock.date]
     );
-    if (existing.rows.length > 0) return { ran: false, reason: "already_ran_today" };
+    if (existing.rows.length > 0 && !options.allowAdditionalRunToday) {
+      return { ran: false, reason: "already_ran_today" };
+    }
 
     await lockClient.query(
       `SELECT public.spcl_generate_monthly_charges($1::DATE);`,
       [clock.date]
     );
-    const { maxPerRun } = configuration();
+    const configuredMaximum = configuration().maxPerRun;
+    const maxPerRun = options.maxPerRunOverride === undefined
+      ? configuredMaximum
+      : boundedInteger(String(options.maxPerRunOverride), configuredMaximum, 1, 500);
     const candidates = await lockClient.query<Candidate>(
       `SELECT
          customer.customer_id,
@@ -456,6 +471,17 @@ export async function runAutomaticDelinquentDisconnect() {
          -- Estimated legacy ledger balances remain visible to staff, but are
          -- not authoritative enough for an unattended disconnection.
          AND billing.unverified_entries = 0
+         -- A deliberately requested continuation may create another run for
+         -- the same billing date, but never selects an account already
+         -- journaled in any earlier run that day.
+         AND NOT EXISTS (
+           SELECT 1
+           FROM public.olt_automation_run_items earlier_item
+           JOIN public.olt_automation_runs earlier_run
+             ON earlier_run.olt_automation_run_id = earlier_item.olt_automation_run_id
+           WHERE earlier_run.billing_date = $2
+             AND earlier_item.customer_id = customer.customer_id
+         )
          AND (
            customer.source_staging_id IS NULL
            OR billing.scheduled_disconnection_date IS NULL
@@ -466,7 +492,7 @@ export async function runAutomaticDelinquentDisconnect() {
          billing.scheduled_disconnection_date,
          customer.customer_id
        LIMIT $1;`,
-      [maxPerRun]
+      [maxPerRun, clock.date]
     );
     const candidateCount = Number(candidates.rows[0]?.candidate_count ?? 0);
     const selectedCount = candidates.rows.length;
