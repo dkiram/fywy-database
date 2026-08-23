@@ -1,14 +1,24 @@
 /** Sends one official payment receipt through the configured Google mailbox. */
 import { google } from "googleapis";
 
+/**
+ * One receipt as it comes back from the database.
+ *
+ * The date fields are typed `string | Date` because that is the truth: node-pg
+ * parses DATE and TIMESTAMPTZ columns into JavaScript Date objects, and only
+ * hand-built objects (tests, fixtures) ever carry strings. Declaring them as
+ * plain strings is what let `value.slice is not a function` reach production -
+ * every row from loadReceipt violated the type, and TypeScript could not see
+ * it because a pg query result is `any`.
+ */
 export type EmailedReceipt = {
   receipt_number: string;
   payment_id: number;
   payment_type: string;
   amount_paid: string;
-  month_paid: string | null;
-  payment_date: string;
-  recorded_at: string;
+  month_paid: string | Date | null;
+  payment_date: string | Date;
+  recorded_at: string | Date;
   location: string | null;
   cashier_name: string | null;
   customer_id: number | null;
@@ -228,8 +238,36 @@ function formatCurrency(value: string) {
   })}`;
 }
 
-function formatDate(value: string) {
-  const date = new Date(`${value.slice(0, 10)}T12:00:00.000Z`);
+/**
+ * Reduces a date column to plain YYYY-MM-DD, whatever shape it arrives in.
+ *
+ * A Date is read through its LOCAL components rather than toISOString(),
+ * because node-pg builds a DATE at local midnight. Converting to UTC would
+ * roll a receipt back to the previous day on any server running east of
+ * Greenwich - the kind of fault that only shows up once the business or the
+ * container timezone changes.
+ */
+function toIsoDate(value: string | Date | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  const text = String(value);
+  return text.length >= 10 ? text.slice(0, 10) : text;
+}
+
+function formatDate(value: string | Date) {
+  const isoDate = toIsoDate(value);
+  if (!isoDate) return "-";
+  // Midday UTC, so no timezone conversion can move it to an adjacent day.
+  const date = new Date(`${isoDate}T12:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("en-JM", {
     day: "numeric",
     month: "long",
@@ -238,9 +276,11 @@ function formatDate(value: string) {
   });
 }
 
-function formatMonth(value: string | null) {
-  if (!value) return "Not applicable";
-  const date = new Date(`${value.slice(0, 10)}T12:00:00.000Z`);
+function formatMonth(value: string | Date | null) {
+  const isoDate = toIsoDate(value);
+  if (!isoDate) return "Not applicable";
+  const date = new Date(`${isoDate}T12:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return "Not applicable";
   return date.toLocaleDateString("en-JM", {
     month: "long",
     year: "numeric",
@@ -248,8 +288,10 @@ function formatMonth(value: string | null) {
   });
 }
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("en-JM", {
+function formatDateTime(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-JM", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "America/Jamaica",

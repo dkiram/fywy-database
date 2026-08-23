@@ -197,14 +197,21 @@ if (!recipient) {
 if (useRealReceipt) {
   heading(`5. Sending through the REAL receipt mailer to ${recipient}`);
   console.log("Using sendReceiptEmail() - the same multipart message the API builds.\n");
+  /* Date objects, not strings, because that is what node-pg hands the mailer
+     for DATE and TIMESTAMPTZ columns. A fixture built from strings is a
+     friendlier input than production ever supplies, and one built that way is
+     exactly why "value.slice is not a function" survived an earlier round of
+     testing here. amount_paid stays a string: NUMERIC really does arrive as
+     one. */
+  const today = new Date();
   const sample: EmailedReceipt = {
     receipt_number: "SPCL-20260823-000000000",
     payment_id: 0,
     payment_type: "Monthly Fee",
     amount_paid: "4500.00",
-    month_paid: "2026-08-01",
-    payment_date: "2026-08-23",
-    recorded_at: new Date().toISOString(),
+    month_paid: new Date(today.getFullYear(), today.getMonth(), 1),
+    payment_date: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+    recorded_at: today,
     location: "Newport",
     cashier_name: "Diagnostic Test",
     customer_id: 0,
