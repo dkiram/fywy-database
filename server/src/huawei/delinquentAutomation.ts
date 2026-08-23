@@ -241,6 +241,7 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
          customer.status,
          billing.eligible_for_disconnection,
          billing.outstanding_balance,
+         billing.unverified_entries,
          assignment.customer_ont_assignment_id,
          assignment.mapping_status,
          assignment.ont_serial
@@ -259,6 +260,7 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
       !current ||
       current.status !== "active" ||
       current.eligible_for_disconnection !== true ||
+      Number(current.unverified_entries) > 0 ||
       current.mapping_status !== "verified" ||
       String(current.ont_serial ?? "").toUpperCase() !== String(candidate.ont_serial).toUpperCase()
     ) {
@@ -451,6 +453,9 @@ export async function runAutomaticDelinquentDisconnect() {
        LEFT JOIN public.olts olt ON olt.olt_id = assignment.olt_id
        WHERE billing.eligible_for_disconnection
          AND customer.hidden_from_app = FALSE
+         -- Estimated legacy ledger balances remain visible to staff, but are
+         -- not authoritative enough for an unattended disconnection.
+         AND billing.unverified_entries = 0
          AND (
            customer.source_staging_id IS NULL
            OR billing.scheduled_disconnection_date IS NULL

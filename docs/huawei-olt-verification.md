@@ -134,3 +134,16 @@ description. Only a confirmed Huawei deactivation is followed by the database
 status/history/fee/audit transaction. Missing mappings, unresolved actions,
 failures, and uncertain results are recorded in `olt_automation_run_items`.
 No staff approval or customer selection is involved.
+
+### Bulk verification before automation
+
+Imported mappings do not need to be opened one profile at a time. The bulk
+verifier groups unverified assignments by OLT/frame/card/PON port, runs one
+read-only `display ont info <port> all` query per port, and compares each live
+location, an already-saved serial, and exact customer description. Only exact matches are
+marked verified; missing ONTs and serial/name mismatches remain unverified and
+are counted without printing customer identity data.
+
+Automatic disconnection additionally requires `unverified_entries = 0` in the
+billing view. Legacy estimated ledger entries remain visible to staff but can
+never be used as the basis for an unattended service cutoff.

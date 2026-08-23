@@ -22,6 +22,8 @@ export type OntVerificationTarget = {
   ontId: number;
 };
 
+export type OntPortTarget = Omit<OntVerificationTarget, "ontId">;
+
 export class OltVerificationError extends Error {
   constructor(
     public readonly kind: "configuration" | "connection" | "command",
@@ -232,7 +234,7 @@ class HuaweiShell {
   }
 }
 
-function openHuaweiShell(target: OntVerificationTarget) {
+function openHuaweiShell(target: Pick<OntVerificationTarget, "managementIp">) {
   const secret = getConnectionSecret(target.managementIp);
 
   return new Promise<{ connection: SshClient; shell: HuaweiShell }>((resolve, reject) => {
@@ -309,12 +311,34 @@ function normalizeCustomerName(value: string) {
 
 async function enterTargetGponInterface(
   shell: HuaweiShell,
-  target: OntVerificationTarget
+  target: Pick<OntVerificationTarget, "frameNumber" | "slotNumber">
 ) {
   const initialPrompt = await shell.waitForPrompt(20_000, true);
   if (initialPrompt.trim().endsWith(">")) await shell.command("enable");
   await shell.command("config");
   await shell.command(`interface gpon ${target.frameNumber}/${target.slotNumber}`);
+}
+
+/** Read every ONT on one PON port with one read-only CLI session. */
+export async function readOntPortFromOlt(target: OntPortTarget) {
+  const { connection, shell } = await openHuaweiShell(target);
+  try {
+    await enterTargetGponInterface(shell, target);
+    const displayOutput = await shell.command(
+      `display ont info ${target.ponPortNumber} all`,
+      45_000
+    );
+    return parseHuaweiOntLog(displayOutput);
+  } catch (error) {
+    if (error instanceof OltVerificationError) throw error;
+    throw new OltVerificationError(
+      "command",
+      "The OLT connected, but its read-only PON response could not be verified."
+    );
+  } finally {
+    shell.close();
+    connection.end();
+  }
 }
 
 async function readTargetOnt(
