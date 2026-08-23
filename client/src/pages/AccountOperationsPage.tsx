@@ -276,6 +276,9 @@ function AccountOperationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reason: "Manager checkbox approval after full balance and reconnection fee verification",
+          // Reconnection is restorative, but the backend still requires the
+          // same customer-specific confirmation used on the profile dialog.
+          confirmation: `RECONNECT ${customerId}`,
         }),
       });
       const data = await response.json();

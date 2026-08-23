@@ -92,6 +92,13 @@ HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED=false
 HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS=
 ```
 
+The rollout list accepts one or more numeric customer IDs for testing, or `*`
+to integrate every normal Account Operations action. `*` does not bypass any
+identity safeguard: customers without a current verified mapping and saved
+serial are blocked before Huawei is contacted. This prevents a staff click
+from silently changing only PostgreSQL while leaving the physical ONT in the
+opposite state.
+
 When both the switch and a customer's allowlist entry are present, the regular
 Account Operations dialog clearly states that it will contact Huawei and
 requires `DEACTIVATE <customer-id>` or `RECONNECT <customer-id>`.

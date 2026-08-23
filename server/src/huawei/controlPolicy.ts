@@ -26,12 +26,15 @@ export function getTestOntControlPolicy(customerId: number) {
 // behavior of the staff-facing Account Operations workflow.
 export function getAccountOntControlPolicy(customerId: number) {
   const isEnabled = enabled(process.env.HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED);
-  const allowlisted = customerIds(
-    process.env.HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS
-  ).has(customerId);
+  const configuredCustomers = process.env.HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS ?? "";
+  const allowAllVerifiedMappings = configuredCustomers
+    .split(",")
+    .some((item) => item.trim() === "*");
+  const allowlisted = allowAllVerifiedMappings || customerIds(configuredCustomers).has(customerId);
   return {
     enabled: isEnabled,
     allowlisted,
+    allowAllVerifiedMappings,
     integrated: isEnabled && allowlisted,
   };
 }
