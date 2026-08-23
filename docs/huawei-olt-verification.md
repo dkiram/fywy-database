@@ -108,3 +108,29 @@ If Huawei cannot be confirmed, the account database is not changed. If Huawei
 is confirmed but the database commit fails, the journal remains `uncertain`
 and blocks retries until an administrator reconciles both systems. Read-only
 equipment verification deliberately cannot clear that account-level warning.
+
+## Automatic delinquent-customer disconnection
+
+This is the unattended workflow that physically disconnects the live billing
+delinquent list. It has a third independent master switch and defaults off:
+
+```dotenv
+HUAWEI_OLT_AUTOMATION_ENABLED=false
+HUAWEI_OLT_AUTOMATION_HOUR=9
+HUAWEI_OLT_AUTOMATION_MINUTE=0
+HUAWEI_OLT_AUTOMATION_MAX_PER_RUN=100
+```
+
+When enabled, the API runs once per Jamaica calendar day at or after the
+configured time. It generates charges through that day and processes customers
+whose `customer_billing_status.eligible_for_disconnection` is true. That view
+already requires an active account, money outstanding beyond grace, the
+scheduled disconnection date to have arrived, and no active hold.
+
+For every candidate, the scheduler also requires a current verified OLT
+mapping and serial, locks the customer against a concurrent payment, re-checks
+billing eligibility, and matches the live Huawei serial and customer
+description. Only a confirmed Huawei deactivation is followed by the database
+status/history/fee/audit transaction. Missing mappings, unresolved actions,
+failures, and uncertain results are recorded in `olt_automation_run_items`.
+No staff approval or customer selection is involved.

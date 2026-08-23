@@ -21,6 +21,7 @@ import poleBoxesRouter from "./routes/poleBoxes.js";
 import reportsRouter from "./routes/reports.js";
 import dashboardRouter from "./routes/dashboard.js";
 import networkAccessRouter from "./routes/networkAccess.js";
+import { startDelinquentAutomation } from "./huawei/delinquentAutomation.js";
 
 import type {
   Request,
@@ -2483,12 +2484,17 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`SPCL API listening on ${HOST}:${PORT}`);
 });
 
+// The scheduler itself always starts, but its master switch defaults to off.
+// This lets the API report the configured state consistently after restarts.
+const stopDelinquentAutomation = startDelinquentAutomation();
+
 /**
  * Containers are stopped with SIGTERM. Closing the HTTP server and the database
  * pool means in-flight requests finish instead of being cut off mid-transaction.
  */
 function shutdown(signal: string) {
   console.log(`${signal} received, shutting down.`);
+  stopDelinquentAutomation();
 
   server.close(() => {
     pool.end().then(
