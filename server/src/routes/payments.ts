@@ -196,14 +196,22 @@ async function deliverQueuedReceiptEmail(
     );
   } catch (error) {
     const publicMessage = receiptDeliveryError(error);
-    console.error(`Could not email receipt delivery #${deliveryId}:`, publicMessage);
+    // Log what Google actually said, not the sanitised sentence. The cashier
+    // gets the friendly wording; whoever has to fix this needs the real one,
+    // and until Aug 2026 only the friendly wording was ever written down - so
+    // a wrong From address, a disabled API and a dead token were
+    // indistinguishable in both the logs and the database.
+    console.error(
+      `Could not email receipt delivery #${deliveryId}: ${publicMessage}\n` +
+        `  Gmail reported: ${describeMailError(error)}`,
+    );
     await client.query(
       `
       UPDATE public.receipt_email_deliveries
-      SET status = 'failed', last_error = $2
+      SET status = 'failed', last_error = $2, last_error_detail = $3
       WHERE receipt_email_delivery_id = $1;
       `,
-      [deliveryId, publicMessage],
+      [deliveryId, publicMessage, describeMailError(error)],
     );
   }
 }
@@ -215,6 +223,44 @@ function receiptDeliveryError(error: unknown) {
     return "Receipt email authorization needs attention. Retry after an administrator reconnects Gmail.";
   }
   return "Gmail could not send the receipt. Check the address, retry, or print it before the customer leaves.";
+}
+
+/**
+ * Flattens a Google API failure into one line worth keeping.
+ *
+ * googleapis puts the sentence that actually identifies the problem in the
+ * HTTP response body - "Invalid From header", "Gmail API has not been used in
+ * project ... or it is disabled" - while error.message is frequently no more
+ * than "Bad Request". Both are captured, with the status, and the whole thing
+ * is capped so a stray HTML error page cannot bloat the row.
+ */
+function describeMailError(error: unknown) {
+  const candidate = error as {
+    message?: string;
+    code?: unknown;
+    status?: unknown;
+    response?: { status?: number; data?: unknown };
+  };
+
+  const parts: string[] = [];
+  const status = candidate?.response?.status ?? candidate?.status ?? candidate?.code;
+  if (status !== undefined) parts.push(`status ${String(status)}`);
+  if (candidate?.message) parts.push(candidate.message);
+
+  const data = candidate?.response?.data as
+    | { error?: { message?: string; errors?: { reason?: string }[] } }
+    | string
+    | undefined;
+  if (typeof data === "string") {
+    parts.push(data);
+  } else if (data?.error?.message) {
+    parts.push(data.error.message);
+    const reason = data.error.errors?.[0]?.reason;
+    if (reason) parts.push(`reason ${reason}`);
+  }
+
+  const detail = parts.length > 0 ? parts.join(" | ") : String(error);
+  return detail.length > 1000 ? `${detail.slice(0, 997)}...` : detail;
 }
 
 paymentsRouter.post(

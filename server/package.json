@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "authorize:gmail": "tsx src/scripts/authorizeGmail.ts",
+    "check:gmail": "tsx src/scripts/checkGmailReceipts.ts",
     "seed:employee": "tsx src/scripts/seedDevEmployee.ts",
     "import:applications": "tsx src/scripts/importLegacyApplications.ts",
     "import:operations": "tsx src/scripts/importLegacyOperations.ts",

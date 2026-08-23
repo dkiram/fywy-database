@@ -98,12 +98,12 @@ function buildMimeMessage(
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: base64",
     "",
-    Buffer.from(plainText, "utf8").toString("base64"),
+    encodeBase64Body(plainText),
     `--${boundary}`,
     'Content-Type: text/html; charset="UTF-8"',
     "Content-Transfer-Encoding: base64",
     "",
-    Buffer.from(html, "utf8").toString("base64"),
+    encodeBase64Body(html),
     `--${boundary}--`,
   ].join("\r\n");
 
@@ -112,6 +112,21 @@ function buildMimeMessage(
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
+}
+
+/**
+ * Base64-encodes one MIME part, wrapped to legal line lengths.
+ *
+ * Buffer.toString("base64") returns the whole payload as a single line. For
+ * the HTML receipt that was 5,368 characters - RFC 2045 asks base64 bodies to
+ * wrap at 76, and RFC 5322 makes 998 a hard ceiling for any line in a message.
+ * A message that breaks it is malformed, and whether it is accepted or refused
+ * is up to whatever handles it next, which is not a coin worth flipping on a
+ * customer's proof of payment.
+ */
+function encodeBase64Body(value: string) {
+  const encoded = Buffer.from(value, "utf8").toString("base64");
+  return (encoded.match(/.{1,76}/g) ?? []).join("\r\n");
 }
 
 function buildPlainText(receipt: EmailedReceipt) {
