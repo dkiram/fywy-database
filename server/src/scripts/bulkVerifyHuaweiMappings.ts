@@ -26,9 +26,12 @@ function argument(name: string) {
 
 const managementIp = argument("--management-ip") ?? "";
 const apply = process.argv.includes("--apply");
+const enrollMissingSerials = process.argv.includes("--enroll-missing-serials");
 
 if (!isIP(managementIp)) {
-  console.error("Usage: bulkVerifyHuaweiMappings --management-ip <IP> [--apply]");
+  console.error(
+    "Usage: bulkVerifyHuaweiMappings --management-ip <IP> [--enroll-missing-serials] [--apply]"
+  );
   process.exit(2);
 }
 
@@ -85,7 +88,7 @@ async function applySafeMatch(match: SafeMatch) {
        ) VALUES (
          NULL, 'SPCL Bulk OLT Verifier', 'Bulk verified customer OLT information',
          'customer', $1, 'network_access', $2, $3,
-         'Exact live location, serial, and customer description match',
+         $4,
          CURRENT_TIMESTAMP
        );`,
       [
@@ -94,14 +97,19 @@ async function applySafeMatch(match: SafeMatch) {
           assignmentId: match.mapping.customer_ont_assignment_id,
           mappingStatus: "unverified",
           location: locationKey(match.mapping),
+          ontSerial: match.mapping.ont_serial,
         }),
         JSON.stringify({
           assignmentId: match.mapping.customer_ont_assignment_id,
           mappingStatus: "verified",
           location: locationKey(match.mapping),
+          ontSerial: match.live.ontSerial,
           liveControlFlag: match.live.controlFlag,
           liveRunState: match.live.runState,
         }),
+        match.mapping.ont_serial
+          ? "Exact live location, serial, and customer description match"
+          : "Exact live location and customer description match; enrolled live ONT serial",
       ]
     );
     await client.query("COMMIT");
@@ -156,6 +164,7 @@ async function main() {
     portErrors: 0,
     missingLiveOnt: 0,
     missingSavedSerial: 0,
+    serialEnrollmentCandidates: 0,
     serialMismatch: 0,
     descriptionMismatch: 0,
     safeExactMatches: 0,
@@ -164,6 +173,7 @@ async function main() {
   };
 
   console.log(`Bulk verifier mode: ${apply ? "APPLY SAFE MATCHES" : "READ-ONLY DRY RUN"}`);
+  console.log(`Enroll missing saved serials: ${enrollMissingSerials ? "yes" : "no"}`);
   console.log(`Loaded ${counts.mappingsLoaded} unverified mappings across ${counts.portsRequested} PON ports.`);
 
   for (const mappings of groups.values()) {
@@ -200,9 +210,7 @@ async function main() {
       }
       if (!mapping.ont_serial?.trim()) {
         counts.missingSavedSerial += 1;
-        continue;
-      }
-      if (mapping.ont_serial.trim().toUpperCase() !== live.ontSerial) {
+      } else if (mapping.ont_serial.trim().toUpperCase() !== live.ontSerial) {
         counts.serialMismatch += 1;
         continue;
       }
@@ -213,6 +221,10 @@ async function main() {
       ) {
         counts.descriptionMismatch += 1;
         continue;
+      }
+      if (!mapping.ont_serial?.trim()) {
+        if (!enrollMissingSerials) continue;
+        counts.serialEnrollmentCandidates += 1;
       }
       safeMatches.push({ mapping, live });
       counts.safeExactMatches += 1;
@@ -233,7 +245,11 @@ async function main() {
   if (!apply) {
     console.log("Dry run only: no mapping status was changed.");
   } else {
-    console.log("Only exact live location + serial + customer-description matches were verified.");
+    console.log(
+      enrollMissingSerials
+        ? "Only exact live location + customer-description matches were verified; missing serials were enrolled from the live ONT."
+        : "Only exact live location + serial + customer-description matches were verified."
+    );
   }
 }
 
