@@ -7,6 +7,7 @@
  */
 import { useEffect, useId, useState } from "react";
 import { apiFetch } from "../lib/api";
+import type { AccountStatusUpdate } from "./AccountOperationsPanel";
 
 type NetworkAccess = {
   customer_ont_assignment_id: number;
@@ -141,9 +142,13 @@ function statusStyles(status: NetworkAccess["mapping_status"]) {
 export default function CustomerNetworkAccessCard({
   customerId,
   canEdit,
+  accountStatus,
+  onStatusSynced,
 }: {
   customerId: number;
   canEdit: boolean;
+  accountStatus: "active" | "disconnected" | "pending_reconnection" | "closed" | "archived";
+  onStatusSynced?: (update: AccountStatusUpdate) => void;
 }) {
   const oltListId = useId();
   const [networkAccess, setNetworkAccess] = useState<NetworkAccess | null>(null);
@@ -162,6 +167,10 @@ export default function CustomerNetworkAccessCard({
   const [controlling, setControlling] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncReason, setSyncReason] = useState("");
+  const [syncConfirmation, setSyncConfirmation] = useState("");
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -325,6 +334,55 @@ export default function CustomerNetworkAccessCard({
     }
   }
 
+  function beginSync() {
+    setSyncReason("");
+    setSyncConfirmation("");
+    setError("");
+    setNotice("");
+    setSyncOpen(true);
+  }
+
+  async function submitSync() {
+    try {
+      setSyncing(true);
+      setError("");
+      setNotice("");
+      const response = await apiFetch(
+        `/api/customers/${customerId}/sync-status-with-olt`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: syncReason, confirmation: syncConfirmation }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not sync the account status with the live OLT.");
+      }
+      onStatusSynced?.(data.customer);
+      setVerification((current) =>
+        current
+          ? {
+              ...current,
+              live: current.live ? { ...current.live, controlFlag: data.live.controlFlag, runState: data.live.runState } : current.live,
+            }
+          : current
+      );
+      setNotice(`Account workflow status synced to match the live OLT (now ${data.customer.status.replaceAll("_", " ")}).`);
+      setSyncOpen(false);
+      setSyncReason("");
+      setSyncConfirmation("");
+    } catch (syncError) {
+      setError(
+        syncError instanceof Error
+          ? syncError.message
+          : "Could not sync the account status with the live OLT."
+      );
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
@@ -374,6 +432,9 @@ export default function CustomerNetworkAccessCard({
   const requiredControlConfirmation = controlAction
     ? `${controlAction.toUpperCase()} ${customerId}`
     : "";
+  const statusMismatch = verification?.live
+    ? (accountStatus === "active") !== (verification.live.controlFlag === "active")
+    : false;
 
   return (
     <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
@@ -442,14 +503,43 @@ export default function CustomerNetworkAccessCard({
       )}
 
       {verification?.live && (
-        <div className={`mt-5 rounded-lg p-3 text-sm ${verification.status === "verified" ? "bg-green-100 text-green-900" : "bg-error-container text-on-error-container"}`}>
-          <p className="font-semibold">
-            Live OLT: {verification.live.controlFlag === "active" ? "Active" : "Deactivated"}
-            {" · "}{verification.live.runState === "online" ? "Online" : "Offline"}
+        <div className={`mt-5 rounded-lg p-4 text-sm ${statusMismatch || verification.status === "mismatch" ? "bg-error-container text-on-error-container" : "bg-green-100 text-green-900"}`}>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <p>
+              <span className="font-semibold">Account workflow:</span>{" "}
+              {accountStatus.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}
+            </p>
+            <p>
+              <span className="font-semibold">Live Huawei OLT:</span>{" "}
+              {verification.live.controlFlag === "active" ? "Active" : "Deactivated"}
+              {" · "}{verification.live.runState === "online" ? "Online" : "Offline"}
+            </p>
+          </div>
+          <p className="mt-2 font-semibold">
+            {verification.status === "mismatch"
+              ? "Mapping mismatch: correct and re-verify the saved ONT before relying on this state comparison."
+              : statusMismatch
+                ? "Out of sync: the account workflow and Huawei service control disagree. Use Account Operations to complete the matching reconnection or deactivation workflow."
+                : "In sync: the account workflow and Huawei service control agree."}
           </p>
           <p className="mt-1">
             Checked {new Date(verification.checkedAt).toLocaleString()}.
           </p>
+          <p className="mt-1 text-xs opacity-80">
+            Sync uses Huawei’s Active/Deactivated control flag. Online/Offline only shows whether the ONT is currently registering and does not by itself change billing status.
+          </p>
+          {canEdit &&
+            statusMismatch &&
+            verification?.status !== "mismatch" &&
+            ["active", "disconnected", "pending_reconnection"].includes(accountStatus) && (
+              <button
+                type="button"
+                onClick={beginSync}
+                className="mt-3 rounded-lg bg-error px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                Sync account status to match OLT
+              </button>
+            )}
         </div>
       )}
 
@@ -575,6 +665,83 @@ export default function CustomerNetworkAccessCard({
             </button>
           </div>
         </form>
+      )}
+
+      {syncOpen && verification?.live && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Sync account status to match OLT"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
+            <h3 className="text-xl font-semibold">Sync account status to match OLT</h3>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              This changes customer {customerId}&apos;s workflow status from{" "}
+              <strong>{accountStatus.replaceAll("_", " ")}</strong> to{" "}
+              <strong>{verification.live.controlFlag === "active" ? "active" : "disconnected"}</strong>{" "}
+              to match what Huawei already shows. No command is sent to the OLT, no reconnection fee
+              is charged, and any outstanding balance is not required to be cleared — this only
+              corrects the record.
+            </p>
+
+            <label className="mt-5 block text-sm font-semibold">
+              Reason <span className="text-error">*</span>
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={syncReason}
+                onChange={(event) => setSyncReason(event.target.value)}
+                className="mt-1.5 w-full resize-none rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
+                placeholder="Field tech confirmed on site / found already reconnected on U2000..."
+              />
+            </label>
+
+            <label className="mt-4 block text-sm font-semibold">
+              Type <strong>SYNC {customerId}</strong> to confirm
+              <input
+                value={syncConfirmation}
+                onChange={(event) => setSyncConfirmation(event.target.value)}
+                autoComplete="off"
+                className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 font-mono text-sm"
+              />
+            </label>
+
+            {error && (
+              <p className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={syncing}
+                onClick={() => {
+                  setSyncOpen(false);
+                  setSyncReason("");
+                  setSyncConfirmation("");
+                  setError("");
+                }}
+                className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  syncing ||
+                  syncReason.trim().length < 3 ||
+                  syncConfirmation !== `SYNC ${customerId}`
+                }
+                onClick={submitSync}
+                className="rounded-lg bg-error px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {syncing ? "Syncing..." : "Sync status"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {controlAction && networkAccess && (

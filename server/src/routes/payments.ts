@@ -4,7 +4,10 @@ import type { NextFunction, Request, Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
 import { isEmail, sendReceiptEmail } from "../email/receiptEmail.js";
-import { insertStatusHistory } from "./accounts.js";
+import {
+  insertStatusHistory,
+  resolvePendingReconnectionRequests,
+} from "./accounts.js";
 
 const paymentsRouter = Router();
 
@@ -462,12 +465,18 @@ paymentsRouter.post(
           `UPDATE public.customers SET status = 'pending_reconnection' WHERE customer_id = $1;`,
           [customerId]
         );
-        await insertStatusHistory(client, {
+        const statusHistory = await insertStatusHistory(client, {
           customerId,
           fromStatus: "disconnected",
           toStatus: "pending_reconnection",
           reason: queueReason,
           employeeId: employee.employeeId,
+        });
+        await resolvePendingReconnectionRequests(client, {
+          customerId,
+          employeeId: employee.employeeId,
+          statusHistoryId: statusHistory.account_status_history_id,
+          reviewNote: "Automatically resolved after payment cleared the account balance.",
         });
         await client.query(
           `

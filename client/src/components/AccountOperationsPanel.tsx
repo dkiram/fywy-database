@@ -41,6 +41,10 @@ type BillingStatus = {
   is_on_hold: boolean;
   hold_expires_on: string | null;
   unverified_entries: number;
+  offline_charge_review_count: number;
+  offline_charge_review_amount: string;
+  offline_charge_review_from: string | null;
+  offline_charge_review_to: string | null;
 };
 
 type LedgerEntry = {
@@ -147,6 +151,7 @@ function AccountOperationsPanel({
   const [action, setAction] = useState<AccountAction | null>(null);
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [adminBalanceOverride, setAdminBalanceOverride] = useState(false);
   const [saving, setSaving] = useState(false);
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
@@ -219,7 +224,11 @@ function AccountOperationsPanel({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason, confirmation }),
+          body: JSON.stringify({
+            reason,
+            confirmation,
+            adminBalanceOverride,
+          }),
         }
       );
       const data = await response.json();
@@ -236,11 +245,18 @@ function AccountOperationsPanel({
         onStatusChanged(data.customer);
         // Update the visible timeline immediately without another round trip.
         setHistory((current) => [data.statusHistory, ...current]);
-        if (data.ontAction?.message) setNotice(data.ontAction.message);
+        if (data.adminBalanceOverride?.applied) {
+          setNotice(
+            `Admin override applied. Service is active, but J$${Number(data.adminBalanceOverride.outstandingBalance).toLocaleString()} remains on the account. Add a disconnection hold or approve a valid service-outage discount if the balance is under review.`
+          );
+        } else if (data.ontAction?.message) {
+          setNotice(data.ontAction.message);
+        }
       }
       setAction(null);
       setReason("");
       setConfirmation("");
+      setAdminBalanceOverride(false);
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -252,9 +268,13 @@ function AccountOperationsPanel({
     }
   };
 
-  const startAction = (nextAction: AccountAction) => {
+  const startAction = (
+    nextAction: AccountAction,
+    options?: { adminBalanceOverride?: boolean }
+  ) => {
     setReason("");
     setConfirmation("");
+    setAdminBalanceOverride(options?.adminBalanceOverride === true);
     setError("");
     setNotice("");
     setAction(nextAction);
@@ -342,7 +362,7 @@ function AccountOperationsPanel({
                 Account Operations
               </p>
               <p className="mt-1 text-sm text-on-surface-variant">
-                Status, billing position, and account actions
+                Billing workflow and service-control actions
               </p>
             </div>
             <StatusBadge status={status} />
@@ -371,15 +391,33 @@ function AccountOperationsPanel({
             {status === "pending_reconnection" && canManage && (
               <>
                 <ActionButton
-                  label={billing && Number(billing.outstanding_balance) <= 0 ? "Confirm Reconnection" : "Balance Outstanding"}
+                  label={
+                    billing && Number(billing.outstanding_balance) <= 0
+                      ? "Confirm Reconnection"
+                      : employeeRole === "admin"
+                        ? "Admin Reconnect"
+                        : "Balance Outstanding"
+                  }
                   icon="sync"
-                  disabled={!billing || Number(billing.outstanding_balance) > 0 || (oltAccountActions?.integrated === true && !oltAccountActions.ready)}
+                  disabled={
+                    !billing ||
+                    (Number(billing.outstanding_balance) > 0 && employeeRole !== "admin") ||
+                    (oltAccountActions?.integrated === true && !oltAccountActions.ready)
+                  }
                   title={billing && Number(billing.outstanding_balance) > 0
-                    ? "The outstanding balance must be cleared before service can be reconnected."
+                    ? employeeRole === "admin"
+                      ? "Reconnect service without clearing the balance. This exception is permanently audited."
+                      : "The outstanding balance must be cleared before service can be reconnected."
                     : oltAccountActions?.integrated === true && !oltAccountActions.ready
                       ? oltAccountActions.reason || "Verify the OLT mapping first."
                       : undefined}
-                  onClick={() => startAction("reconnect")}
+                  onClick={() =>
+                    startAction("reconnect", {
+                      adminBalanceOverride:
+                        employeeRole === "admin" &&
+                        Number(billing?.outstanding_balance ?? 0) > 0,
+                    })
+                  }
                 />
                 <ActionButton
                   label="Cancel Pending"
@@ -402,12 +440,24 @@ function AccountOperationsPanel({
             )}
             {canManage && !pendingWaiverRequest && (
               <ActionButton
-                label="Request Discount"
+                label={
+                  billing && Number(billing.offline_charge_review_amount) > 0
+                    ? "Review Offline Charges"
+                    : "Request Discount"
+                }
                 icon="money_off"
                 onClick={() => {
                   setExceptionAction("waiver");
-                  setExceptionValue("");
-                  setExceptionReason("");
+                  setExceptionValue(
+                    Number(billing?.offline_charge_review_amount ?? 0) > 0
+                      ? String(billing?.offline_charge_review_amount)
+                      : ""
+                  );
+                  setExceptionReason(
+                    Number(billing?.offline_charge_review_amount ?? 0) > 0
+                      ? `Review and discount monthly charges recorded while service was not active (${billing?.offline_charge_review_from ?? "unknown"} to ${billing?.offline_charge_review_to ?? "unknown"}).`
+                      : ""
+                  );
                 }}
               />
             )}
@@ -483,6 +533,16 @@ function AccountOperationsPanel({
                 {billing.unverified_entries} legacy balance entr{billing.unverified_entries === 1 ? "y is" : "ies are"} estimated and awaiting verification.
               </p>
             )}
+            {Number(billing.offline_charge_review_amount) > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 sm:col-span-2 lg:col-span-4">
+                <p className="font-semibold">
+                  Possible no-service charges: {formatCurrency(billing.offline_charge_review_amount)} across {billing.offline_charge_review_count} billing date{billing.offline_charge_review_count === 1 ? "" : "s"}
+                </p>
+                <p className="mt-1">
+                  The system has not removed this money. Management should compare the status history, then use Review Offline Charges to request an audited discount when appropriate.
+                </p>
+              </div>
+            )}
           </div>
         )}
         {loading ? (
@@ -550,6 +610,14 @@ function AccountOperationsPanel({
                 ? "The backend will re-check the saved customer, ONT serial, and OLT location. It will confirm the physical ONT state before updating the account database."
                 : "This change becomes permanent account history and is recorded in Activity History."}
             </p>
+            {adminBalanceOverride && billing && (
+              <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-semibold">Admin balance override</p>
+                <p className="mt-1">
+                  This reconnects service with {formatCurrency(billing.outstanding_balance)} still outstanding. It does not erase or discount the balance, and the delinquency scheduler may disconnect the account again unless a hold or valid discount is added.
+                </p>
+              </div>
+            )}
             <label className="mt-5 block text-sm font-semibold text-on-surface">
               Reason <span className="text-error">*</span>
               <textarea
@@ -586,6 +654,7 @@ function AccountOperationsPanel({
                   setAction(null);
                   setReason("");
                   setConfirmation("");
+                  setAdminBalanceOverride(false);
                   setError("");
                 }}
                 className="rounded-lg bg-surface-container px-5 py-2.5 text-sm font-medium text-on-surface-variant disabled:opacity-50"
@@ -735,7 +804,7 @@ function StatusBadge({ status }: { status: AccountStatus }) {
     <span
       className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}
     >
-      {humanize(status)}
+      Account: {humanize(status)}
     </span>
   );
 }

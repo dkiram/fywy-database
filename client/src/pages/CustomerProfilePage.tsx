@@ -528,6 +528,27 @@ if (error || !customer) {
           <CustomerNetworkAccessCard
             customerId={customer.customer_id}
             canEdit={canManageSubscription}
+            accountStatus={customer.status}
+            onStatusSynced={(update: AccountStatusUpdate) => {
+              setCustomer((current) =>
+                current
+                  ? {
+                      ...current,
+                      status: update.status,
+                      deactivation_date: update.deactivation_date,
+                      reactivation_date: update.reactivation_date,
+                      last_disconnected_on:
+                        update.status === "disconnected"
+                          ? update.deactivation_date
+                          : current.last_disconnected_on,
+                      last_reconnected_on:
+                        update.status === "active"
+                          ? update.reactivation_date
+                          : current.last_reconnected_on,
+                    }
+                  : current
+              );
+            }}
           />
 
           {employee && (

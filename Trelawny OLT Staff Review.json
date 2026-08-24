@@ -1,0 +1,1332 @@
+{
+  "summary": {
+    "mode": "dry-run",
+    "oltName": "TRELAWNY",
+    "managementIp": "192.168.1.2",
+    "inputFiles": [
+      "trelawny-import-source.txt"
+    ],
+    "parsedOnts": 1268,
+    "exactOneToOneMatches": 1142,
+    "needsNameReview": 126,
+    "databaseConflicts": 7,
+    "alreadyPresent": 1135,
+    "readyToInsert": 0,
+    "inserted": 0
+  },
+  "nameReview": [
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Shomorrey Smith",
+      "candidateCustomerIds": [
+        6868,
+        14586
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 0,
+      "ontId": 39
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Joan Anthony/ Ms.Yap",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 0,
+      "ontId": 41
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Terry Ann Francis",
+      "candidateCustomerIds": [
+        7922,
+        14585
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 0,
+      "ontId": 49
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Cordel Levy",
+      "candidateCustomerIds": [
+        10996,
+        14604
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 0,
+      "ontId": 57
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Dave Lorraine",
+      "candidateCustomerIds": [
+        5687,
+        14654
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 0,
+      "ontId": 84
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Taneeshea Black Bramwell",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 0,
+      "ontId": 97
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Andrea Dempster",
+      "candidateCustomerIds": [
+        8074,
+        14906
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 0,
+      "ontId": 98
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Pair 3",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 1,
+      "ontId": 2
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Dottie Furguson",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 1,
+      "ontId": 4
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Samantha Daley",
+      "candidateCustomerIds": [
+        4723,
+        14655
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 1,
+      "ontId": 9
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Nash Floral Arrangements",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 1,
+      "ontId": 12
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Thurston Campbelll",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 1,
+      "ontId": 28
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "DESORENE TAIT",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 1,
+      "ontId": 46
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Kayon Barnett/kerry-ann chambers",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 1,
+      "ontId": 56
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Sherwaine Henry",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 1,
+      "ontId": 60
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Melishan Edwards",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 1,
+      "ontId": 69
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Gregory Johnson",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 5
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Clevetta Blair",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 7
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Monikay Griffiths",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 9
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Jermaine Lyles",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 15
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Shaday Young",
+      "candidateCustomerIds": [
+        5929,
+        14657
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 16
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Paul Williams",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 22
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Cecil Huss",
+      "candidateCustomerIds": [
+        4619,
+        14975
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 26
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Faithlyn Griffiths",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 28
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Doret Baker",
+      "candidateCustomerIds": [
+        6634,
+        14658
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 42
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Robins Hall SDA",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 43
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Jermaine Henry",
+      "candidateCustomerIds": [
+        7859,
+        14659
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 2,
+      "ontId": 56
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Oniel E.Morris",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 0
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Winston Thorpe",
+      "candidateCustomerIds": [
+        4362,
+        14643,
+        14715
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 14
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Gifferd Russell Supa",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 26
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Robin Hall United Church",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 40
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Davia Lindsay-robins hall",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 59
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Jerome Lyle 2",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 62
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Douglas Allen worker",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 65
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Christa gay Johnson",
+      "candidateCustomerIds": [
+        6071,
+        14998
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 72
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Rajohn Vassell",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 91
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Margaret Johnson",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 94
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Fitzroy Sulph",
+      "candidateCustomerIds": [
+        11059,
+        14599
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 95
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Nefrita Powell",
+      "candidateCustomerIds": [
+        7030,
+        14666
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 100
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Christine Smith",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 4,
+      "ontId": 16
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Carlos Angel",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 4,
+      "ontId": 44
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Tommeco Bennett/Michella Haye",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 4,
+      "ontId": 62
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Kelly Ann Gordon Edwards 2",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 5,
+      "ontId": 25
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Kayla Davidson",
+      "candidateCustomerIds": [
+        5325,
+        14667
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 5,
+      "ontId": 26
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Kay ann Brown",
+      "candidateCustomerIds": [
+        10520,
+        14669
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 5,
+      "ontId": 28
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Renae Reid",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 5,
+      "ontId": 36
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Harry Watch SDA",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 5,
+      "ontId": 37
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Mary Frecklton",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 5,
+      "ontId": 41
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Marcus Rattery",
+      "candidateCustomerIds": [
+        5494,
+        14663
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 6,
+      "ontId": 0
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Seymour Findley",
+      "candidateCustomerIds": [
+        5675,
+        14576
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 6,
+      "ontId": 18
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Oneil  Graham",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 6,
+      "ontId": 33
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Reginald Washing Whyte",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 6,
+      "ontId": 51
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Demar Dailey",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 6,
+      "ontId": 54
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Jermie Williams",
+      "candidateCustomerIds": [
+        4977,
+        14711
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 6,
+      "ontId": 59
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Giovanie Denton",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 6,
+      "ontId": 88
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Annmarie Smith",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 7,
+      "ontId": 20
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Demar Getfield an Esnett Baker",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 7,
+      "ontId": 39
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Cherine Foster",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 7,
+      "ontId": 42
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Euvan Robinson",
+      "candidateCustomerIds": [
+        6823,
+        14712
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 7,
+      "ontId": 68
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Audrey Frazer",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 7,
+      "ontId": 73
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Cherry Daley",
+      "candidateCustomerIds": [
+        10719,
+        14714
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 7,
+      "ontId": 74
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Nardia Thompson",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 7,
+      "ontId": 77
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Elaine Shields-Menedez",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 7,
+      "ontId": 79
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Retinella Morgan",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 3
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Dimiri South",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 6
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Sean Griffiths",
+      "candidateCustomerIds": [
+        6705,
+        14571
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 12
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Sophia Small",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 22
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Desrene Smith",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 26
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Tyrone Brooks",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 31
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Kerry Ann Williams",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 33
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Stanford Chambers/ Nordia Samuels",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 47
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Tyrone Brooks",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 52
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Dellecia Cole",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 64
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Kemar Doiley",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 66
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Dawn Williams",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 73
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Shani Robinson",
+      "candidateCustomerIds": [
+        12132,
+        14628
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 80
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Marlon Wright",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 88
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Macedonia Rivival Mission Church/ Kerry-Ann Darby",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 94
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Alexia Mitchell #2",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 0
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Anna Marie Mattis",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 3
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Mauva Swaby",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 12
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Janice Ellis- Simpson",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 17
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Glad Tidings Church of the First Born Top Hil",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 22
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Winsome Foster White",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 36
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Sartia White / Tommy Wilburn",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 43
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Asheka Myerss",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 48
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Shamar Wilson-Whynes",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 53
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Deaf village",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 73
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Clover Mattocks",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 77
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Deaf Village #2",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 9,
+      "ontId": 78
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Shanique Gordon",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 8
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Kerry Ann Donaldson",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 15
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Janet Rochester/ Corey Rochester",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 19
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Petrice Robinson",
+      "candidateCustomerIds": [
+        8226,
+        14726
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 20
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Andre Woollery",
+      "candidateCustomerIds": [
+        5132,
+        14575
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 31
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Michel Bryan York",
+      "candidateCustomerIds": [
+        4715,
+        14545
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 38
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Shequan Davis",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 44
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Lorenzo Roach/ Baswell  Mcleod",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 45
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Juliet Fisher",
+      "candidateCustomerIds": [
+        8427,
+        14602
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 46
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Shevian Johnson",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 53
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Rodney Allensworth",
+      "candidateCustomerIds": [
+        10118,
+        14725
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 10,
+      "ontId": 55
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "RANALDO WILLIAMS",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 11,
+      "ontId": 27
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Ryan Hendricks",
+      "candidateCustomerIds": [
+        4622,
+        14739
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 11,
+      "ontId": 37
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Yolanda D Cole",
+      "candidateCustomerIds": [
+        4591,
+        14612
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 12,
+      "ontId": 7
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Kerry-Ann Blackwood-Smith",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 12,
+      "ontId": 13
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Judith Beckford",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 12,
+      "ontId": 22
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "roderick/Gwendolyn Williams",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 12,
+      "ontId": 49
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Judith Beckford#2",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 12,
+      "ontId": 81
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Lenford L. Watson",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 12,
+      "ontId": 97
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Pauline Robinson",
+      "candidateCustomerIds": [
+        6375,
+        14860
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 12,
+      "ontId": 99
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Desri-Ann Johnson Baker",
+      "candidateCustomerIds": [
+        8919,
+        14738
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 13,
+      "ontId": 23
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Daville Blake",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 13,
+      "ontId": 40
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Kidding Corner Basic SchoolKiddies Corner Basic School",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 13,
+      "ontId": 44
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Hugh Harvey Mobay",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 13,
+      "ontId": 60
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Calisia Richards",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 13,
+      "ontId": 73
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Hepheibah Missionary Church",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 13,
+      "ontId": 76
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Shenesa Reid",
+      "candidateCustomerIds": [
+        7479,
+        14757
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 14,
+      "ontId": 4
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Jermain Kennedy",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 14,
+      "ontId": 5
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Andrene Powell 2",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 14,
+      "ontId": 6
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Claudine Townsend Shop",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 14,
+      "ontId": 8
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Michael Gordon Mile gully barba Shop",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 14,
+      "ontId": 15
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Omar Joseph",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 14,
+      "ontId": 22
+    },
+    {
+      "reason": "no_exact_customer_name",
+      "customerDescription": "Patricia Watson-Gowdie",
+      "candidateCustomerIds": [],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 14,
+      "ontId": 24
+    },
+    {
+      "reason": "duplicate_customer_name",
+      "customerDescription": "Ricardo Maxwell",
+      "candidateCustomerIds": [
+        11023,
+        14977
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 15,
+      "ontId": 10
+    },
+    {
+      "reason": "multiple_onts_for_customer",
+      "customerDescription": "Jestina Mitchell",
+      "candidateCustomerIds": [
+        8506
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 5,
+      "ontId": 42
+    },
+    {
+      "reason": "multiple_onts_for_customer",
+      "customerDescription": "Jestina Mitchell",
+      "candidateCustomerIds": [
+        8506
+      ],
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 6,
+      "ontId": 55
+    }
+  ],
+  "databaseConflicts": [
+    {
+      "reason": "ont_serial_already_assigned",
+      "customerId": 11026,
+      "customerName": "Shaneil Russell",
+      "existingAssignmentId": 1429,
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 3,
+      "ontId": 30
+    },
+    {
+      "reason": "ont_serial_already_assigned",
+      "customerId": 14008,
+      "customerName": "Camille Daley",
+      "existingAssignmentId": 1873,
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 8,
+      "ontId": 92
+    },
+    {
+      "reason": "ont_serial_already_assigned",
+      "customerId": 7379,
+      "customerName": "Rochell Wright",
+      "existingAssignmentId": 2315,
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 11,
+      "ontId": 21
+    },
+    {
+      "reason": "ont_serial_already_assigned",
+      "customerId": 11735,
+      "customerName": "Nicky Guy-Spence #2",
+      "existingAssignmentId": 1967,
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 11,
+      "ontId": 49
+    },
+    {
+      "reason": "ont_serial_already_assigned",
+      "customerId": 8089,
+      "customerName": "Ann-Marie Wright",
+      "existingAssignmentId": 1100,
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 13,
+      "ontId": 52
+    },
+    {
+      "reason": "customer_already_has_different_mapping",
+      "customerId": 5609,
+      "customerName": "Oliver Johnson",
+      "existingAssignmentId": 1186,
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 13,
+      "ontId": 54
+    },
+    {
+      "reason": "customer_already_has_different_mapping",
+      "customerId": 7847,
+      "customerName": "Beverly Morgan",
+      "existingAssignmentId": 1779,
+      "frameNumber": 0,
+      "slotNumber": 2,
+      "ponPortNumber": 14,
+      "ontId": 2
+    }
+  ]
+}

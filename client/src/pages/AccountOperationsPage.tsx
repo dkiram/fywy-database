@@ -267,7 +267,26 @@ function AccountOperationsPage() {
 
   // The checkbox is the manager's explicit approval step. Payment only places
   // a fully cleared account into this queue; it never activates service itself.
-  const approveReconnection = async (customerId: number) => {
+  const approveReconnection = async (
+    customerId: number,
+    adminBalanceOverride = false
+  ) => {
+    let reason = "Manager checkbox approval after full balance and reconnection fee verification";
+    if (adminBalanceOverride) {
+      const enteredReason = window.prompt(
+        "Why should service be reconnected before this balance is cleared? This reason is permanently audited."
+      );
+      if (enteredReason === null) return;
+      reason = enteredReason.trim();
+      if (reason.length < 3) {
+        setError("Enter an Admin override reason of at least 3 characters.");
+        return;
+      }
+      if (!window.confirm(
+        "Reconnect service without clearing the balance? The balance remains, and the account may be disconnected again unless a hold or valid discount is added."
+      )) return;
+    }
+
     try {
       setApprovingCustomerId(customerId);
       setError("");
@@ -275,7 +294,8 @@ function AccountOperationsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          reason: "Manager checkbox approval after full balance and reconnection fee verification",
+          reason,
+          adminBalanceOverride,
           // Reconnection is restorative, but the backend still requires the
           // same customer-specific confirmation used on the profile dialog.
           confirmation: `RECONNECT ${customerId}`,
@@ -551,23 +571,36 @@ function AccountOperationsPage() {
                     <td className="px-6 py-4" onClick={(event) => event.stopPropagation()}>
                       {account.status === "pending_reconnection" && canApprove ? (
                         <div className="flex min-w-40 flex-col items-start gap-2">
-                          <label
-                            className={`inline-flex items-center gap-2 text-xs font-medium ${account.ready_for_reconnection ? "cursor-pointer text-primary" : "cursor-not-allowed text-on-surface-variant"}`}
-                            title={account.ready_for_reconnection ? "Approve reconnection" : "Outstanding balance must be cleared first"}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={false}
-                              disabled={!account.ready_for_reconnection || approvingCustomerId !== null || cancellingCustomerId !== null}
-                              onChange={() => approveReconnection(account.customer_id)}
-                              className="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary"
-                            />
-                            {approvingCustomerId === account.customer_id
-                              ? "Approving..."
-                              : account.ready_for_reconnection
-                                ? "Confirm Reconnection"
-                                : "Balance Outstanding"}
-                          </label>
+                          {account.ready_for_reconnection ? (
+                            <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-primary" title="Approve reconnection">
+                              <input
+                                type="checkbox"
+                                checked={false}
+                                disabled={approvingCustomerId !== null || cancellingCustomerId !== null}
+                                onChange={() => approveReconnection(account.customer_id)}
+                                className="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary"
+                              />
+                              {approvingCustomerId === account.customer_id
+                                ? "Approving..."
+                                : "Confirm Reconnection"}
+                            </label>
+                          ) : isAdmin ? (
+                            <button
+                              type="button"
+                              disabled={approvingCustomerId !== null || cancellingCustomerId !== null}
+                              onClick={() => approveReconnection(account.customer_id, true)}
+                              className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-950 disabled:opacity-50"
+                              title="Reconnect service without clearing the balance; permanently audited"
+                            >
+                              {approvingCustomerId === account.customer_id
+                                ? "Reconnecting..."
+                                : "Admin Reconnect"}
+                            </button>
+                          ) : (
+                            <span className="text-xs font-medium text-on-surface-variant" title="Outstanding balance must be cleared first">
+                              Balance Outstanding
+                            </span>
+                          )}
                           <button
                             type="button"
                             disabled={approvingCustomerId !== null || cancellingCustomerId !== null}

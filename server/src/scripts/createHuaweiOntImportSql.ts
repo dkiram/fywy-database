@@ -40,6 +40,16 @@ function sqlText(value: string) {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+function filenameSlug(value: string) {
+  const slug = value
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase("en-US")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "olt";
+}
+
 async function readAccessCustomers(databasePath: string): Promise<CustomerNameRow[]> {
   const child = spawn("mdb-json", [path.resolve(databasePath), "Customer TBL"], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -241,6 +251,66 @@ SELECT import_status, COUNT(*) AS customer_count
 FROM spcl_newport_safe_evaluation
 GROUP BY import_status
 ORDER BY import_status;
+
+-- Detail every blocked row so staff can review the exact live-database reason.
+SELECT
+  evaluation.import_status,
+  evaluation.customer_id AS proposed_customer_id,
+  proposed.name AS proposed_customer_name,
+  evaluation.frame_number AS frame,
+  evaluation.slot_number AS card,
+  evaluation.pon_port_number AS pon_port,
+  evaluation.ont_id,
+  evaluation.ont_serial,
+  candidates.exact_name_customer_ids,
+  conflict.existing_customer_id,
+  conflict.existing_customer_name,
+  conflict.existing_olt_name,
+  conflict.existing_location,
+  conflict.existing_ont_serial
+FROM spcl_newport_safe_evaluation evaluation
+LEFT JOIN public.customers proposed
+  ON proposed.customer_id = evaluation.customer_id
+LEFT JOIN LATERAL (
+  SELECT STRING_AGG(customer.customer_id::TEXT, ', ' ORDER BY customer.customer_id)
+           AS exact_name_customer_ids
+  FROM public.customers customer
+  WHERE LOWER(REGEXP_REPLACE(TRIM(customer.name), '[[:space:]]+', ' ', 'g')) =
+        evaluation.expected_normalized_name
+) candidates ON TRUE
+LEFT JOIN LATERAL (
+  SELECT
+    assignment.customer_id AS existing_customer_id,
+    customer.name AS existing_customer_name,
+    olt.name AS existing_olt_name,
+    assignment.frame_number || '/' || assignment.slot_number || '/' ||
+      assignment.pon_port_number || '/' || assignment.ont_id AS existing_location,
+    assignment.ont_serial AS existing_ont_serial
+  FROM public.customer_ont_assignments assignment
+  JOIN public.customers customer ON customer.customer_id = assignment.customer_id
+  JOIN public.olts olt ON olt.olt_id = assignment.olt_id
+  WHERE assignment.ended_at IS NULL
+    AND (
+      assignment.customer_id = evaluation.customer_id
+      OR (
+        olt.normalized_name = UPPER(TRIM(${sqlText(oltName)}))
+        AND assignment.frame_number = evaluation.frame_number
+        AND assignment.slot_number = evaluation.slot_number
+        AND assignment.pon_port_number = evaluation.pon_port_number
+        AND assignment.ont_id = evaluation.ont_id
+      )
+      OR (
+        assignment.ont_serial IS NOT NULL
+        AND UPPER(TRIM(assignment.ont_serial)) = UPPER(TRIM(evaluation.ont_serial))
+      )
+    )
+  ORDER BY
+    CASE WHEN assignment.customer_id = evaluation.customer_id THEN 0 ELSE 1 END,
+    assignment.customer_ont_assignment_id
+  LIMIT 1
+) conflict ON TRUE
+WHERE evaluation.import_status NOT IN ('ready', 'already_present')
+ORDER BY evaluation.import_status, evaluation.customer_id;
 
 -- Deliberately leave the live database unchanged.
 ROLLBACK;
@@ -618,15 +688,17 @@ async function main() {
   const customers = await readAccessCustomers(accessDb);
   const matching = matchOntsToCustomers(onts, customers);
   const outputDir = path.resolve(outputDirectory);
-  const dryRunPath = path.join(outputDir, "newport-safe-matches-tableplus-dry-run.sql");
-  const applyPath = path.join(outputDir, "newport-safe-matches-tableplus-apply.sql");
+  const outputSlug = filenameSlug(oltName);
+  const dryRunPath = path.join(outputDir, `${outputSlug}-safe-matches-tableplus-dry-run.sql`);
+  const applyPath = path.join(outputDir, `${outputSlug}-safe-matches-tableplus-apply.sql`);
+  const reviewPath = path.join(outputDir, `${outputSlug}-matching-review.json`);
   const twoYearReviewPath = path.join(
     outputDir,
-    "newport-over-two-years-tableplus-dry-run.sql"
+    `${outputSlug}-over-two-years-tableplus-dry-run.sql`
   );
   const twoYearApplyPath = expectedTwoYearCount == null
     ? null
-    : path.join(outputDir, "newport-over-two-years-tableplus-apply.sql");
+    : path.join(outputDir, `${outputSlug}-over-two-years-tableplus-apply.sql`);
 
   await Promise.all([
     writeFile(dryRunPath, dryRunSql(matching.safeMatches, oltName, managementIp), {
@@ -638,6 +710,25 @@ async function main() {
     writeFile(twoYearReviewPath, twoYearReviewSql(matching.safeMatches, oltName), {
       encoding: "utf8", mode: 0o600,
     }),
+    writeFile(reviewPath, `${JSON.stringify({
+      oltName,
+      managementIp,
+      parsedOnts: onts.length,
+      safeMatchCount: matching.safeMatches.length,
+      needsReviewCount: matching.review.length,
+      needsReview: matching.review.map((item) => ({
+        reason: item.reason,
+        candidateCustomerIds: item.candidateCustomerIds,
+        frameNumber: item.ont.frameNumber,
+        slotNumber: item.ont.slotNumber,
+        ponPortNumber: item.ont.ponPortNumber,
+        ontId: item.ont.ontId,
+        ontSerial: item.ont.ontSerial,
+        description: item.ont.description,
+        controlFlag: item.ont.controlFlag,
+        runState: item.ont.runState,
+      })),
+    }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 }),
     ...(twoYearApplyPath == null
       ? []
       : [writeFile(
@@ -653,6 +744,7 @@ async function main() {
     needsReview: matching.review.length,
     dryRunPath,
     applyPath,
+    reviewPath,
     twoYearReviewPath,
     twoYearApplyPath,
   }, null, 2));

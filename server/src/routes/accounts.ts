@@ -8,6 +8,7 @@ import {
   changeOntActivationState,
   OltControlError,
   OltVerificationError,
+  readOntFromOlt,
   type OntControlAction,
 } from "../huawei/verifyOnt.js";
 
@@ -163,6 +164,37 @@ async function insertStatusHistory(
   return result.rows[0];
 }
 
+// Once an account has left the disconnected state, an older unpaid-request
+// approval is no longer waiting for an Admin decision. Resolve it alongside
+// the status change so it cannot linger in the Admin queue or block a later
+// reconnection request for the same customer.
+async function resolvePendingReconnectionRequests(
+  client: PoolClient,
+  values: {
+    customerId: number;
+    employeeId: number;
+    statusHistoryId: number;
+    reviewNote: string;
+  }
+) {
+  await client.query(
+    `UPDATE public.reconnection_requests
+     SET status = 'approved',
+         reviewed_by_employee_id = $2,
+         reviewed_at = CURRENT_TIMESTAMP,
+         review_note = $4,
+         account_status_history_id = $3
+     WHERE customer_id = $1
+       AND status = 'pending';`,
+    [
+      values.customerId,
+      values.employeeId,
+      values.statusHistoryId,
+      values.reviewNote,
+    ]
+  );
+}
+
 type TransitionOptions = {
   action: string;
   allowedFrom: AccountStatus[];
@@ -191,9 +223,23 @@ async function applyAccountTransition(
     reason: string;
     employee: TransitionEmployee;
     options: TransitionOptions;
+    allowOutstandingBalance?: boolean;
   }
 ) {
-  const { customerId, reason, employee, options } = values;
+  const {
+    customerId,
+    reason,
+    employee,
+    options,
+    allowOutstandingBalance = false,
+  } = values;
+
+  if (allowOutstandingBalance && employee.role !== "admin") {
+    throw new AccountTransitionError(
+      403,
+      "Only an administrator can reconnect service with an outstanding balance."
+    );
+  }
 
     // Lock the customer so two employees cannot transition the same account
     // from a stale status at the same time.
@@ -219,8 +265,10 @@ async function applyAccountTransition(
     );
   }
 
-    // Reconnection can be requested or approved only after the full recurring
-    // balance and reconnection fee have been paid or waived.
+    // Normal reconnection still requires a cleared balance. An Admin may make
+    // an explicit, audited service exception; the balance itself is preserved
+    // so reconnecting service never silently changes money owed.
+    let outstandingBalance = 0;
     if (options.requireClearedBalance) {
       await client.query(
         `SELECT public.spcl_generate_monthly_charges(
@@ -231,14 +279,20 @@ async function applyAccountTransition(
         `SELECT outstanding_balance FROM public.customer_billing_status WHERE customer_id = $1;`,
         [customerId]
       );
-      const outstandingBalance = Number(balanceResult.rows[0]?.outstanding_balance ?? 0);
-      if (outstandingBalance > 0) {
+      outstandingBalance = Number(balanceResult.rows[0]?.outstanding_balance ?? 0);
+      if (outstandingBalance > 0 && !allowOutstandingBalance) {
         throw new AccountTransitionError(
           409,
           `Reconnection requires the full outstanding balance. J$${outstandingBalance.toFixed(2)} remains unpaid.`
         );
       }
     }
+
+    const adminOverrideApplied =
+      allowOutstandingBalance && options.requireClearedBalance === true && outstandingBalance > 0;
+    const recordedReason = adminOverrideApplied
+      ? `ADMIN BALANCE OVERRIDE (J$${outstandingBalance.toFixed(2)} remains outstanding): ${reason}`
+      : reason;
 
     const dateAssignment = options.updateDateColumn
       ? `, ${options.updateDateColumn} =
@@ -266,9 +320,18 @@ async function applyAccountTransition(
       customerId,
       fromStatus: customer.status,
       toStatus: options.toStatus,
-      reason,
+      reason: recordedReason,
       employeeId: employee.employeeId,
     });
+
+    if (customer.status === "pending_reconnection" && options.toStatus === "active") {
+      await resolvePendingReconnectionRequests(client, {
+        customerId,
+        employeeId: employee.employeeId,
+        statusHistoryId: history.account_status_history_id,
+        reviewNote: "Automatically resolved when management confirmed reconnection.",
+      });
+    }
 
     // Each actual deactivation creates one reconnection-fee debit. Using the
     // immutable status-history ID makes this safe even after later reconnects.
@@ -319,17 +382,26 @@ async function applyAccountTransition(
       [
         employee.employeeId,
         `${employee.firstName} ${employee.lastName}`,
-        options.action,
+        adminOverrideApplied
+          ? `${options.action} with Admin balance override`
+          : options.action,
         String(customerId),
         customer.status,
         options.toStatus,
-        reason,
+        recordedReason,
       ]
     );
 
     return {
       customer: updatedResult.rows[0],
       statusHistory: history,
+      adminBalanceOverride: adminOverrideApplied
+        ? {
+            applied: true,
+            outstandingBalance: outstandingBalance.toFixed(2),
+            balanceChanged: false,
+          }
+        : null,
     };
 }
 
@@ -356,6 +428,12 @@ async function transitionAccount(
   }
 
   const employee = req.session.employee!;
+  const allowOutstandingBalance = req.body.adminBalanceOverride === true;
+  if (allowOutstandingBalance && employee.role !== "admin") {
+    return res.status(403).json({
+      error: "Only an administrator can reconnect service with an outstanding balance.",
+    });
+  }
   const client = await pool.connect();
 
   try {
@@ -365,6 +443,7 @@ async function transitionAccount(
       reason,
       employee,
       options,
+      allowOutstandingBalance,
     });
     await client.query("COMMIT");
     res.json(result);
@@ -457,6 +536,13 @@ async function transitionAccountWithOnt(
       error: `Type ${requiredConfirmation} exactly to confirm.`,
     });
   }
+  const employee = req.session.employee!;
+  const allowOutstandingBalance = req.body.adminBalanceOverride === true;
+  if (allowOutstandingBalance && employee.role !== "admin") {
+    return res.status(403).json({
+      error: "Only an administrator can reconnect service with an outstanding balance.",
+    });
+  }
   if (accountOntActionsInProgress.has(customerId)) {
     return res.status(409).json({ error: "This customer already has an OLT account action in progress." });
   }
@@ -476,7 +562,7 @@ async function transitionAccountWithOnt(
 
   // Avoid cutting service before discovering that a reconnecting customer
   // still owes money. applyAccountTransition repeats this check under lock.
-  if (options.requireClearedBalance) {
+  if (options.requireClearedBalance && !allowOutstandingBalance) {
     await pool.query(
       `SELECT public.spcl_generate_monthly_charges(
         (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
@@ -510,7 +596,6 @@ async function transitionAccountWithOnt(
     });
   }
 
-  const employee = req.session.employee!;
   let attemptId: number;
   try {
     const attempt = await pool.query(
@@ -579,6 +664,7 @@ async function transitionAccountWithOnt(
         reason,
         employee,
         options,
+        allowOutstandingBalance,
       });
 
       // Ensure staff did not edit the mapping between live preflight and the
@@ -1105,9 +1191,17 @@ accountsRouter.get(
       const [statusResult, ledgerResult] = await Promise.all([
         pool.query(
           `
-          SELECT billing.*, c.status AS account_status
+          SELECT
+            billing.*,
+            c.status AS account_status,
+            COALESCE(review.charge_count, 0)::INTEGER AS offline_charge_review_count,
+            COALESCE(review.charge_amount, 0)::NUMERIC(14,2) AS offline_charge_review_amount,
+            review.first_charge_date AS offline_charge_review_from,
+            review.last_charge_date AS offline_charge_review_to
           FROM public.customer_billing_status billing
           JOIN public.customers c USING (customer_id)
+          LEFT JOIN public.customer_offline_monthly_charge_review review
+            USING (customer_id)
           WHERE billing.customer_id = $1;
           `,
           [customerId]
@@ -1501,6 +1595,12 @@ accountsRouter.post(
           reason: queueReason,
           employeeId: employee.employeeId,
         });
+        await resolvePendingReconnectionRequests(client, {
+          customerId: waiverRequest.customer_id,
+          employeeId: employee.employeeId,
+          statusHistoryId: statusHistory.account_status_history_id,
+          reviewNote: "Automatically resolved after an approved waiver cleared the account balance.",
+        });
       }
 
       await client.query(
@@ -1830,6 +1930,12 @@ accountsRouter.post(
         reason,
         employeeId: employee.employeeId,
       });
+      await resolvePendingReconnectionRequests(client, {
+        customerId,
+        employeeId: employee.employeeId,
+        statusHistoryId: statusHistory.account_status_history_id,
+        reviewNote: "Automatically resolved after the account balance was cleared.",
+      });
       await client.query(
         `INSERT INTO public.audit_logs (
           employee_id, actor_name, action, entity_type, entity_id,
@@ -1910,6 +2016,8 @@ accountsRouter.get("/reconnection-requests", requireAuth, requireAdmin, async (_
        LEFT JOIN public.employees requester
          ON requester.employee_id = request.requested_by_employee_id
        WHERE request.status = 'pending'
+         AND customer.status = 'disconnected'
+         AND customer.hidden_from_app = FALSE
        ORDER BY request.requested_at ASC
        LIMIT 100;`
     );
@@ -2088,5 +2196,182 @@ accountsRouter.post(
     )
 );
 
-export { insertStatusHistory };
+// Reconciliation only: the customer's workflow status (active/disconnected/
+// pending_reconnection) and Huawei's live control flag can drift apart when
+// service is changed directly on the OLT instead of through this app. This
+// endpoint re-reads the live ONT and, if it disagrees with the database,
+// corrects the database to match physical reality. It never sends a command
+// to the OLT and never charges a reconnection fee or requires a cleared
+// balance — it is only catching the records up to what is already true on
+// the equipment, not granting or removing service.
+const accountStatusSyncsInProgress = new Set<number>();
+
+accountsRouter.post(
+  "/customers/:customerId/sync-status-with-olt",
+  requireAuth,
+  requireAccountManager,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+
+    const reason = cleanText(req.body.reason);
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({
+        error: "A reason between 3 and 500 characters is required.",
+      });
+    }
+    const requiredConfirmation = `SYNC ${customerId}`;
+    if (cleanText(req.body.confirmation) !== requiredConfirmation) {
+      return res.status(400).json({
+        error: `Type ${requiredConfirmation} exactly to confirm.`,
+      });
+    }
+
+    if (
+      accountOntActionsInProgress.has(customerId) ||
+      accountStatusSyncsInProgress.has(customerId)
+    ) {
+      return res.status(409).json({
+        error: "This customer already has an OLT account action in progress.",
+      });
+    }
+
+    const context = await loadAccountOntContext(customerId);
+    if (!context) return res.status(404).json({ error: "Customer not found." });
+    if (!mappingReadyForAccountAction(context)) {
+      return res.status(409).json({
+        error: "This account needs a verified OLT mapping and ONT serial before its status can be synced.",
+      });
+    }
+
+    const assignmentId = Number(context.customer_ont_assignment_id);
+    const unresolved = await pool.query(
+      `SELECT olt_action_attempt_id, outcome
+       FROM public.olt_action_attempts
+       WHERE customer_ont_assignment_id = $1
+         AND outcome IN ('requested', 'uncertain')
+       ORDER BY requested_at DESC
+       LIMIT 1;`,
+      [assignmentId]
+    );
+    if (unresolved.rows.length > 0) {
+      return res.status(409).json({
+        error: `ONT action #${unresolved.rows[0].olt_action_attempt_id} must be resolved before another account action.`,
+      });
+    }
+
+    accountStatusSyncsInProgress.add(customerId);
+    try {
+      const liveOnt = await readOntFromOlt({
+        managementIp: String(context.management_ip),
+        frameNumber: Number(context.frame_number),
+        slotNumber: Number(context.slot_number),
+        ponPortNumber: Number(context.pon_port_number),
+        ontId: Number(context.ont_id),
+      });
+      if (!liveOnt) {
+        return res.status(409).json({
+          error: "The ONT was not found at the saved OLT location. Re-verify the mapping first.",
+        });
+      }
+
+      const liveActive = liveOnt.controlFlag === "active";
+      const dbActive = context.customer_status === "active";
+      if (liveActive === dbActive) {
+        return res.status(409).json({
+          error: "The account workflow status already matches the live OLT. Nothing to sync.",
+        });
+      }
+
+      let options: TransitionOptions;
+      if (liveActive) {
+        if (!["disconnected", "pending_reconnection"].includes(context.customer_status)) {
+          return res.status(409).json({
+            error: `This account is ${context.customer_status}. Use the normal workflow to change it before syncing.`,
+          });
+        }
+        options = {
+          action: "Synced account status to match live OLT (Active)",
+          allowedFrom: ["disconnected", "pending_reconnection"],
+          toStatus: "active",
+          updateDateColumn: "reactivation_date",
+          requireClearedBalance: false,
+        };
+      } else {
+        if (context.customer_status !== "active") {
+          return res.status(409).json({
+            error: `This account is ${context.customer_status}. Use the normal workflow to change it before syncing.`,
+          });
+        }
+        options = {
+          action: "Synced account status to match live OLT (Deactivated)",
+          allowedFrom: ["active"],
+          toStatus: "disconnected",
+          updateDateColumn: "deactivation_date",
+          chargeReconnectionFee: false,
+        };
+      }
+
+      const balanceResult = await pool.query(
+        `SELECT outstanding_balance FROM public.customer_billing_status WHERE customer_id = $1;`,
+        [customerId]
+      );
+      const outstandingBalance = Number(balanceResult.rows[0]?.outstanding_balance ?? 0);
+      const fullReason =
+        `Live Huawei OLT already shows ${liveActive ? "Active" : "Deactivated"}` +
+        (outstandingBalance > 0 ? ` (J$${outstandingBalance.toFixed(2)} outstanding)` : "") +
+        `. No reconnection fee or balance check applied — this only reconciles records to the equipment. ${reason}`;
+
+      const employee = req.session.employee!;
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const result = await applyAccountTransition(client, {
+          customerId,
+          reason: fullReason,
+          employee,
+          options,
+        });
+        // applyAccountTransition only auto-resolves the reconnection queue
+        // when the prior status was pending_reconnection. This sync can also
+        // jump straight from disconnected to active, so resolve it here too.
+        if (context.customer_status === "disconnected" && options.toStatus === "active") {
+          await resolvePendingReconnectionRequests(client, {
+            customerId,
+            employeeId: employee.employeeId,
+            statusHistoryId: result.statusHistory.account_status_history_id,
+            reviewNote: "Automatically resolved after syncing the account to match the live OLT.",
+          });
+        }
+        await client.query("COMMIT");
+        res.json({
+          ...result,
+          live: { controlFlag: liveOnt.controlFlag, runState: liveOnt.runState },
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        if (error instanceof AccountTransitionError) {
+          return res.status(error.status).json({ error: error.message });
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      if (error instanceof OltVerificationError) {
+        console.warn(`OLT status-sync ${error.kind} error for customer ${customerId}.`);
+        return res.status(error.kind === "configuration" ? 503 : 502).json({
+          error: error.message,
+          code: `olt_${error.kind}_error`,
+        });
+      }
+      console.error("Could not sync customer status with OLT:", error);
+      res.status(500).json({ error: "Could not sync account status with the live OLT." });
+    } finally {
+      accountStatusSyncsInProgress.delete(customerId);
+    }
+  }
+);
+
+export { insertStatusHistory, resolvePendingReconnectionRequests };
 export default accountsRouter;
