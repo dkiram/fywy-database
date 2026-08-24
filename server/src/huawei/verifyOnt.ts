@@ -289,12 +289,14 @@ function openHuaweiShell(target: Pick<OntVerificationTarget, "managementIp">) {
             prepend: [],
             remove: [],
           },
-          // The same server offers AES/Blowfish/3DES/DES only in CBC mode.
-          // Append the AES option and keep the weaker alternatives disabled.
+          // Mandeville advertises AES-GCM but corrupts the encrypted stream
+          // immediately after authentication. Prefer AES-CTR and remove only
+          // the two broken GCM modes. Newport still needs the AES-CBC fallback;
+          // Blowfish, 3DES, and DES remain disabled.
           cipher: {
+            prepend: ["aes128-ctr"],
             append: ["aes128-cbc"],
-            prepend: [],
-            remove: [],
+            remove: ["aes128-gcm@openssh.com", "aes256-gcm@openssh.com"],
           },
         },
       } satisfies ConnectConfig);
