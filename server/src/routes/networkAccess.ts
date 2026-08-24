@@ -472,23 +472,32 @@ networkAccessRouter.post(
 
         const savedResult = await client.query(`${currentAssignmentSelect};`, [customerId]);
         const saved = savedResult.rows[0];
-        await insertAudit(client, {
-          employeeId: employee.employeeId,
-          actorName: `${employee.firstName} ${employee.lastName}`,
-          customerId,
-          action: verified ? "Verified customer OLT information" : "OLT mapping mismatch",
-          oldValue: initial,
-          newValue: {
-            ...saved,
-            liveControlFlag: liveOnt?.controlFlag ?? null,
-            liveRunState: liveOnt?.runState ?? null,
-            mismatchReasons,
-            reconciledAttemptIds,
-          },
-          reason: verified
-            ? "Read-only live OLT verification"
-            : mismatchReasons.join("; "),
-        });
+        // A routine re-check that still matches and resolved nothing new is
+        // not worth a permanent Activity History record — staff can verify a
+        // mapping as often as they like without flooding the shared, capped
+        // activity feed. Only a mismatch, or a first-time confirmation, or an
+        // uncertain OLT action getting resolved, is worth recording.
+        const isRoutineRecheck =
+          verified && initial.mapping_status === "verified" && reconciledAttemptIds.length === 0;
+        if (!isRoutineRecheck) {
+          await insertAudit(client, {
+            employeeId: employee.employeeId,
+            actorName: `${employee.firstName} ${employee.lastName}`,
+            customerId,
+            action: verified ? "Verified customer OLT information" : "OLT mapping mismatch",
+            oldValue: initial,
+            newValue: {
+              ...saved,
+              liveControlFlag: liveOnt?.controlFlag ?? null,
+              liveRunState: liveOnt?.runState ?? null,
+              mismatchReasons,
+              reconciledAttemptIds,
+            },
+            reason: verified
+              ? "Read-only live OLT verification"
+              : mismatchReasons.join("; "),
+          });
+        }
         await client.query("COMMIT");
 
         return res.json({

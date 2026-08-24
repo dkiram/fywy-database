@@ -202,6 +202,11 @@ type TransitionOptions = {
   updateDateColumn?: "deactivation_date" | "reactivation_date";
   requireClearedBalance?: boolean;
   chargeReconnectionFee?: boolean;
+  // account_status_history is the definitive, per-customer service timeline
+  // and is always written. audit_logs feeds the shared, capped Activity
+  // History feed across every customer; a routine OLT reconciliation is not
+  // worth spending one of those slots on, so it can opt out here.
+  skipAuditLog?: boolean;
 };
 
 class AccountTransitionError extends Error {
@@ -360,37 +365,39 @@ async function applyAccountTransition(
 
     // audit_logs is the staff-facing activity trail; account_status_history is
     // the complete status timeline shown on the customer profile.
-    await client.query(
-      `
-      INSERT INTO public.audit_logs (
-        employee_id,
-        actor_name,
-        action,
-        entity_type,
-        entity_id,
-        field_name,
-        old_value,
-        new_value,
-        reason,
-        occurred_at
-      )
-      VALUES (
-        $1, $2, $3, 'customer', $4,
-        'status', $5, $6, $7, CURRENT_TIMESTAMP
+    if (!options.skipAuditLog) {
+      await client.query(
+        `
+        INSERT INTO public.audit_logs (
+          employee_id,
+          actor_name,
+          action,
+          entity_type,
+          entity_id,
+          field_name,
+          old_value,
+          new_value,
+          reason,
+          occurred_at
+        )
+        VALUES (
+          $1, $2, $3, 'customer', $4,
+          'status', $5, $6, $7, CURRENT_TIMESTAMP
+        );
+        `,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          adminOverrideApplied
+            ? `${options.action} with Admin balance override`
+            : options.action,
+          String(customerId),
+          customer.status,
+          options.toStatus,
+          recordedReason,
+        ]
       );
-      `,
-      [
-        employee.employeeId,
-        `${employee.firstName} ${employee.lastName}`,
-        adminOverrideApplied
-          ? `${options.action} with Admin balance override`
-          : options.action,
-        String(customerId),
-        customer.status,
-        options.toStatus,
-        recordedReason,
-      ]
-    );
+    }
 
     return {
       customer: updatedResult.rows[0],
@@ -2283,6 +2290,7 @@ accountsRouter.post(
           toStatus: "active",
           updateDateColumn: "reactivation_date",
           requireClearedBalance: false,
+          skipAuditLog: true,
         };
       } else {
         if (context.customer_status !== "active") {
@@ -2296,6 +2304,7 @@ accountsRouter.post(
           toStatus: "disconnected",
           updateDateColumn: "deactivation_date",
           chargeReconnectionFee: false,
+          skipAuditLog: true,
         };
       }
 
