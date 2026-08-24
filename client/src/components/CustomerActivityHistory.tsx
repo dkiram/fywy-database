@@ -353,7 +353,7 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
                   {!isLast && <span className="w-px flex-1 bg-surface-container" aria-hidden="true" />}
                 </div>
 
-                <div className={isLast ? "flex-1 pb-1" : "flex-1 pb-6"}>
+                <div className={isLast ? "min-w-0 flex-1 pb-1" : "min-w-0 flex-1 pb-6"}>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <p className="font-medium text-on-surface">{entry.title}</p>
                     <div className="flex items-center gap-3">
@@ -439,11 +439,11 @@ function CustomerActivityHistory({ customerId }: { customerId: number | string }
                   ) : (
                     <>
                       {entry.detail && (
-                        <p className="mt-1 text-sm text-on-surface-variant">{entry.detail}</p>
+                        <p className="mt-1 [overflow-wrap:anywhere] text-sm text-on-surface-variant">{entry.detail}</p>
                       )}
 
                       {entry.reason && (
-                        <p className="mt-1.5 border-l-2 border-surface-container-high pl-3 text-sm italic text-on-surface-variant">
+                        <p className="mt-1.5 border-l-2 border-surface-container-high pl-3 [overflow-wrap:anywhere] text-sm italic text-on-surface-variant">
                           {entry.reason}
                         </p>
                       )}

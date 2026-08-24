@@ -1106,12 +1106,30 @@ app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => 
               al.occurred_at,
               'staff_edit',
               al.action,
-              NULLIF(CONCAT_WS(' ',
-                  NULLIF(al.field_name, ''),
-                  CASE WHEN al.old_value IS NOT NULL OR al.new_value IS NOT NULL
-                       THEN COALESCE(al.old_value, '(blank)') || ' → ' || COALESCE(al.new_value, '(blank)')
+              CASE
+                -- Customer OLT audits store complete JSON snapshots for
+                -- traceability. The profile timeline only needs a readable
+                -- summary; exposing those snapshots here creates a huge block
+                -- of technical text and can stretch the entire page.
+                WHEN al.field_name = 'network_access' THEN
+                  CASE
+                    WHEN al.action = 'Verified customer OLT information'
+                      THEN 'Saved OLT information matched the live ONT.'
+                    WHEN al.action = 'OLT mapping mismatch'
+                      THEN 'Saved OLT information did not match the live ONT.'
+                    WHEN al.action = 'Added customer OLT information'
+                      THEN 'OLT information was added to this customer.'
+                    WHEN al.action = 'Changed customer OLT information'
+                      THEN 'OLT information was updated for this customer.'
+                    ELSE 'OLT information was checked or updated.'
                   END
-              ), ''),
+                ELSE NULLIF(CONCAT_WS(' ',
+                    NULLIF(al.field_name, ''),
+                    CASE WHEN al.old_value IS NOT NULL OR al.new_value IS NOT NULL
+                         THEN COALESCE(al.old_value, '(blank)') || ' → ' || COALESCE(al.new_value, '(blank)')
+                    END
+                ), '')
+              END,
               al.reason,
               al.actor_name,
               al.entity_id
