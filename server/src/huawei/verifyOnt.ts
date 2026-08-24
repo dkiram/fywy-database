@@ -258,7 +258,11 @@ function openHuaweiShell(target: Pick<OntVerificationTarget, "managementIp">) {
       .on("keyboard-interactive", (_name, _instructions, _language, prompts, finish) => {
         finish(prompts.map(() => secret.password));
       })
-      .once("error", fail)
+      // Some MA5680T firmware resets the TCP socket more than once while a
+      // completed CLI session is closing. Keep the listener installed so
+      // those post-resolution errors cannot terminate the Node process; fail
+      // still rejects normally when an error occurs before the shell opens.
+      .on("error", fail)
       .once("ready", () => {
         connection.shell(
           { term: "vt100", cols: 160, rows: 60 },
