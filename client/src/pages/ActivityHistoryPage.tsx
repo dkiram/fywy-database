@@ -192,12 +192,12 @@ function ActivityHistoryPage() {
                 </div>
 
                 <AuditDetail
-                  label="Old Value"
+                  label={log.field_name === "network_access" ? "Previous OLT details" : "Old Value"}
                   value={formatAuditValue(log.field_name, log.old_value)}
                 />
 
                 <AuditDetail
-                  label="New Value"
+                  label={log.field_name === "network_access" ? "Result" : "New Value"}
                   value={formatAuditValue(log.field_name, log.new_value)}
                   emphasized
                 />
@@ -275,7 +275,89 @@ function formatAuditValue(
     }
   }
 
+  // OLT audit records deliberately retain the complete before/after objects in
+  // PostgreSQL, but printing those objects as JSON makes the staff screen look
+  // like a developer console. Keep the full audit evidence in the database and
+  // turn only its presentation into the few facts a person needs to review.
+  if (fieldName === "network_access") {
+    return formatNetworkAccessAuditValue(value);
+  }
+
   return value;
+}
+
+function formatNetworkAccessAuditValue(value: string) {
+  let details: Record<string, unknown>;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return "OLT details recorded";
+    }
+    details = parsed as Record<string, unknown>;
+  } catch {
+    // Older data may not be JSON. Preserve it instead of hiding potentially
+    // useful historical information.
+    return value;
+  }
+
+  const lines: string[] = [];
+  const oltName = readableText(details.olt_name);
+  const locationParts = [
+    readableInteger(details.frame_number),
+    readableInteger(details.slot_number),
+    readableInteger(details.pon_port_number),
+    readableInteger(details.ont_id),
+  ];
+
+  if (oltName || locationParts.some((part) => part !== null)) {
+    const location = locationParts.every((part) => part !== null)
+      ? `ONT ${locationParts.join("/")}`
+      : "ONT location incomplete";
+    lines.push(oltName ? `${oltName} · ${location}` : location);
+  }
+
+  const mappingStatus = readableText(details.mapping_status);
+  if (mappingStatus) {
+    lines.push(`Mapping: ${friendlyStatus(mappingStatus)}`);
+  }
+
+  const controlFlag = readableText(details.liveControlFlag);
+  const runState = readableText(details.liveRunState);
+  if (controlFlag || runState) {
+    const liveState = [controlFlag, runState]
+      .filter((part): part is string => Boolean(part))
+      .map(friendlyStatus)
+      .join(" · ");
+    lines.push(`Live OLT: ${liveState}`);
+  }
+
+  const mismatchReasons = Array.isArray(details.mismatchReasons)
+    ? details.mismatchReasons
+        .map(readableText)
+        .filter((reason): reason is string => Boolean(reason))
+    : [];
+  if (mismatchReasons.length > 0) {
+    lines.push(`Issue: ${mismatchReasons.join("; ")}`);
+  }
+
+  return lines.length > 0 ? lines.join("\n") : "OLT details recorded";
+}
+
+function readableText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readableInteger(value: unknown) {
+  if (typeof value === "number" && Number.isInteger(value)) return String(value);
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) return value.trim();
+  return null;
+}
+
+function friendlyStatus(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatAuditDate(value: string) {
