@@ -2214,19 +2214,6 @@ accountsRouter.post(
     const customerId = parseCustomerId(req, res);
     if (customerId === null) return;
 
-    const reason = cleanText(req.body.reason);
-    if (reason.length < 3 || reason.length > 500) {
-      return res.status(400).json({
-        error: "A reason between 3 and 500 characters is required.",
-      });
-    }
-    const requiredConfirmation = `SYNC ${customerId}`;
-    if (cleanText(req.body.confirmation) !== requiredConfirmation) {
-      return res.status(400).json({
-        error: `Type ${requiredConfirmation} exactly to confirm.`,
-      });
-    }
-
     if (
       accountOntActionsInProgress.has(customerId) ||
       accountStatusSyncsInProgress.has(customerId)
@@ -2320,7 +2307,7 @@ accountsRouter.post(
       const fullReason =
         `Live Huawei OLT already shows ${liveActive ? "Active" : "Deactivated"}` +
         (outstandingBalance > 0 ? ` (J$${outstandingBalance.toFixed(2)} outstanding)` : "") +
-        `. No reconnection fee or balance check applied — this only reconciles records to the equipment. ${reason}`;
+        `. No reconnection fee or balance check applied — this only reconciles records to what Verify with OLT found on the equipment.`;
 
       const employee = req.session.employee!;
       const client = await pool.connect();

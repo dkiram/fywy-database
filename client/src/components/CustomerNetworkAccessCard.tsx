@@ -167,9 +167,6 @@ export default function CustomerNetworkAccessCard({
   const [controlling, setControlling] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [syncOpen, setSyncOpen] = useState(false);
-  const [syncReason, setSyncReason] = useState("");
-  const [syncConfirmation, setSyncConfirmation] = useState("");
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -334,26 +331,21 @@ export default function CustomerNetworkAccessCard({
     }
   }
 
-  function beginSync() {
-    setSyncReason("");
-    setSyncConfirmation("");
-    setError("");
-    setNotice("");
-    setSyncOpen(true);
-  }
-
-  async function submitSync() {
+  async function syncStatusWithOlt() {
+    if (
+      !window.confirm(
+        "Sync this account's workflow status to match the live OLT? No command is sent to the OLT, no reconnection fee is charged, and no balance needs to be cleared — this only corrects the database record."
+      )
+    ) {
+      return;
+    }
     try {
       setSyncing(true);
       setError("");
       setNotice("");
       const response = await apiFetch(
         `/api/customers/${customerId}/sync-status-with-olt`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: syncReason, confirmation: syncConfirmation }),
-        }
+        { method: "POST" }
       );
       const data = await response.json();
       if (!response.ok) {
@@ -369,9 +361,6 @@ export default function CustomerNetworkAccessCard({
           : current
       );
       setNotice(`Account workflow status synced to match the live OLT (now ${data.customer.status.replaceAll("_", " ")}).`);
-      setSyncOpen(false);
-      setSyncReason("");
-      setSyncConfirmation("");
     } catch (syncError) {
       setError(
         syncError instanceof Error
@@ -534,10 +523,11 @@ export default function CustomerNetworkAccessCard({
             ["active", "disconnected", "pending_reconnection"].includes(accountStatus) && (
               <button
                 type="button"
-                onClick={beginSync}
-                className="mt-3 rounded-lg bg-error px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                disabled={syncing}
+                onClick={syncStatusWithOlt}
+                className="mt-3 rounded-lg bg-error px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
               >
-                Sync account status to match OLT
+                {syncing ? "Syncing..." : "Sync account status to match OLT"}
               </button>
             )}
         </div>
@@ -665,83 +655,6 @@ export default function CustomerNetworkAccessCard({
             </button>
           </div>
         </form>
-      )}
-
-      {syncOpen && verification?.live && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Sync account status to match OLT"
-        >
-          <div className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
-            <h3 className="text-xl font-semibold">Sync account status to match OLT</h3>
-            <p className="mt-2 text-sm text-on-surface-variant">
-              This changes customer {customerId}&apos;s workflow status from{" "}
-              <strong>{accountStatus.replaceAll("_", " ")}</strong> to{" "}
-              <strong>{verification.live.controlFlag === "active" ? "active" : "disconnected"}</strong>{" "}
-              to match what Huawei already shows. No command is sent to the OLT, no reconnection fee
-              is charged, and any outstanding balance is not required to be cleared — this only
-              corrects the record.
-            </p>
-
-            <label className="mt-5 block text-sm font-semibold">
-              Reason <span className="text-error">*</span>
-              <textarea
-                rows={3}
-                maxLength={500}
-                value={syncReason}
-                onChange={(event) => setSyncReason(event.target.value)}
-                className="mt-1.5 w-full resize-none rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
-                placeholder="Field tech confirmed on site / found already reconnected on U2000..."
-              />
-            </label>
-
-            <label className="mt-4 block text-sm font-semibold">
-              Type <strong>SYNC {customerId}</strong> to confirm
-              <input
-                value={syncConfirmation}
-                onChange={(event) => setSyncConfirmation(event.target.value)}
-                autoComplete="off"
-                className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 font-mono text-sm"
-              />
-            </label>
-
-            {error && (
-              <p className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">
-                {error}
-              </p>
-            )}
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                disabled={syncing}
-                onClick={() => {
-                  setSyncOpen(false);
-                  setSyncReason("");
-                  setSyncConfirmation("");
-                  setError("");
-                }}
-                className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={
-                  syncing ||
-                  syncReason.trim().length < 3 ||
-                  syncConfirmation !== `SYNC ${customerId}`
-                }
-                onClick={submitSync}
-                className="rounded-lg bg-error px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                {syncing ? "Syncing..." : "Sync status"}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {controlAction && networkAccess && (
