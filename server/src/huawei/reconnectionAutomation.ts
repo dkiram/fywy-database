@@ -232,7 +232,8 @@ async function loadJob(jobId: number) {
        assignment.mapping_status
      FROM public.olt_reconnection_automation_jobs job
      JOIN public.customers customer ON customer.customer_id = job.customer_id
-     JOIN public.customer_billing_status billing USING (customer_id)
+     JOIN public.customer_billing_status billing
+       ON billing.customer_id = customer.customer_id
      LEFT JOIN LATERAL (
        SELECT history.account_status_history_id
        FROM public.account_status_history history
