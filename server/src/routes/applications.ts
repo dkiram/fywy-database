@@ -80,8 +80,12 @@ function parseApplicationId(req: Request, res: Response) {
   return Number(value);
 }
 
-applicationsRouter.get("/packages", requireAuth, async (_req, res) => {
+applicationsRouter.get("/packages", requireAuth, async (req, res) => {
   try {
+    // The New Application form only offers the standard catalog. Manage
+    // Subscription (context=subscription) also needs legacy plans like Old
+    // Internet (5 Mbps), which stay active for existing customers only.
+    const forSubscription = req.query.context === "subscription";
     const result = await pool.query(`
       SELECT
         package_id,
@@ -94,8 +98,9 @@ applicationsRouter.get("/packages", requireAuth, async (_req, res) => {
         speed_mbps
       FROM public.packages
       WHERE is_active = TRUE
+        AND (available_for_new_applications = TRUE OR $1)
       ORDER BY display_order, package_id;
-    `);
+    `, [forSubscription]);
     res.json({ packages: result.rows });
   } catch (error) {
     console.error("Could not load packages:", error);

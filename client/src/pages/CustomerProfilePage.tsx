@@ -164,7 +164,7 @@ useEffect(() => {
 
 useEffect(() => {
   if (!canManageSubscription) return;
-  apiFetch("/api/packages")
+  apiFetch("/api/packages?context=subscription")
     .then(async (response) => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not load packages.");
