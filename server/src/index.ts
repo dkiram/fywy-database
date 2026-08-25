@@ -909,6 +909,11 @@ app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => 
           FROM public.account_status_history h
           LEFT JOIN public.employees e ON e.employee_id = h.changed_by_employee_id
           WHERE h.customer_id = $1
+            -- A routine OLT-vs-database reconciliation still needs its row in
+            -- account_status_history (billing and Account Operations depend
+            -- on it), but it is not a noteworthy event for this blended
+            -- timeline the way a real deactivation or reconnection is.
+            AND h.reason NOT LIKE 'OLT reconciliation:%'
 
           UNION ALL
 

@@ -2313,8 +2313,12 @@ accountsRouter.post(
         [customerId]
       );
       const outstandingBalance = Number(balanceResult.rows[0]?.outstanding_balance ?? 0);
+      // The "OLT reconciliation:" prefix is a deliberate marker: the customer
+      // activity timeline filters status_change rows on it so a routine sync
+      // does not clutter that feed, while the row itself still exists in
+      // account_status_history for billing and the Account Operations panel.
       const fullReason =
-        `Live Huawei OLT already shows ${liveActive ? "Active" : "Deactivated"}` +
+        `OLT reconciliation: Live Huawei OLT already shows ${liveActive ? "Active" : "Deactivated"}` +
         (outstandingBalance > 0 ? ` (J$${outstandingBalance.toFixed(2)} outstanding)` : "") +
         `. No reconnection fee or balance check applied — this only reconciles records to what Verify with OLT found on the equipment.`;
 
