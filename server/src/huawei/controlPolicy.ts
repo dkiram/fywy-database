@@ -38,3 +38,17 @@ export function getAccountOntControlPolicy(customerId: number) {
     integrated: isEnabled && allowlisted,
   };
 }
+
+// Automatic reconnection is narrower than the normal account-action gate: it
+// must be enabled explicitly and can only operate on customers already inside
+// the account-action rollout.
+export function getAutomaticReconnectionPolicy(customerId: number) {
+  const accountPolicy = getAccountOntControlPolicy(customerId);
+  const automationEnabled = enabled(
+    process.env.HUAWEI_OLT_RECONNECTION_AUTOMATION_ENABLED
+  );
+  return {
+    enabled: automationEnabled,
+    integrated: automationEnabled && accountPolicy.integrated,
+  };
+}

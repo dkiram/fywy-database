@@ -22,6 +22,7 @@ import reportsRouter from "./routes/reports.js";
 import dashboardRouter from "./routes/dashboard.js";
 import networkAccessRouter from "./routes/networkAccess.js";
 import { startDelinquentAutomation } from "./huawei/delinquentAutomation.js";
+import { startReconnectionAutomation } from "./huawei/reconnectionAutomation.js";
 
 import type {
   Request,
@@ -2510,6 +2511,7 @@ const server = app.listen(PORT, HOST, () => {
 // The scheduler itself always starts, but its master switch defaults to off.
 // This lets the API report the configured state consistently after restarts.
 const stopDelinquentAutomation = startDelinquentAutomation();
+const stopReconnectionAutomation = startReconnectionAutomation();
 
 /**
  * Containers are stopped with SIGTERM. Closing the HTTP server and the database
@@ -2518,6 +2520,7 @@ const stopDelinquentAutomation = startDelinquentAutomation();
 function shutdown(signal: string) {
   console.log(`${signal} received, shutting down.`);
   stopDelinquentAutomation();
+  stopReconnectionAutomation();
 
   server.close(() => {
     pool.end().then(

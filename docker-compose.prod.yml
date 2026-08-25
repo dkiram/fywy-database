@@ -87,6 +87,10 @@ services:
       # Both values default closed and must be deliberately configured.
       HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED: ${HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED:-false}
       HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS: ${HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS:-}
+      # Fully cleared pending accounts may be verified and reactivated without
+      # a staff confirmation. The normal account-action gate still applies.
+      HUAWEI_OLT_RECONNECTION_AUTOMATION_ENABLED: ${HUAWEI_OLT_RECONNECTION_AUTOMATION_ENABLED:-false}
+      HUAWEI_OLT_RECONNECTION_AUTOMATION_MAX_PER_TICK: ${HUAWEI_OLT_RECONNECTION_AUTOMATION_MAX_PER_TICK:-10}
       # Actual scheduled disconnection of the billing-eligible delinquent list.
       HUAWEI_OLT_AUTOMATION_ENABLED: ${HUAWEI_OLT_AUTOMATION_ENABLED:-false}
       HUAWEI_OLT_AUTOMATION_HOUR: ${HUAWEI_OLT_AUTOMATION_HOUR:-9}

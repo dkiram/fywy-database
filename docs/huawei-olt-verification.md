@@ -116,6 +116,38 @@ is confirmed but the database commit fails, the journal remains `uncertain`
 and blocks retries until an administrator reconciles both systems. Read-only
 equipment verification deliberately cannot clear that account-level warning.
 
+## Automatic cleared-account reconnection
+
+Fully cleared accounts can leave the Pending Reconnection queue without a
+manager typing `RECONNECT <customer-id>`. This worker has its own master switch
+and still requires the normal account-action gate and customer allowlist:
+
+```dotenv
+HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED=true
+HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS=*
+HUAWEI_OLT_RECONNECTION_AUTOMATION_ENABLED=true
+HUAWEI_OLT_RECONNECTION_AUTOMATION_MAX_PER_TICK=10
+```
+
+Every minute, the API generates charges through the current Jamaica date and
+queues pending-reconnection accounts only when `ready_for_reconnection` is
+true and the ledger has no unverified entries. Accounts with any amount still
+outstanding remain pending and no OLT command is sent.
+
+The durable worker re-checks the balance under the same customer row lock used
+by payment recording, requires a current verified mapping and saved serial,
+then matches the live Huawei serial and customer Description. If the ONT is
+deactivated it activates and confirms it; if it is already active it only
+synchronizes the app. The customer becomes Active only after that live result
+is confirmed. Connection failures retry every 15 minutes up to three times;
+identity mismatches and uncertain commands remain blocked for deliberate
+review. Manual reconnection remains available for Admin balance overrides and
+recovery.
+
+Confirmed activations that changed the OLT create an independent configuration
+save due after `HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES` (120 minutes by
+default). Save failure never stops or reverses a confirmed reconnection.
+
 ## Automatic delinquent-customer disconnection
 
 This is the unattended workflow that physically disconnects the live billing

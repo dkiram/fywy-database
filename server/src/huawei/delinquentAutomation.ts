@@ -1,6 +1,7 @@
 /** Automatically disconnects billing-eligible customers from their Huawei ONTs. */
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
+import { OLT_AUTOMATION_LOCK_ID } from "./automationLock.js";
 import {
   changeOntActivationState,
   OltControlError,
@@ -9,7 +10,6 @@ import {
 } from "./verifyOnt.js";
 
 const AUTOMATION_ACTOR = "SPCL Automatic Delinquency Scheduler";
-const AUTOMATION_LOCK_ID = 56802026;
 const MINUTE = 60_000;
 const SAVE_RETRY_MINUTES = 15;
 const MAX_SAVE_ATTEMPTS = 3;
@@ -104,7 +104,7 @@ async function processDueConfigurationSaves() {
   try {
     const lock = await lockClient.query(
       `SELECT pg_try_advisory_lock($1) AS acquired;`,
-      [AUTOMATION_LOCK_ID]
+      [OLT_AUTOMATION_LOCK_ID]
     );
     if (!lock.rows[0]?.acquired) return;
 
@@ -200,7 +200,7 @@ async function processDueConfigurationSaves() {
     console.error("Could not process delayed OLT configuration saves:", error);
   } finally {
     await lockClient
-      .query(`SELECT pg_advisory_unlock($1);`, [AUTOMATION_LOCK_ID])
+      .query(`SELECT pg_advisory_unlock($1);`, [OLT_AUTOMATION_LOCK_ID])
       .catch(() => undefined);
     lockClient.release();
   }
@@ -544,7 +544,7 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
   try {
     const lock = await lockClient.query(
       `SELECT pg_try_advisory_lock($1) AS acquired;`,
-      [AUTOMATION_LOCK_ID]
+      [OLT_AUTOMATION_LOCK_ID]
     );
     if (!lock.rows[0]?.acquired) return { ran: false, reason: "already_running" };
 
@@ -692,7 +692,7 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
     }
     return { ran: false, reason: "failed" };
   } finally {
-    await lockClient.query(`SELECT pg_advisory_unlock($1);`, [AUTOMATION_LOCK_ID]).catch(() => undefined);
+    await lockClient.query(`SELECT pg_advisory_unlock($1);`, [OLT_AUTOMATION_LOCK_ID]).catch(() => undefined);
     lockClient.release();
   }
 }

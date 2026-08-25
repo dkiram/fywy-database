@@ -47,7 +47,7 @@ function DashboardPage() {
       <DashboardCard label="Disconnected" value={data.summary.disconnected_customers} detail={`${data.summary.pending_reconnections} pending reconnection`} icon="link_off" tone="negative" onClick={() => navigate("/account-operations")} />
       <DashboardCard label="Active Customers" value={data.summary.active_customers} detail="Current active accounts" icon="group" tone="positive" onClick={() => navigate("/account-operations?view=active")} />
       <DashboardCard label="Pole Boxes" value={data.summary.pole_boxes} detail={`${data.summary.pole_box_alerts} need attention`} icon="dns" tone={data.summary.pole_box_alerts > 0 ? "negative" : "primary"} onClick={() => navigate("/pole-boxes")} />
-      <DashboardCard label="Pending Reconnection" value={data.summary.pending_reconnections} detail="Waiting for management approval" icon="sync" tone="warning" onClick={() => navigate("/account-operations?view=pending_reconnection")} />
+      <DashboardCard label="Pending Reconnection" value={data.summary.pending_reconnections} detail="Automatic when the verified balance clears" icon="sync" tone="warning" onClick={() => navigate("/account-operations?view=pending_reconnection")} />
       {/* The card stays a quick signal; its click opens the full filtered detail. */}
       <DashboardCard label="Delinquent Customers" value={data.summary.delinquent_customers} detail={`${data.summary.eligible_for_disconnection} eligible for disconnection now`} icon="event_busy" tone="negative" onClick={() => navigate("/reports?report=delinquent-customers")} />
     </div>

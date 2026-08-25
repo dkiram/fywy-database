@@ -36,6 +36,10 @@ HUAWEI_OLT_CONNECTIONS_JSON=
 # enable it for exactly one spare/company customer ID, never a paying account.
 HUAWEI_OLT_WRITES_ENABLED=false
 HUAWEI_OLT_WRITE_CUSTOMER_IDS=
+HUAWEI_OLT_ACCOUNT_ACTIONS_ENABLED=false
+HUAWEI_OLT_ACCOUNT_ACTION_CUSTOMER_IDS=
+HUAWEI_OLT_RECONNECTION_AUTOMATION_ENABLED=false
+HUAWEI_OLT_RECONNECTION_AUTOMATION_MAX_PER_TICK=10
 
 # Unattended delinquent-customer disconnection. Each affected OLT is saved
 # once, 120 minutes after its completed run; the job survives API restarts.

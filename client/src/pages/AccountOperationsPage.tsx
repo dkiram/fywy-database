@@ -30,6 +30,10 @@ type AccountRecord = {
   latest_status_date: string | null;
   outstanding_balance: string;
   ready_for_reconnection: boolean;
+  automatic_reconnection_enabled: boolean;
+  automatic_reconnection_status: string | null;
+  automatic_reconnection_message: string | null;
+  automatic_reconnection_attempt_count: number | null;
 };
 
 type AccountSummary = {
@@ -91,6 +95,14 @@ const emptyPagination: Pagination = {
   total: 0,
   totalPages: 1,
 };
+
+function automaticReconnectLabel(status: string | null) {
+  if (status === "failed") return "Automatic reconnect needs attention";
+  if (status === "uncertain") return "Check the OLT before retrying";
+  if (status?.startsWith("blocked")) return "Automatic reconnect blocked";
+  if (status === "waiting_balance") return "Waiting for verified balance";
+  return "Automatic reconnect queued";
+}
 
 function AccountOperationsPage() {
   const navigate = useNavigate();
@@ -282,8 +294,8 @@ function AccountOperationsPage() {
     }
   };
 
-  // The checkbox is the manager's explicit approval step. Payment only places
-  // a fully cleared account into this queue; it never activates service itself.
+  // Manual fallback for customers outside automation or a deliberate Admin
+  // balance override. Eligible integrated accounts are handled by the worker.
   const approveReconnection = async (
     customerId: number,
     adminBalanceOverride = false
@@ -542,7 +554,7 @@ function AccountOperationsPage() {
                 <TableHeading>Status</TableHeading>
                 <TableHeading>Status Date</TableHeading>
                 <TableHeading>Latest Note</TableHeading>
-                <TableHeading>Manager Approval</TableHeading>
+                <TableHeading>Reconnection</TableHeading>
                 <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                   Account
                 </th>
@@ -582,7 +594,17 @@ function AccountOperationsPage() {
                     <td className="px-6 py-4" onClick={(event) => event.stopPropagation()}>
                       {account.status === "pending_reconnection" && canApprove ? (
                         <div className="flex min-w-40 flex-col items-start gap-2">
-                          {account.ready_for_reconnection ? (
+                          {account.ready_for_reconnection && account.automatic_reconnection_enabled ? (
+                            <div className="max-w-64 text-xs">
+                              <p className="font-semibold text-primary">
+                                {automaticReconnectLabel(account.automatic_reconnection_status)}
+                              </p>
+                              <p className="mt-1 text-on-surface-variant">
+                                {account.automatic_reconnection_message ||
+                                  "The system will verify the live ONT, activate it if needed, and synchronize this account."}
+                              </p>
+                            </div>
+                          ) : account.ready_for_reconnection ? (
                             <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-primary" title="Approve reconnection">
                               <input
                                 type="checkbox"

@@ -3,7 +3,10 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
-import { getAccountOntControlPolicy } from "../huawei/controlPolicy.js";
+import {
+  getAccountOntControlPolicy,
+  getAutomaticReconnectionPolicy,
+} from "../huawei/controlPolicy.js";
 import {
   changeOntActivationState,
   OltControlError,
@@ -879,13 +882,16 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
           billing.is_delinquent,
           billing.eligible_for_disconnection,
           billing.is_on_hold,
-          billing.hold_expires_on
+          billing.hold_expires_on,
+          automatic_reconnection.status AS automatic_reconnection_status,
+          automatic_reconnection.message AS automatic_reconnection_message,
+          automatic_reconnection.attempt_count AS automatic_reconnection_attempt_count
         FROM public.customers c
         LEFT JOIN public.packages p
           ON c.package_id = p.package_id
         LEFT JOIN LATERAL (
           -- Attach only the newest status note to each queue row.
-          SELECT reason, effective_date
+          SELECT account_status_history_id, reason, effective_date
           FROM public.account_status_history history
           WHERE history.customer_id = c.customer_id
           ORDER BY history.changed_at DESC, history.account_status_history_id DESC
@@ -893,6 +899,14 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
         ) latest ON TRUE
         LEFT JOIN public.customer_billing_status billing
           ON billing.customer_id = c.customer_id
+        LEFT JOIN LATERAL (
+          SELECT job.status, job.message, job.attempt_count
+          FROM public.olt_reconnection_automation_jobs job
+          WHERE job.customer_id = c.customer_id
+            AND job.pending_status_history_id = latest.account_status_history_id
+          ORDER BY job.created_at DESC, job.olt_reconnection_automation_job_id DESC
+          LIMIT 1
+        ) automatic_reconnection ON TRUE
         WHERE c.hidden_from_app = FALSE
           AND (${viewClause})
           AND (
@@ -950,7 +964,11 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
     if (!isAdmin) delete summary.active;
 
     res.json({
-      accounts: accountsResult.rows,
+      accounts: accountsResult.rows.map((account) => ({
+        ...account,
+        automatic_reconnection_enabled:
+          getAutomaticReconnectionPolicy(Number(account.customer_id)).integrated,
+      })),
       summary,
       pagination: { page, limit, total, totalPages },
     });

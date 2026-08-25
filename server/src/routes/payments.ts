@@ -458,9 +458,10 @@ paymentsRouter.post(
       const billing = billingResult.rows[0];
 
       // A fully paid disconnected account leaves the disconnected queue
-      // automatically, but it still waits for the manager checkbox approval.
+      // automatically. The durable OLT worker handles eligible integrated
+      // accounts; the manual workflow remains available as a fallback.
       if (billing?.status === "disconnected" && billing.ready_for_reconnection) {
-        const queueReason = "Full outstanding balance and reconnection fee paid; awaiting manager approval";
+        const queueReason = "Full outstanding balance and reconnection fee paid; queued for reconnection processing";
         await client.query(
           `UPDATE public.customers SET status = 'pending_reconnection' WHERE customer_id = $1;`,
           [customerId]
