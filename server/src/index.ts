@@ -1595,7 +1595,7 @@ const EDITABLE_ROLES = ["admin", "head_office", "branch"] as const;
 type EditableRole = (typeof EDITABLE_ROLES)[number];
 
 /**
- * Edits one employee's role, office, or active state.
+ * Edits one employee's name, role, office, or active state.
  *
  * The guards exist because this screen is the one place an admin can lock
  * themselves — or everyone — out of the system, and the NAS is in Jamaica.
@@ -1617,12 +1617,42 @@ app.patch(
     }
 
     const targetId = Number(employeeId);
+    const wantsFirstName = req.body.firstName !== undefined;
+    const wantsLastName = req.body.lastName !== undefined;
     const wantsRole = req.body.role !== undefined;
     const wantsActive = req.body.isActive !== undefined;
     const wantsLocation = req.body.locationId !== undefined;
 
-    if (!wantsRole && !wantsActive && !wantsLocation) {
+    if (
+      !wantsFirstName &&
+      !wantsLastName &&
+      !wantsRole &&
+      !wantsActive &&
+      !wantsLocation
+    ) {
       return res.status(400).json({ error: "Nothing to change." });
+    }
+
+    const normalizeName = (value: unknown) =>
+      typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+    const firstName = wantsFirstName ? normalizeName(req.body.firstName) : null;
+    const lastName = wantsLastName ? normalizeName(req.body.lastName) : null;
+
+    if (wantsFirstName && (firstName!.length < 1 || firstName!.length > 100)) {
+      return res.status(400).json({
+        error: "First name must be between 1 and 100 characters.",
+      });
+    }
+    if (wantsLastName && (lastName!.length < 1 || lastName!.length > 100)) {
+      return res.status(400).json({
+        error: "Last name must be between 1 and 100 characters.",
+      });
+    }
+    if (
+      (firstName !== null && /[\u0000-\u001F\u007F]/.test(firstName)) ||
+      (lastName !== null && /[\u0000-\u001F\u007F]/.test(lastName))
+    ) {
+      return res.status(400).json({ error: "Employee names contain invalid characters." });
     }
 
     const role = wantsRole ? String(req.body.role) : null;
@@ -1727,15 +1757,21 @@ app.patch(
       const updated = await client.query(
         `
         UPDATE public.employees
-        SET role        = COALESCE($2, role),
-            is_active   = COALESCE($3, is_active),
-            location_id = CASE WHEN $4::BOOLEAN THEN $5::SMALLINT ELSE location_id END,
+        SET first_name  = CASE WHEN $2::BOOLEAN THEN $3::TEXT ELSE first_name END,
+            last_name   = CASE WHEN $4::BOOLEAN THEN $5::TEXT ELSE last_name END,
+            role        = COALESCE($6, role),
+            is_active   = COALESCE($7, is_active),
+            location_id = CASE WHEN $8::BOOLEAN THEN $9::SMALLINT ELSE location_id END,
             updated_at  = CURRENT_TIMESTAMP
         WHERE employee_id = $1
         RETURNING employee_id, first_name, last_name, username, role, is_active, location_id;
         `,
         [
           targetId,
+          wantsFirstName,
+          firstName,
+          wantsLastName,
+          lastName,
           wantsRole ? role : null,
           wantsActive ? req.body.isActive : null,
           wantsLocation,
@@ -1747,6 +1783,12 @@ app.patch(
       // "what changed" rather than "someone opened the edit form".
       const changes: Array<[string, string | null, string | null]> = [];
 
+      if (wantsFirstName && firstName !== current.first_name) {
+        changes.push(["first_name", current.first_name, firstName]);
+      }
+      if (wantsLastName && lastName !== current.last_name) {
+        changes.push(["last_name", current.last_name, lastName]);
+      }
       if (wantsRole && role !== current.role) {
         changes.push(["role", current.role, role]);
       }
@@ -1787,6 +1829,14 @@ app.patch(
       }
 
       await client.query("COMMIT");
+
+      // Keep this browser session's actor name accurate when an Admin corrects
+      // their own spelling. Existing audit rows intentionally retain the name
+      // captured at the time of each historical action.
+      if (targetId === actor.employeeId) {
+        actor.firstName = updated.rows[0].first_name;
+        actor.lastName = updated.rows[0].last_name;
+      }
 
       res.json({ employee: updated.rows[0], changed: changes.length });
     } catch (error) {

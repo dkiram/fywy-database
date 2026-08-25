@@ -432,6 +432,8 @@ function EditEmployeeModal({
 }) {
   const isTechnician = employee.role === "technician";
 
+  const [firstName, setFirstName] = useState(employee.first_name);
+  const [lastName, setLastName] = useState(employee.last_name);
   const [role, setRole] = useState(employee.role);
   const [locationId, setLocationId] = useState(
     employee.location_id === null ? "" : String(employee.location_id)
@@ -454,6 +456,8 @@ function EditEmployeeModal({
       setModalError("");
 
       const body: Record<string, unknown> = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         isActive,
         locationId: locationId === "" ? null : Number(locationId),
       };
@@ -475,7 +479,7 @@ function EditEmployeeModal({
       onSaved(
         data.changed === 0
           ? "Nothing changed."
-          : `Updated ${employee.first_name} ${employee.last_name}.`
+          : `Updated ${data.employee.first_name} ${data.employee.last_name}.`
       );
     } catch (saveError) {
       setModalError(
@@ -539,6 +543,30 @@ function EditEmployeeModal({
         </div>
 
         <form onSubmit={save} className="space-y-5 px-6 py-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm font-semibold text-on-surface">
+              First name
+              <input
+                value={firstName}
+                maxLength={100}
+                required
+                onChange={(event) => setFirstName(event.target.value)}
+                className={inputClass}
+              />
+            </label>
+
+            <label className="block text-sm font-semibold text-on-surface">
+              Last name
+              <input
+                value={lastName}
+                maxLength={100}
+                required
+                onChange={(event) => setLastName(event.target.value)}
+                className={inputClass}
+              />
+            </label>
+          </div>
+
           <label className="block text-sm font-semibold text-on-surface">
             Role
             <select
@@ -632,7 +660,7 @@ function EditEmployeeModal({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !firstName.trim() || !lastName.trim()}
               className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save changes"}
