@@ -100,7 +100,7 @@ function automaticReconnectLabel(status: string | null) {
   if (status === "failed") return "Automatic reconnect needs attention";
   if (status === "uncertain") return "Check the OLT before retrying";
   if (status?.startsWith("blocked")) return "Automatic reconnect blocked";
-  if (status === "waiting_balance") return "Waiting for verified balance";
+  if (status === "waiting_balance") return "Waiting for clear balance";
   return "Automatic reconnect queued";
 }
 

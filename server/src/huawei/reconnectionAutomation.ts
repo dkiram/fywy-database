@@ -18,7 +18,6 @@ const MAX_ATTEMPTS = 3;
 type QueueCandidate = {
   customer_id: number;
   pending_status_history_id: number;
-  unverified_entries: number;
   customer_ont_assignment_id: number | null;
   management_ip: string | null;
   ont_serial: string | null;
@@ -34,7 +33,6 @@ type ReconnectionJob = {
   customer_name: string;
   customer_status: string;
   ready_for_reconnection: boolean;
-  unverified_entries: number;
   customer_ont_assignment_id: number | null;
   management_ip: string | null;
   frame_number: number | null;
@@ -112,7 +110,6 @@ async function enqueueClearedPendingAccounts(client: PoolClient) {
     `SELECT
        customer.customer_id,
        latest.account_status_history_id AS pending_status_history_id,
-       billing.unverified_entries,
        assignment.customer_ont_assignment_id,
        host(olt.management_ip) AS management_ip,
        assignment.ont_serial,
@@ -153,10 +150,7 @@ async function enqueueClearedPendingAccounts(client: PoolClient) {
            message = NULL,
            completed_at = NULL,
            updated_at = CURRENT_TIMESTAMP
-       WHERE (
-            olt_reconnection_automation_jobs.status = 'waiting_balance'
-            AND $4::BOOLEAN
-          )
+       WHERE olt_reconnection_automation_jobs.status = 'waiting_balance'
           OR olt_reconnection_automation_jobs.status = 'blocked_policy'
           OR (
             olt_reconnection_automation_jobs.status = 'blocked_mapping'
@@ -175,7 +169,6 @@ async function enqueueClearedPendingAccounts(client: PoolClient) {
         candidate.customer_id,
         candidate.pending_status_history_id,
         mappingReady(candidate),
-        Number(candidate.unverified_entries) === 0,
       ]
     );
   }
@@ -221,7 +214,6 @@ async function loadJob(jobId: number) {
        customer.name AS customer_name,
        customer.status AS customer_status,
        billing.ready_for_reconnection,
-       billing.unverified_entries,
        assignment.customer_ont_assignment_id,
        host(olt.management_ip) AS management_ip,
        assignment.frame_number,
@@ -270,11 +262,11 @@ async function processJob(jobId: number) {
     );
     return;
   }
-  if (!job.ready_for_reconnection || Number(job.unverified_entries) > 0) {
+  if (!job.ready_for_reconnection) {
     await pool.query(
       `UPDATE public.olt_reconnection_automation_jobs
        SET status = 'waiting_balance',
-           message = 'The complete verified balance is not clear; no OLT command was sent.',
+           message = 'The outstanding balance is not clear; no OLT command was sent.',
            updated_at = CURRENT_TIMESTAMP
        WHERE olt_reconnection_automation_job_id = $1 AND status = 'pending';`,
       [jobId]
@@ -339,7 +331,7 @@ async function processJob(jobId: number) {
   );
   if (claimed.rows.length === 0) return;
   const attemptCount = Number(claimed.rows[0].attempt_count);
-  const reason = "Automatic reconnection after the full verified balance and reconnection fee cleared";
+  const reason = "Automatic reconnection after the full balance and reconnection fee cleared";
 
   let attemptId: number;
   try {
@@ -396,7 +388,6 @@ async function processJob(jobId: number) {
       `SELECT
          customer.status,
          billing.ready_for_reconnection,
-         billing.unverified_entries,
          assignment.customer_ont_assignment_id,
          assignment.mapping_status,
          assignment.ont_serial
@@ -423,11 +414,8 @@ async function processJob(jobId: number) {
       await client.query("COMMIT");
       return;
     }
-    if (
-      current.ready_for_reconnection !== true ||
-      Number(current.unverified_entries) > 0
-    ) {
-      const message = "The complete verified balance stopped being clear before the OLT action; no command was sent.";
+    if (current.ready_for_reconnection !== true) {
+      const message = "The outstanding balance stopped being clear before the OLT action; no command was sent.";
       await client.query(
         `UPDATE public.olt_action_attempts
          SET outcome = 'blocked', result_message = $2, completed_at = CURRENT_TIMESTAMP
