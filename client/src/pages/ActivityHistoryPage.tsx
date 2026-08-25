@@ -1,7 +1,8 @@
 /** Displays the latest auditable employee and system changes in readable form. */
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { apiFetch } from "../lib/api";
+import { useScrollRestoration } from "../hooks/useScrollRestoration";
 
 type AuditLog = {
   audit_log_id: number;
@@ -25,7 +26,22 @@ function ActivityHistoryPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [employeeSearch, setEmployeeSearch] = useState("");
+  // Kept in the URL, not just component state, so the browser back button
+  // restores the exact search someone had typed instead of clearing it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const employeeSearch = searchParams.get("employee") ?? "";
+  const setEmployeeSearch = (value: string) => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) next.set("employee", value);
+        else next.delete("employee");
+        return next;
+      },
+      { replace: true }
+    );
+  };
+  useScrollRestoration(!loading);
 
   useEffect(() => {
     // Debounce name searches so typing a full employee name does not issue one

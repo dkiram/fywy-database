@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
+import { useScrollRestoration } from "../hooks/useScrollRestoration";
 
 // MVP 3 queue page for finding accounts that need a service-status decision.
 // Status-changing actions stay on the customer profile so the operator can
@@ -95,18 +96,33 @@ function AccountOperationsPage() {
   const navigate = useNavigate();
   const { employee } = useAuth();
   const isAdmin = employee?.role === "admin";
-  const [searchParams] = useSearchParams();
+  // Kept in the URL rather than component state, so the browser back button
+  // restores the exact view, search, and page someone was on instead of
+  // resetting to the first page of the default view.
+  const [searchParams, setSearchParams] = useSearchParams();
   const [accounts, setAccounts] = useState<AccountRecord[]>([]);
   const [summary, setSummary] = useState<AccountSummary>(emptySummary);
   const [pagination, setPagination] = useState<Pagination>(emptyPagination);
   const requestedView = (searchParams.get("view") as AccountView) || "attention";
-  const [view, setView] = useState<AccountView>(
-    !isAdmin && ["active", "all"].includes(requestedView)
-      ? "attention"
-      : requestedView
-  );
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const view: AccountView =
+    !isAdmin && ["active", "all"].includes(requestedView) ? "attention" : requestedView;
+  const search = searchParams.get("search") ?? "";
+  const page = Math.max(Number.parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
+  const updateParams = (
+    patch: Partial<Record<"view" | "search" | "page", string | null>>
+  ) => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const [key, value] of Object.entries(patch)) {
+          if (!value) next.delete(key);
+          else next.set(key, value);
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [approvingCustomerId, setApprovingCustomerId] = useState<number | null>(null);
@@ -116,6 +132,7 @@ function AccountOperationsPage() {
   const [reconnectionRequests, setReconnectionRequests] = useState<ReconnectionApprovalRequest[]>([]);
   const [reviewingReconnectionId, setReviewingReconnectionId] = useState<number | null>(null);
   const canApprove = employee?.role === "admin" || employee?.role === "head_office";
+  useScrollRestoration(!loading);
 
   // The server owns filtering and pagination because the customer table is too
   // large to load into the browser as one list.
@@ -134,7 +151,7 @@ function AccountOperationsPage() {
       setAccounts(data.accounts);
       setSummary(data.summary);
       setPagination(data.pagination);
-      if (data.pagination.page !== page) setPage(data.pagination.page);
+      if (data.pagination.page !== page) updateParams({ page: String(data.pagination.page) });
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -485,10 +502,7 @@ function AccountOperationsPage() {
               <button
                 key={value}
                 type="button"
-                onClick={() => {
-                  setView(value);
-                  setPage(1);
-                }}
+                onClick={() => updateParams({ view: value, page: null })}
                 className={
                   view === value
                     ? "rounded-full bg-primary px-4 py-2 text-xs font-medium text-on-primary"
@@ -506,10 +520,7 @@ function AccountOperationsPage() {
             </span>
             <input
               value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
+              onChange={(event) => updateParams({ search: event.target.value || null, page: null })}
               placeholder="Search customer, ID, phone, address..."
               className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm"
             />
@@ -656,7 +667,7 @@ function AccountOperationsPage() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setPage((current) => Math.max(current - 1, 1))}
+                onClick={() => updateParams({ page: String(Math.max(page - 1, 1)) })}
                 disabled={pagination.page <= 1}
                 className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -667,7 +678,7 @@ function AccountOperationsPage() {
               </span>
               <button
                 type="button"
-                onClick={() => setPage((current) => Math.min(current + 1, pagination.totalPages))}
+                onClick={() => updateParams({ page: String(Math.min(page + 1, pagination.totalPages)) })}
                 disabled={pagination.page >= pagination.totalPages}
                 className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
               >
