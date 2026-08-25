@@ -1,4 +1,4 @@
-/** Read-only Huawei MA5680T verification over an interactive SSH CLI. */
+/** Huawei MA5680T verification and tightly bounded control over an interactive SSH CLI. */
 import { createHash, timingSafeEqual } from "node:crypto";
 import ssh2 from "ssh2";
 import type { Client as SshClient, ClientChannel, ConnectConfig } from "ssh2";
@@ -146,6 +146,7 @@ class HuaweiShell {
     | {
         start: number;
         expectedEcho: string;
+        completionPattern: RegExp;
         resolve: (value: string) => void;
         reject: (error: Error) => void;
         timer: NodeJS.Timeout;
@@ -171,7 +172,7 @@ class HuaweiShell {
         this.pagerSearchFrom = markerAt + "---- More".length;
         stream.write(" ");
       }
-      this.checkPrompt();
+      this.checkCompletion();
     });
     stream.on("close", () => {
       if (this.waiting) {
@@ -182,7 +183,7 @@ class HuaweiShell {
     });
   }
 
-  private checkPrompt() {
+  private checkCompletion() {
     if (!this.waiting) return;
     const commandOutput = this.output.slice(this.waiting.start);
     // Old MA5680T software can deliver the previous command's prompt after
@@ -194,9 +195,8 @@ class HuaweiShell {
     ) {
       return;
     }
-    // Examples: MA5680T>, MA5680T#, MA5680T(config)#,
-    // MA5680T(config-if-gpon-0/11)#
-    if (!/(?:^|[\r\n])[^\r\n]{1,200}[>#]\s*$/.test(commandOutput)) return;
+    this.waiting.completionPattern.lastIndex = 0;
+    if (!this.waiting.completionPattern.test(commandOutput)) return;
     clearTimeout(this.waiting.timer);
     const { resolve } = this.waiting;
     this.waiting = undefined;
@@ -204,6 +204,22 @@ class HuaweiShell {
   }
 
   waitForPrompt(
+    timeoutMs = 20_000,
+    includeBufferedOutput = false,
+    expectedCommand = ""
+  ) {
+    // Examples: MA5680T>, MA5680T#, MA5680T(config)#,
+    // MA5680T(config-if-gpon-0/11)#
+    return this.waitForPattern(
+      /(?:^|[\r\n])[^\r\n]{1,200}[>#]\s*$/,
+      timeoutMs,
+      includeBufferedOutput,
+      expectedCommand
+    );
+  }
+
+  waitForPattern(
+    completionPattern: RegExp,
     timeoutMs = 20_000,
     includeBufferedOutput = false,
     expectedCommand = ""
@@ -216,16 +232,37 @@ class HuaweiShell {
         this.waiting = undefined;
         reject(new Error("Timed out waiting for the OLT command prompt."));
       }, timeoutMs);
-      this.waiting = { start, expectedEcho, resolve, reject, timer };
+      this.waiting = {
+        start,
+        expectedEcho,
+        completionPattern,
+        resolve,
+        reject,
+        timer,
+      };
       // The initial prompt can already be buffered before the shell callback
       // finishes, so its caller opts into checking the existing buffer.
-      this.checkPrompt();
+      this.checkCompletion();
     });
   }
 
   async command(command: string, timeoutMs = 20_000) {
     const response = this.waitForPrompt(timeoutMs, false, command);
     this.stream.write(`${command}\r`);
+    return response;
+  }
+
+  async commandUntil(command: string, completionPattern: RegExp, timeoutMs = 20_000) {
+    const response = this.waitForPattern(completionPattern, timeoutMs, false, command);
+    this.stream.write(`${command}\r`);
+    return response;
+  }
+
+  async respond(responseText: string, timeoutMs = 20_000) {
+    // Confirmation replies are not consistently echoed by older MA5680T
+    // software, so completion is based only on the returning CLI prompt.
+    const response = this.waitForPrompt(timeoutMs);
+    this.stream.write(`${responseText}\r`);
     return response;
   }
 
@@ -387,6 +424,53 @@ export async function readOntFromOlt(
     throw new OltVerificationError(
       "command",
       "The OLT connected, but its read-only ONT response could not be verified."
+    );
+  } finally {
+    shell.close();
+    connection.end();
+  }
+}
+
+/**
+ * Persist the OLT's complete running configuration to its next-startup file.
+ * Huawei's save command is global to the device, so callers must invoke this
+ * once per affected OLT after a batch, never once per customer.
+ */
+export async function saveOltConfiguration(managementIp: string) {
+  const { connection, shell } = await openHuaweiShell({ managementIp });
+  try {
+    const initialPrompt = await shell.waitForPrompt(20_000, true);
+    if (initialPrompt.trim().endsWith(">")) await shell.command("enable");
+
+    const confirmationOrCompletion = await shell.commandUntil(
+      "save",
+      /(?:continue|sure)[^\r\n]{0,160}(?:y\s*\/\s*n|y\/n)[^\r\n]*[:?]?\s*$|(?:^|[\r\n])[^\r\n]{1,200}[>#]\s*$/i,
+      60_000
+    );
+    const needsConfirmation =
+      /(?:continue|sure)[^\r\n]{0,160}(?:y\s*\/\s*n|y\/n)/i.test(
+        confirmationOrCompletion
+      );
+    const finalOutput = needsConfirmation
+      ? await shell.respond("y", 5 * 60_000)
+      : confirmationOrCompletion;
+
+    if (
+      !/(?:sav(?:e|ed|ing)[^\r\n]{0,120}success|success[^\r\n]{0,120}sav)/i.test(
+        finalOutput
+      )
+    ) {
+      throw new OltVerificationError(
+        "command",
+        "The OLT returned to the CLI, but configuration-save success could not be confirmed."
+      );
+    }
+    return { saved: true as const };
+  } catch (error) {
+    if (error instanceof OltVerificationError) throw error;
+    throw new OltVerificationError(
+      "command",
+      "The OLT configuration could not be confirmed as saved."
     );
   } finally {
     shell.close();

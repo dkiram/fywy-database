@@ -37,6 +37,14 @@ HUAWEI_OLT_CONNECTIONS_JSON=
 HUAWEI_OLT_WRITES_ENABLED=false
 HUAWEI_OLT_WRITE_CUSTOMER_IDS=
 
+# Unattended delinquent-customer disconnection. Each affected OLT is saved
+# once, 120 minutes after its completed run; the job survives API restarts.
+HUAWEI_OLT_AUTOMATION_ENABLED=false
+HUAWEI_OLT_AUTOMATION_HOUR=9
+HUAWEI_OLT_AUTOMATION_MINUTE=0
+HUAWEI_OLT_AUTOMATION_MAX_PER_RUN=100
+HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES=120
+
 # Port staff computers on the home-office LAN connect to,
 # e.g. http://192.168.1.8:8090
 # Avoid 8181 and 8443 - TOS itself uses those.

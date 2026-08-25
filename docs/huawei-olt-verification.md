@@ -126,6 +126,7 @@ HUAWEI_OLT_AUTOMATION_ENABLED=false
 HUAWEI_OLT_AUTOMATION_HOUR=9
 HUAWEI_OLT_AUTOMATION_MINUTE=0
 HUAWEI_OLT_AUTOMATION_MAX_PER_RUN=100
+HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES=120
 ```
 
 When enabled, the API runs once per Jamaica calendar day at or after the
@@ -141,6 +142,22 @@ description. Only a confirmed Huawei deactivation is followed by the database
 status/history/fee/audit transaction. Missing mappings, unresolved actions,
 failures, and uncertain results are recorded in `olt_automation_run_items`.
 No staff approval or customer selection is involved.
+
+After a completed run, the API creates one durable configuration-save job for
+each OLT on which at least one ONT was actually changed. The job becomes due
+120 minutes later by default, opens a new user-view SSH session, runs Huawei's
+global `save`, answers its confirmation prompt, and accepts success only when
+the OLT reports that the configuration was saved. It retries at 15-minute
+intervals, at most three times, and records successful saves in Activity
+History. No save job is created when every ONT was already deactivated or when
+the run only skipped/failed customers. Because the due time is relative to the
+run's completion, a run ending around 12:30 AM Jamaica time saves around 2:30
+AM; changing the disconnection start time moves the save with it.
+
+Huawei `save` persists the OLT's complete running configuration, including any
+other unsaved technician changes present at that time. The configured OLT
+service account therefore needs permission to run `save`, and operations must
+keep the two-hour window free of unrelated unreviewed configuration work.
 
 ### Bulk verification before automation
 

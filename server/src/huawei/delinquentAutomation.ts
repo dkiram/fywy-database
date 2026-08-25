@@ -5,11 +5,14 @@ import {
   changeOntActivationState,
   OltControlError,
   OltVerificationError,
+  saveOltConfiguration,
 } from "./verifyOnt.js";
 
 const AUTOMATION_ACTOR = "SPCL Automatic Delinquency Scheduler";
 const AUTOMATION_LOCK_ID = 56802026;
 const MINUTE = 60_000;
+const SAVE_RETRY_MINUTES = 15;
+const MAX_SAVE_ATTEMPTS = 3;
 
 type Candidate = {
   customer_id: number;
@@ -28,6 +31,13 @@ type Candidate = {
 };
 
 type ItemResult = "disconnected" | "skipped" | "failed";
+
+type ConfigurationSaveJob = {
+  olt_automation_save_job_id: number;
+  olt_automation_run_id: number;
+  management_ip: string;
+  attempt_count: number;
+};
 
 type AutomaticRunOptions = {
   /**
@@ -53,6 +63,12 @@ function configuration() {
     hour: boundedInteger(process.env.HUAWEI_OLT_AUTOMATION_HOUR, 9, 0, 23),
     minute: boundedInteger(process.env.HUAWEI_OLT_AUTOMATION_MINUTE, 0, 0, 59),
     maxPerRun: boundedInteger(process.env.HUAWEI_OLT_AUTOMATION_MAX_PER_RUN, 100, 1, 500),
+    saveDelayMinutes: boundedInteger(
+      process.env.HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES,
+      120,
+      1,
+      1440
+    ),
   };
 }
 
@@ -81,6 +97,113 @@ function mappingReady(candidate: Candidate) {
       candidate.ont_serial &&
       candidate.management_ip
   );
+}
+
+async function processDueConfigurationSaves() {
+  const lockClient = await pool.connect();
+  try {
+    const lock = await lockClient.query(
+      `SELECT pg_try_advisory_lock($1) AS acquired;`,
+      [AUTOMATION_LOCK_ID]
+    );
+    if (!lock.rows[0]?.acquired) return;
+
+    const jobs = await lockClient.query<ConfigurationSaveJob>(
+      `SELECT
+         olt_automation_save_job_id,
+         olt_automation_run_id,
+         host(management_ip) AS management_ip,
+         attempt_count
+       FROM public.olt_automation_save_jobs
+       WHERE status = 'pending'
+         AND attempt_count < $1
+         AND next_attempt_at <= CURRENT_TIMESTAMP
+       ORDER BY next_attempt_at, olt_automation_save_job_id
+       LIMIT 20;`,
+      [MAX_SAVE_ATTEMPTS]
+    );
+
+    for (const job of jobs.rows) {
+      const attemptResult = await lockClient.query<{ attempt_count: number }>(
+        `UPDATE public.olt_automation_save_jobs
+         SET attempt_count = attempt_count + 1,
+             last_attempt_at = CURRENT_TIMESTAMP,
+             next_attempt_at = CURRENT_TIMESTAMP + make_interval(mins => $2),
+             error_message = NULL
+         WHERE olt_automation_save_job_id = $1
+           AND status = 'pending'
+         RETURNING attempt_count;`,
+        [job.olt_automation_save_job_id, SAVE_RETRY_MINUTES]
+      );
+      if (attemptResult.rows.length === 0) continue;
+      const attemptCount = Number(attemptResult.rows[0].attempt_count);
+
+      try {
+        await saveOltConfiguration(job.management_ip);
+        await lockClient.query("BEGIN");
+        await lockClient.query(
+          `UPDATE public.olt_automation_save_jobs
+           SET status = 'succeeded',
+               completed_at = CURRENT_TIMESTAMP,
+               error_message = NULL
+           WHERE olt_automation_save_job_id = $1
+             AND status = 'pending';`,
+          [job.olt_automation_save_job_id]
+        );
+        await lockClient.query(
+          `INSERT INTO public.audit_logs (
+             employee_id, actor_name, action, entity_type, entity_id,
+             field_name, old_value, new_value, reason, occurred_at, source_key
+           ) VALUES (
+             NULL, $1, 'Saved OLT configuration', 'olt', $2,
+             'configuration', NULL,
+             json_build_object(
+               'automationRunId', $3::BIGINT,
+               'savedAt', CURRENT_TIMESTAMP
+             )::TEXT,
+             $4, CURRENT_TIMESTAMP, $5
+           )
+           ON CONFLICT (source_key) DO NOTHING;`,
+          [
+            AUTOMATION_ACTOR,
+            job.management_ip,
+            job.olt_automation_run_id,
+            `Persisted confirmed automatic disconnections after the configured ${configuration().saveDelayMinutes}-minute delay`,
+            `olt-automation-save:${job.olt_automation_run_id}:${job.management_ip}`,
+          ]
+        );
+        await lockClient.query("COMMIT");
+        console.log(
+          `Saved OLT ${job.management_ip} configuration for automatic run ${job.olt_automation_run_id}.`
+        );
+      } catch (error) {
+        await lockClient.query("ROLLBACK").catch(() => undefined);
+        const message =
+          error instanceof Error
+            ? error.message.slice(0, 1000)
+            : "Unknown OLT configuration-save failure.";
+        const finalAttempt = attemptCount >= MAX_SAVE_ATTEMPTS;
+        await lockClient.query(
+          `UPDATE public.olt_automation_save_jobs
+           SET status = CASE WHEN $2 THEN 'failed' ELSE 'pending' END,
+               completed_at = CASE WHEN $2 THEN CURRENT_TIMESTAMP ELSE NULL END,
+               error_message = $3
+           WHERE olt_automation_save_job_id = $1;`,
+          [job.olt_automation_save_job_id, finalAttempt, message]
+        );
+        console.error(
+          `Could not save OLT ${job.management_ip} configuration for automatic run ${job.olt_automation_run_id} (attempt ${attemptCount}/${MAX_SAVE_ATTEMPTS}): ${message}`
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Could not process delayed OLT configuration saves:", error);
+  } finally {
+    await lockClient
+      .query(`SELECT pg_advisory_unlock($1);`, [AUTOMATION_LOCK_ID])
+      .catch(() => undefined);
+    lockClient.release();
+  }
 }
 
 async function finishItem(
@@ -515,16 +638,44 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
       else failed += 1;
     }
 
-    await lockClient.query(
-      `UPDATE public.olt_automation_runs
-       SET status = 'completed',
-           disconnected_count = $2,
-           skipped_count = $3,
-           failed_count = $4,
-           completed_at = CURRENT_TIMESTAMP
-       WHERE olt_automation_run_id = $1;`,
-      [runId, disconnected, skipped, failed]
-    );
+    // Complete the run and create its per-OLT save jobs atomically. If the API
+    // restarts during the two-hour wait, the jobs remain due in PostgreSQL.
+    await lockClient.query("BEGIN");
+    try {
+      await lockClient.query(
+        `UPDATE public.olt_automation_runs
+         SET status = 'completed',
+             disconnected_count = $2,
+             skipped_count = $3,
+             failed_count = $4,
+             completed_at = CURRENT_TIMESTAMP
+         WHERE olt_automation_run_id = $1;`,
+        [runId, disconnected, skipped, failed]
+      );
+      await lockClient.query(
+        `INSERT INTO public.olt_automation_save_jobs (
+           olt_automation_run_id, management_ip, next_attempt_at
+         )
+         SELECT DISTINCT
+           run.olt_automation_run_id,
+           attempt.management_ip,
+           run.completed_at + make_interval(mins => $2)
+         FROM public.olt_automation_runs run
+         JOIN public.olt_automation_run_items item
+           ON item.olt_automation_run_id = run.olt_automation_run_id
+         JOIN public.olt_action_attempts attempt
+           ON attempt.olt_action_attempt_id = item.olt_action_attempt_id
+         WHERE run.olt_automation_run_id = $1
+           AND item.outcome = 'disconnected'
+           AND attempt.outcome = 'succeeded'
+         ON CONFLICT (olt_automation_run_id, management_ip) DO NOTHING;`,
+        [runId, configuration().saveDelayMinutes]
+      );
+      await lockClient.query("COMMIT");
+    } catch (error) {
+      await lockClient.query("ROLLBACK");
+      throw error;
+    }
     console.log(
       `Automatic OLT run ${runId} completed: ${disconnected} disconnected, ${skipped} skipped, ${failed} failed.`
     );
@@ -551,11 +702,14 @@ let tickInProgress = false;
 
 async function tick() {
   if (tickInProgress || !isEnabled()) return;
-  const clock = jamaicaClock();
-  const { hour, minute } = configuration();
-  if (clock.hour < hour || (clock.hour === hour && clock.minute < minute)) return;
   tickInProgress = true;
   try {
+    // Delayed saves are checked regardless of today's disconnection time. A
+    // save due after midnight must not wait for the next batch's start time.
+    await processDueConfigurationSaves();
+    const clock = jamaicaClock();
+    const { hour, minute } = configuration();
+    if (clock.hour < hour || (clock.hour === hour && clock.minute < minute)) return;
     await runAutomaticDelinquentDisconnect();
   } finally {
     tickInProgress = false;
@@ -566,7 +720,7 @@ export function startDelinquentAutomation() {
   const config = configuration();
   console.log(
     isEnabled()
-      ? `Automatic delinquent OLT disconnection enabled for ${String(config.hour).padStart(2, "0")}:${String(config.minute).padStart(2, "0")} Jamaica time; maximum ${config.maxPerRun} customers per day.`
+      ? `Automatic delinquent OLT disconnection enabled for ${String(config.hour).padStart(2, "0")}:${String(config.minute).padStart(2, "0")} Jamaica time; maximum ${config.maxPerRun} customers per day; affected OLTs save ${config.saveDelayMinutes} minutes after each run.`
       : "Automatic delinquent OLT disconnection is disabled."
   );
   const startupTimer = setTimeout(() => void tick(), 15_000);

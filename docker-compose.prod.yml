@@ -92,6 +92,9 @@ services:
       HUAWEI_OLT_AUTOMATION_HOUR: ${HUAWEI_OLT_AUTOMATION_HOUR:-9}
       HUAWEI_OLT_AUTOMATION_MINUTE: ${HUAWEI_OLT_AUTOMATION_MINUTE:-0}
       HUAWEI_OLT_AUTOMATION_MAX_PER_RUN: ${HUAWEI_OLT_AUTOMATION_MAX_PER_RUN:-100}
+      # One global Huawei `save` per affected OLT, this many minutes after a
+      # completed run. The durable job survives an API/container restart.
+      HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES: ${HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES:-120}
 
       # auto | true | false. "auto" decides per request, so branch offices
       # arriving over HTTPS through the tunnel get a protected cookie while
