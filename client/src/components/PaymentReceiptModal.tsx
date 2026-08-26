@@ -5,7 +5,7 @@
  * `html.printing-receipt.printing-a4`; this file owns the classes and the
  * @page rules that switch them on.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
@@ -18,8 +18,9 @@ const A4_PAGE_RULE = "@page { size: A4 portrait; margin: 16mm; }";
 
 /* Printed at the foot of every receipt so a customer holding the slip has a
    way to reach the company without looking one up. `display` is what goes on
-   the paper; `href` is what a click does on screen. */
-const CONTACT_NUMBERS = {
+   the paper; `href` is what a click does on screen — which is why the website
+   shows bare but links with its scheme. */
+const CONTACT_DETAILS = {
   whatsapp: [
     { display: "1-876-899-8867", href: "https://wa.me/18768998867" },
     { display: "1-876-880-0093", href: "https://wa.me/18768800093" },
@@ -28,6 +29,7 @@ const CONTACT_NUMBERS = {
     { display: "1-876-941-0043", href: "tel:+18769410043" },
     { display: "1-876-965-7334", href: "tel:+18769657334" },
   ],
+  website: [{ display: "fywycable.com", href: "https://fywycable.com/" }],
 } as const;
 
 /* Width of the roll. Change to 58 if an office ever runs narrow stock; the
@@ -96,22 +98,10 @@ export type PaymentReceipt = {
   location: string | null;
   cashier_name: string | null;
   note: string | null;
-  // Null while an installation fee is still sitting against an application:
-  // the money is collected but the applicant is not a customer yet. Activation
-  // fills this in on the same row.
-  customer_id: number | null;
-  application_id: number | null;
+  customer_id: number;
   customer_name: string | null;
   customer_address: string | null;
   customer_telephone: string | null;
-  customer_email: string | null;
-  receipt_delivery_method: "physical" | "email";
-  receipt_email_delivery_id: number | null;
-  receipt_email: string | null;
-  receipt_email_status: "pending" | "sending" | "sent" | "failed" | null;
-  receipt_email_attempt_count: number | null;
-  receipt_email_error: string | null;
-  receipt_email_sent_at: string | null;
   is_voided: boolean;
   voided_at: string | null;
   void_reason: string | null;
@@ -128,26 +118,12 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
   const [showDeleteForm, setShowDeleteForm] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [emailRecipient, setEmailRecipient] = useState(
-    payment.receipt_email || payment.customer_email || "",
-  );
-  const [emailError, setEmailError] = useState("");
-  // Voiding and permanent deletion are both Admin-only. Head Office lost the
-  // void button in Aug 2026; the server enforces the same rule, so hiding it
-  // here is presentation, not the control.
-  const canVoid = employee?.role === "admin";
+  const canVoid = employee?.role === "admin" || employee?.role === "head_office";
   const canDelete = employee?.role === "admin";
-  const emailFailed = displayPayment.receipt_delivery_method === "email"
-    && displayPayment.receipt_email_status === "failed";
-  const canPrint = displayPayment.receipt_delivery_method === "physical" || emailFailed;
 
   const [printFormat, setPrintFormat] = useState<PrintFormat>(
     () => readStoredFormat() ?? defaultFormatForRole(employee?.role),
   );
-  const receiptRef = useRef<HTMLDivElement>(null);
-  const pageStyleRef = useRef<HTMLStyleElement | null>(null);
-  const printFrameRef = useRef<number | null>(null);
 
   const choosePrintFormat = (format: PrintFormat) => {
     setPrintFormat(format);
@@ -158,89 +134,55 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
     }
   };
 
-  const exitPrintMode = useCallback(() => {
-    document.documentElement.classList.remove(
-      "printing-receipt",
-      "printing-thermal",
-      "printing-a4",
-    );
-    receiptRef.current?.classList.remove("receipt-slip-layout");
-    pageStyleRef.current?.remove();
-    pageStyleRef.current = null;
-  }, []);
-
-  const enterPrintMode = useCallback(() => {
-    if (!canPrint) return;
-    const receipt = receiptRef.current;
-    const thermal = printFormat === "thermal" && receipt !== null;
-
-    // Measure before anything else: buildSlipPageRule needs the receipt in
-    // its on-screen box, not the unwrapped print one.
-    const rule = thermal ? buildSlipPageRule(receipt) : A4_PAGE_RULE;
-
-    document.documentElement.classList.add(
-      "printing-receipt",
-      thermal ? "printing-thermal" : "printing-a4",
-    );
-    if (thermal) receipt.classList.add("receipt-slip-layout");
-
-    if (!pageStyleRef.current) {
-      pageStyleRef.current = document.createElement("style");
-      pageStyleRef.current.dataset.receiptPage = "true";
-      document.head.appendChild(pageStyleRef.current);
-    }
-    pageStyleRef.current.textContent = rule;
-  }, [canPrint, printFormat]);
-
-  const printReceipt = () => {
-    // Give Chrome one paint after installing the measured @page rule. Calling
-    // window.print() in the same task can make some printer drivers paginate
-    // using their saved long-paper size first, leaving large blank margins and
-    // enough room for Chrome's URL/page-number footer.
-    enterPrintMode();
-    printFrameRef.current = window.requestAnimationFrame(() => {
-      printFrameRef.current = null;
-      window.print();
-    });
-  };
-
-  // beforeprint remains as a fallback for Ctrl+P while the receipt is open.
-  // The Print Slip button prepares the rule one frame earlier, which is the
-  // reliable path for thermal printers.
+  // Driven off beforeprint rather than the button's click handler so that
+  // Ctrl+P with the receipt open produces the same output as the button, and
+  // so the @page size is never left applied to the rest of the app.
   useEffect(() => {
+    let pageStyle: HTMLStyleElement | null = null;
+
+    const enterPrintMode = () => {
+      const receipt = document.querySelector<HTMLElement>(".payment-receipt-print");
+      const thermal = printFormat === "thermal" && receipt !== null;
+
+      // Measure before anything else: buildSlipPageRule needs the receipt in
+      // its on-screen box, not the unwrapped print one.
+      const rule = thermal ? buildSlipPageRule(receipt) : A4_PAGE_RULE;
+
+      document.documentElement.classList.add(
+        "printing-receipt",
+        thermal ? "printing-thermal" : "printing-a4",
+      );
+      if (thermal) receipt.classList.add("receipt-slip-layout");
+
+      if (pageStyle) return;
+      pageStyle = document.createElement("style");
+      pageStyle.textContent = rule;
+      document.head.appendChild(pageStyle);
+    };
+
+    const exitPrintMode = () => {
+      document.documentElement.classList.remove(
+        "printing-receipt",
+        "printing-thermal",
+        "printing-a4",
+      );
+      document
+        .querySelector(".payment-receipt-print")
+        ?.classList.remove("receipt-slip-layout");
+      pageStyle?.remove();
+      pageStyle = null;
+    };
+
     window.addEventListener("beforeprint", enterPrintMode);
     window.addEventListener("afterprint", exitPrintMode);
     return () => {
       window.removeEventListener("beforeprint", enterPrintMode);
       window.removeEventListener("afterprint", exitPrintMode);
-      if (printFrameRef.current !== null) {
-        window.cancelAnimationFrame(printFrameRef.current);
-        printFrameRef.current = null;
-      }
       exitPrintMode();
     };
-  }, [enterPrintMode, exitPrintMode]);
-
-  const emailReceipt = async () => {
-    try {
-      setSaving(true);
-      setEmailError("");
-      const response = await apiFetch(`/api/payments/${displayPayment.payment_id}/email-receipt`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailRecipient }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not email receipt.");
-      setDisplayPayment(data.payment);
-      setEmailRecipient(data.payment.receipt_email || emailRecipient);
-      setShowEmailForm(data.payment.receipt_email_status === "failed");
-    } catch (sendError) {
-      setEmailError(sendError instanceof Error ? sendError.message : "Could not email receipt.");
-    } finally {
-      setSaving(false);
-    }
-  };
+    // Re-bound when the format changes so beforeprint always reads the
+    // current choice rather than the one captured at mount.
+  }, [printFormat]);
 
   // Voiding preserves the receipt and posts a separate balance reversal.
   const voidPayment = async () => {
@@ -295,20 +237,10 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
         {/* Keep long receipts and destructive confirmations inside a dedicated
             scroll region while the main action bar remains reachable. */}
         <div className="receipt-modal-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <ReceiptDeliveryStatus
-          payment={displayPayment}
-          emailRecipient={emailRecipient}
-          setEmailRecipient={setEmailRecipient}
-          showEmailForm={showEmailForm}
-          setShowEmailForm={setShowEmailForm}
-          emailError={emailError}
-          saving={saving}
-          onSend={emailReceipt}
-        />
         {/* Print CSS drops the rest of the app and reflows this section into a
             single 72mm column. The hook classes below are print-only; they
             carry no screen styling. */}
-        <div ref={receiptRef} className="payment-receipt-print bg-white p-5 text-on-surface sm:p-9">
+        <div className="payment-receipt-print bg-white p-5 text-on-surface sm:p-9">
           <div className="receipt-header flex items-start justify-between gap-6 border-b-2 border-primary pb-5">
             <div>
               <p className="receipt-brand text-xs font-semibold uppercase tracking-[0.2em] text-primary">SPCL/FYWY</p>
@@ -336,13 +268,7 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
 
           <div className="receipt-fields mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <ReceiptField label="Received from" value={displayPayment.customer_name || "Unnamed customer"} />
-            {/* An applicant has no customer number to print yet, so the slip
-                carries the application number they can quote instead. */}
-            {displayPayment.customer_id !== null ? (
-              <ReceiptField label="Customer ID" value={String(displayPayment.customer_id)} />
-            ) : (
-              <ReceiptField label="Application" value={displayPayment.application_id !== null ? `#${displayPayment.application_id}` : "—"} />
-            )}
+            <ReceiptField label="Customer ID" value={String(displayPayment.customer_id)} />
             <ReceiptField label="Payment type" value={displayPayment.payment_type} />
             <ReceiptField label="Month paid for" value={formatMonth(displayPayment.month_paid)} />
             <ReceiptField label="Cashier" value={firstName(displayPayment.cashier_name)} />
@@ -354,14 +280,9 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
             <p className="receipt-amount-value mt-2 text-4xl font-medium text-primary">{formatCurrency(displayPayment.amount_paid)}</p>
           </div>
 
-          {/* Staff-only. `no-print` drops it from both the A4 file copy and the
-              80mm slip, and index.css removes it from the slip layout as well
-              so the measured page height does not reserve paper for it. The
-              customer's receipt must not carry an internal remark like "paid
-              Monday, receipt handed in today". */}
           {displayPayment.note && (
-            <div className="receipt-note no-print mt-6 rounded-lg border border-dashed border-outline-variant bg-surface-container-low p-4">
-              <ReceiptField label="Internal note — not printed" value={displayPayment.note} />
+            <div className="receipt-note mt-6 border-t border-surface-container pt-4">
+              <ReceiptField label="Note" value={displayPayment.note} />
             </div>
           )}
 
@@ -374,8 +295,9 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
               block reads as its own section on the slip rather than a second
               line of recording metadata. */}
           <div className="receipt-contact mt-5 border-t border-surface-container pt-4 text-center text-xs text-on-surface-variant">
-            <ContactLine label="WhatsApp" numbers={CONTACT_NUMBERS.whatsapp} />
-            <ContactLine label="Telephone" numbers={CONTACT_NUMBERS.telephone} />
+            <ContactLine label="WhatsApp" entries={CONTACT_DETAILS.whatsapp} />
+            <ContactLine label="Telephone" entries={CONTACT_DETAILS.telephone} />
+            <ContactLine label="Website" entries={CONTACT_DETAILS.website} />
             <p className="receipt-thanks print-only mt-3 hidden">Thank you</p>
           </div>
         </div>
@@ -402,12 +324,7 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
         )}
         </div>
 
-        {canPrint && printFormat === "thermal" && (
-          <p className="no-print border-t border-surface-container bg-surface-container-low px-4 pt-3 text-xs text-on-surface-variant sm:px-6">
-            Slip print window: select <strong>80 mm paper</strong>, set <strong>Margins to None</strong>, and turn <strong>Headers and footers off</strong>. Chrome remembers these settings for this printer.
-          </p>
-        )}
-        <div className="no-print flex shrink-0 flex-wrap justify-end gap-3 bg-surface-container-low px-4 py-3 sm:px-6 sm:py-4">
+        <div className="no-print flex shrink-0 flex-wrap justify-end gap-3 border-t border-surface-container bg-surface-container-low px-4 py-3 sm:px-6 sm:py-4">
           {canVoid && !displayPayment.is_voided && !showVoidForm && (
             <button type="button" onClick={() => setShowVoidForm(true)} className="mr-auto rounded-lg bg-error/10 px-5 py-2.5 text-sm font-medium text-error">Void Payment</button>
           )}
@@ -416,110 +333,20 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
           )}
           {/* Counters print the 80mm slip, head office prints a full sheet.
               Defaults by role, then remembers whatever this machine last used. */}
-          {canPrint && (
-            <div className="flex items-center gap-0.5 rounded-lg bg-surface-container p-0.5" role="group" aria-label="Print format">
-              <PrintFormatOption label="Slip" description="Print as an 80mm thermal slip" active={printFormat === "thermal"} onSelect={() => choosePrintFormat("thermal")} />
-              <PrintFormatOption label="A4" description="Print on A4 paper" active={printFormat === "a4"} onSelect={() => choosePrintFormat("a4")} />
-            </div>
-          )}
+          <div className="flex items-center gap-0.5 rounded-lg bg-surface-container p-0.5" role="group" aria-label="Print format">
+            <PrintFormatOption label="Slip" description="Print as an 80mm thermal slip" active={printFormat === "thermal"} onSelect={() => choosePrintFormat("thermal")} />
+            <PrintFormatOption label="A4" description="Print on A4 paper" active={printFormat === "a4"} onSelect={() => choosePrintFormat("a4")} />
+          </div>
           <button type="button" onClick={onClose} className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant sm:px-5">Close</button>
-          {canPrint && (
-            <button type="button" onClick={printReceipt} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary sm:px-5">
-              <span className="material-symbols-outlined text-lg">print</span>
-              {emailFailed ? "Print After Email Failure" : printFormat === "thermal" ? "Print Slip" : "Print A4"}
-            </button>
-          )}
+          <button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary sm:px-5">
+            <span className="material-symbols-outlined text-lg">print</span>
+            {printFormat === "thermal" ? "Print Slip" : "Print A4"}
+          </button>
         </div>
       </div>
     </div>,
     document.body,
   );
-}
-
-function ReceiptDeliveryStatus({ payment, emailRecipient, setEmailRecipient, showEmailForm, setShowEmailForm, emailError, saving, onSend }: {
-  payment: PaymentReceipt;
-  emailRecipient: string;
-  setEmailRecipient: (value: string) => void;
-  showEmailForm: boolean;
-  setShowEmailForm: (value: boolean) => void;
-  emailError: string;
-  saving: boolean;
-  onSend: () => void;
-}) {
-  const status = payment.receipt_email_status;
-  const sent = payment.receipt_delivery_method === "email" && status === "sent";
-  const failed = payment.receipt_delivery_method === "email" && status === "failed";
-  const inProgress = payment.receipt_delivery_method === "email" && (status === "pending" || status === "sending");
-
-  return (
-    <div className="no-print border-b border-surface-container px-4 py-4 sm:px-6">
-      {sent && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-primary/10 p-4 text-sm text-primary">
-          <span className="material-symbols-outlined">mark_email_read</span>
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold">Receipt emailed successfully</p>
-            <p className="mt-0.5 break-all text-xs">{maskEmail(payment.receipt_email)}</p>
-          </div>
-          {!payment.is_voided && <button type="button" onClick={() => setShowEmailForm(!showEmailForm)} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-primary">Send Again</button>}
-        </div>
-      )}
-
-      {inProgress && (
-        <div className="flex items-center gap-3 rounded-xl bg-primary/10 p-4 text-sm text-primary">
-          <span className="material-symbols-outlined animate-pulse">outgoing_mail</span>
-          <p className="font-semibold">Sending receipt email…</p>
-        </div>
-      )}
-
-      {failed && (
-        <div className="rounded-xl border border-error/25 bg-error/5 p-4 text-sm">
-          <div className="flex gap-3 text-error">
-            <span className="material-symbols-outlined">mark_email_unread</span>
-            <div>
-              <p className="font-semibold">Email failed — the payment is still recorded</p>
-              <p className="mt-1 text-xs">{payment.receipt_email_error || "Check the address and retry. Print only if the customer is still present and email cannot be sent."}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {payment.receipt_delivery_method === "physical" && !payment.is_voided && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-          <span className="material-symbols-outlined">receipt_long</span>
-          <p className="min-w-0 flex-1 font-semibold">Physical receipt selected</p>
-          <button type="button" onClick={() => setShowEmailForm(!showEmailForm)} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-primary">Email Instead</button>
-        </div>
-      )}
-
-      {(showEmailForm || failed) && !payment.is_voided && (
-        <div className="mt-3 rounded-xl bg-surface-container-low p-4">
-          <label className="block text-sm font-semibold text-on-surface">Receipt email address
-            <input
-              type="email"
-              maxLength={254}
-              value={emailRecipient}
-              onChange={(event) => setEmailRecipient(event.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm focus:border-primary"
-              placeholder="customer@example.com"
-            />
-          </label>
-          <p className="mt-2 text-xs text-on-surface-variant">Changing this address applies only to this send and does not update the customer profile.</p>
-          {emailError && <p className="mt-3 rounded-lg bg-error/10 p-3 text-sm text-error">{emailError}</p>}
-          <div className="mt-3 flex justify-end gap-3">
-            {!failed && <button type="button" disabled={saving} onClick={() => setShowEmailForm(false)} className="rounded-lg bg-white px-4 py-2 text-sm font-medium">Cancel</button>}
-            <button type="button" disabled={saving || !emailRecipient.trim()} onClick={onSend} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary disabled:opacity-50">{saving ? "Sending…" : failed ? "Retry Email" : "Send Email"}</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function maskEmail(value: string | null) {
-  if (!value) return "Email address unavailable";
-  const [local, domain] = value.split("@");
-  if (!domain) return value;
-  return `${local.slice(0, 1)}${"*".repeat(Math.min(Math.max(local.length - 1, 2), 6))}@${domain}`;
 }
 
 function PrintFormatOption({ label, description, active, onSelect }: { label: string; description: string; active: boolean; onSelect: () => void }) {
@@ -538,16 +365,23 @@ function PrintFormatOption({ label, description, active, onSelect }: { label: st
 }
 
 /* Anchors rather than plain text: on screen a counter can tap through to
-   WhatsApp or dial, and print simply drops the affordance and leaves the
-   number readable. */
-function ContactLine({ label, numbers }: { label: string; numbers: readonly { display: string; href: string }[] }) {
+   WhatsApp, dial, or open the site, and print simply drops the affordance and
+   leaves the number readable. */
+function ContactLine({ label, entries }: { label: string; entries: readonly { display: string; href: string }[] }) {
   return (
     <p className="receipt-contact-line">
       <span className="receipt-contact-label font-semibold">{label}</span>{" "}
-      {numbers.map((number, index) => (
-        <span key={number.href}>
+      {entries.map((entry, index) => (
+        <span key={entry.href}>
           {index > 0 && <span className="receipt-contact-separator"> or </span>}
-          <a href={number.href} className="receipt-contact-number whitespace-nowrap hover:underline">{number.display}</a>
+          <a
+            href={entry.href}
+            target={entry.href.startsWith("http") ? "_blank" : undefined}
+            rel={entry.href.startsWith("http") ? "noreferrer" : undefined}
+            className="receipt-contact-value whitespace-nowrap hover:underline"
+          >
+            {entry.display}
+          </a>
         </span>
       ))}
     </p>

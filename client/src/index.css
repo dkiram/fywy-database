@@ -155,9 +155,9 @@ textarea {
    Branches hand the customer a slip off a thermal POS printer; head office
    doesn't serve customers directly and files a full sheet. PaymentReceiptModal
    puts `printing-receipt` on <html> plus either `printing-thermal` or
-   `printing-a4`, and injects the matching @page rule immediately before the
-   print dialog opens (with beforeprint as the Ctrl+P fallback). Report printing
-   at the bottom of this file stands down whenever `printing-receipt` is present.
+   `printing-a4`, and injects the matching @page rule, on beforeprint. Report
+   printing (bottom of this file) stands down whenever `printing-receipt` is
+   present.
 
    WHY THE SLIP LAYOUT IS NOT INSIDE @media print
    ----------------------------------------------
@@ -188,7 +188,7 @@ textarea {
 .receipt-slip-layout {
   width: 72mm; /* the printable width of 80mm stock on every common head */
   margin: 0 auto !important;
-  padding: 2mm 0 5mm !important; /* enough feed to clear the cutter without wasting roll */
+  padding: 3mm 0 14mm !important; /* trailing feed clears the cutter */
   background: #fff !important;
   color: #000 !important;
   font-family: "SF Mono", "DejaVu Sans Mono", Menlo, Consolas, "Courier New", monospace;
@@ -227,7 +227,7 @@ textarea {
 
 .receipt-slip-layout .receipt-brand {
   margin: 0 !important;
-  font-size: 15pt !important;
+  font-size: 17pt !important;
   font-weight: 700 !important;
   letter-spacing: 0.18em !important;
 }
@@ -262,8 +262,8 @@ textarea {
    The on-screen two-column grid is far too wide for 72mm. */
 .receipt-slip-layout .receipt-fields {
   display: block !important;
-  margin: 1.5mm 0 0 !important;
-  padding: 1mm 0 !important;
+  margin: 2mm 0 0 !important;
+  padding: 1.5mm 0 !important;
   border-top: 1px dashed #000 !important;
   border-bottom: 1px dashed #000 !important;
 }
@@ -273,7 +273,7 @@ textarea {
   justify-content: space-between;
   align-items: baseline;
   gap: 3mm;
-  padding: 0.35mm 0;
+  padding: 0.5mm 0;
 }
 
 .receipt-slip-layout .receipt-field-label {
@@ -296,8 +296,8 @@ textarea {
 /* Heavy rules rather than a tinted panel — a bar of black ink survives a
    monochrome head, a background colour does not. */
 .receipt-slip-layout .receipt-amount {
-  margin: 2mm 0 0 !important;
-  padding: 1.5mm 0 !important;
+  margin: 3mm 0 0 !important;
+  padding: 2mm 0 !important;
   border-top: 1.2mm solid #000 !important;
   border-bottom: 1.2mm solid #000 !important;
   text-align: center !important;
@@ -350,18 +350,16 @@ textarea {
   text-decoration: line-through !important;
 }
 
-/* The payment note is an internal remark, not something the customer should
-   read on their slip. Removed rather than hidden, and removed here rather than
-   only under @media print, because buildSlipPageRule measures the receipt with
-   this class applied - left in, its height would be baked into the @page rule
-   and the printer would feed blank paper for a note that never appears. */
 .receipt-slip-layout .receipt-note {
-  display: none !important;
+  margin: 2.5mm 0 0 !important;
+  padding: 1.5mm 0 0 !important;
+  border: 0 !important;
+  border-top: 1px dashed #000 !important;
 }
 
 .receipt-slip-layout .receipt-footer {
-  margin: 1.5mm 0 0 !important;
-  padding: 1mm 0 0 !important;
+  margin: 2.5mm 0 0 !important;
+  padding: 1.5mm 0 0 !important;
   border: 0 !important;
   border-top: 1px dashed #000 !important;
   text-align: center !important;
@@ -373,8 +371,8 @@ textarea {
 }
 
 .receipt-slip-layout .receipt-contact {
-  margin: 1.5mm 0 0 !important;
-  padding: 1mm 0 0 !important;
+  margin: 2.5mm 0 0 !important;
+  padding: 1.5mm 0 0 !important;
   border: 0 !important;
   border-top: 1px dashed #000 !important;
   text-align: center !important;
@@ -391,16 +389,16 @@ textarea {
 }
 
 .receipt-slip-layout .receipt-contact-line {
-  margin: 0.5mm 0 0 !important;
+  margin: 1mm 0 0 !important;
 }
 
 /* The underline is an on-screen affordance and only costs ink on paper. */
-.receipt-slip-layout .receipt-contact-number {
+.receipt-slip-layout .receipt-contact-value {
   text-decoration: none !important;
 }
 
 .receipt-slip-layout .receipt-thanks {
-  margin-top: 1mm !important;
+  margin-top: 2mm !important;
   font-size: 9pt !important;
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
@@ -517,7 +515,7 @@ textarea {
   }
 
   /* Nothing to click on a sheet of paper — the number is the content. */
-  html.printing-a4 .receipt-contact-number {
+  html.printing-a4 .receipt-contact-value {
     text-decoration: none !important;
   }
 }
