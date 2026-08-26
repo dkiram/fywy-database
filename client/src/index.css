@@ -188,7 +188,11 @@ textarea {
 .receipt-slip-layout {
   width: 72mm; /* the printable width of 80mm stock on every common head */
   margin: 0 auto !important;
-  padding: 3mm 0 14mm !important; /* trailing feed clears the cutter */
+  /* Trailing feed, so the last line clears the cutter or tear bar rather than
+     being torn through. This is the single knob for how much blank paper
+     follows "Thank you" — if slips still come out long, lower it; if the last
+     line ever gets torn in half, raise it. */
+  padding: 3mm 0 8mm !important;
   background: #fff !important;
   color: #000 !important;
   font-family: "SF Mono", "DejaVu Sans Mono", Menlo, Consolas, "Courier New", monospace;
