@@ -188,11 +188,14 @@ textarea {
 .receipt-slip-layout {
   width: 72mm; /* the printable width of 80mm stock on every common head */
   margin: 0 auto !important;
-  /* Trailing feed, so the last line clears the cutter or tear bar rather than
-     being torn through. This is the single knob for how much blank paper
-     follows "Thank you" — if slips still come out long, lower it; if the last
+  /* Top: kept near zero deliberately. Whatever blank paper appears above
+     SPCL/FYWY comes from the printer's head-to-cutter gap and the driver's own
+     top margin, not from here — so there is nothing to reclaim by growing it.
+     Bottom: trailing feed, so the last line clears the cutter or tear bar
+     rather than being torn through. That is the one knob for how much blank
+     paper follows "Thank you" — if slips come out long, lower it; if the last
      line ever gets torn in half, raise it. */
-  padding: 3mm 0 8mm !important;
+  padding: 1mm 0 8mm !important;
   background: #fff !important;
   color: #000 !important;
   font-family: "SF Mono", "DejaVu Sans Mono", Menlo, Consolas, "Courier New", monospace;
