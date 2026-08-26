@@ -5,7 +5,7 @@
  * `html.printing-receipt.printing-a4`; this file owns the classes and the
  * @page rules that switch them on.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
@@ -145,6 +145,9 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
   const [printFormat, setPrintFormat] = useState<PrintFormat>(
     () => readStoredFormat() ?? defaultFormatForRole(employee?.role),
   );
+  const receiptRef = useRef<HTMLDivElement>(null);
+  const pageStyleRef = useRef<HTMLStyleElement | null>(null);
+  const printFrameRef = useRef<number | null>(null);
 
   const choosePrintFormat = (format: PrintFormat) => {
     setPrintFormat(format);
@@ -155,56 +158,68 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
     }
   };
 
-  // Driven off beforeprint rather than the button's click handler so that
-  // Ctrl+P with the receipt open produces the same output as the button, and
-  // so the @page size is never left applied to the rest of the app.
+  const exitPrintMode = useCallback(() => {
+    document.documentElement.classList.remove(
+      "printing-receipt",
+      "printing-thermal",
+      "printing-a4",
+    );
+    receiptRef.current?.classList.remove("receipt-slip-layout");
+    pageStyleRef.current?.remove();
+    pageStyleRef.current = null;
+  }, []);
+
+  const enterPrintMode = useCallback(() => {
+    if (!canPrint) return;
+    const receipt = receiptRef.current;
+    const thermal = printFormat === "thermal" && receipt !== null;
+
+    // Measure before anything else: buildSlipPageRule needs the receipt in
+    // its on-screen box, not the unwrapped print one.
+    const rule = thermal ? buildSlipPageRule(receipt) : A4_PAGE_RULE;
+
+    document.documentElement.classList.add(
+      "printing-receipt",
+      thermal ? "printing-thermal" : "printing-a4",
+    );
+    if (thermal) receipt.classList.add("receipt-slip-layout");
+
+    if (!pageStyleRef.current) {
+      pageStyleRef.current = document.createElement("style");
+      pageStyleRef.current.dataset.receiptPage = "true";
+      document.head.appendChild(pageStyleRef.current);
+    }
+    pageStyleRef.current.textContent = rule;
+  }, [canPrint, printFormat]);
+
+  const printReceipt = () => {
+    // Give Chrome one paint after installing the measured @page rule. Calling
+    // window.print() in the same task can make some printer drivers paginate
+    // using their saved long-paper size first, leaving large blank margins and
+    // enough room for Chrome's URL/page-number footer.
+    enterPrintMode();
+    printFrameRef.current = window.requestAnimationFrame(() => {
+      printFrameRef.current = null;
+      window.print();
+    });
+  };
+
+  // beforeprint remains as a fallback for Ctrl+P while the receipt is open.
+  // The Print Slip button prepares the rule one frame earlier, which is the
+  // reliable path for thermal printers.
   useEffect(() => {
-    let pageStyle: HTMLStyleElement | null = null;
-
-    const enterPrintMode = () => {
-      if (!canPrint) return;
-      const receipt = document.querySelector<HTMLElement>(".payment-receipt-print");
-      const thermal = printFormat === "thermal" && receipt !== null;
-
-      // Measure before anything else: buildSlipPageRule needs the receipt in
-      // its on-screen box, not the unwrapped print one.
-      const rule = thermal ? buildSlipPageRule(receipt) : A4_PAGE_RULE;
-
-      document.documentElement.classList.add(
-        "printing-receipt",
-        thermal ? "printing-thermal" : "printing-a4",
-      );
-      if (thermal) receipt.classList.add("receipt-slip-layout");
-
-      if (pageStyle) return;
-      pageStyle = document.createElement("style");
-      pageStyle.textContent = rule;
-      document.head.appendChild(pageStyle);
-    };
-
-    const exitPrintMode = () => {
-      document.documentElement.classList.remove(
-        "printing-receipt",
-        "printing-thermal",
-        "printing-a4",
-      );
-      document
-        .querySelector(".payment-receipt-print")
-        ?.classList.remove("receipt-slip-layout");
-      pageStyle?.remove();
-      pageStyle = null;
-    };
-
     window.addEventListener("beforeprint", enterPrintMode);
     window.addEventListener("afterprint", exitPrintMode);
     return () => {
       window.removeEventListener("beforeprint", enterPrintMode);
       window.removeEventListener("afterprint", exitPrintMode);
+      if (printFrameRef.current !== null) {
+        window.cancelAnimationFrame(printFrameRef.current);
+        printFrameRef.current = null;
+      }
       exitPrintMode();
     };
-    // Re-bound when the format changes so beforeprint always reads the
-    // current choice rather than the one captured at mount.
-  }, [canPrint, printFormat]);
+  }, [enterPrintMode, exitPrintMode]);
 
   const emailReceipt = async () => {
     try {
@@ -293,7 +308,7 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
         {/* Print CSS drops the rest of the app and reflows this section into a
             single 72mm column. The hook classes below are print-only; they
             carry no screen styling. */}
-        <div className="payment-receipt-print bg-white p-5 text-on-surface sm:p-9">
+        <div ref={receiptRef} className="payment-receipt-print bg-white p-5 text-on-surface sm:p-9">
           <div className="receipt-header flex items-start justify-between gap-6 border-b-2 border-primary pb-5">
             <div>
               <p className="receipt-brand text-xs font-semibold uppercase tracking-[0.2em] text-primary">SPCL/FYWY</p>
@@ -387,7 +402,12 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
         )}
         </div>
 
-        <div className="no-print flex shrink-0 flex-wrap justify-end gap-3 border-t border-surface-container bg-surface-container-low px-4 py-3 sm:px-6 sm:py-4">
+        {canPrint && printFormat === "thermal" && (
+          <p className="no-print border-t border-surface-container bg-surface-container-low px-4 pt-3 text-xs text-on-surface-variant sm:px-6">
+            Slip print window: select <strong>80 mm paper</strong>, set <strong>Margins to None</strong>, and turn <strong>Headers and footers off</strong>. Chrome remembers these settings for this printer.
+          </p>
+        )}
+        <div className="no-print flex shrink-0 flex-wrap justify-end gap-3 bg-surface-container-low px-4 py-3 sm:px-6 sm:py-4">
           {canVoid && !displayPayment.is_voided && !showVoidForm && (
             <button type="button" onClick={() => setShowVoidForm(true)} className="mr-auto rounded-lg bg-error/10 px-5 py-2.5 text-sm font-medium text-error">Void Payment</button>
           )}
@@ -404,7 +424,7 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
           )}
           <button type="button" onClick={onClose} className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant sm:px-5">Close</button>
           {canPrint && (
-            <button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary sm:px-5">
+            <button type="button" onClick={printReceipt} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary sm:px-5">
               <span className="material-symbols-outlined text-lg">print</span>
               {emailFailed ? "Print After Email Failure" : printFormat === "thermal" ? "Print Slip" : "Print A4"}
             </button>
