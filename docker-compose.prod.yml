@@ -77,6 +77,15 @@ services:
       GMAIL_SENDER_ADDRESS: ${GMAIL_SENDER_ADDRESS:-receipts@fywycable.com}
       GMAIL_SENDER_NAME: ${GMAIL_SENDER_NAME:-SPCL/FYWY Cable - Do Not Reply}
 
+      # Daily five-day disconnection warnings. Delivery is intentionally paced
+      # so counter receipts continue to use Gmail immediately.
+      EMAIL_REMINDERS_ENABLED: ${EMAIL_REMINDERS_ENABLED:-false}
+      EMAIL_REMINDERS_HOUR: ${EMAIL_REMINDERS_HOUR:-8}
+      EMAIL_REMINDERS_MINUTE: ${EMAIL_REMINDERS_MINUTE:-0}
+      EMAIL_REMINDERS_BATCH_SIZE: ${EMAIL_REMINDERS_BATCH_SIZE:-20}
+      EMAIL_REMINDERS_DAILY_LIMIT: ${EMAIL_REMINDERS_DAILY_LIMIT:-1500}
+      EMAIL_REMINDERS_MAX_ATTEMPTS: ${EMAIL_REMINDERS_MAX_ATTEMPTS:-3}
+
       # Private per-OLT SSH credentials and pinned host fingerprints used only
       # by the backend's OLT actions. Writes remain off unless BOTH the global
       # switch and a comma-separated test-customer allowlist are configured.

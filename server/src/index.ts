@@ -23,6 +23,7 @@ import dashboardRouter from "./routes/dashboard.js";
 import networkAccessRouter from "./routes/networkAccess.js";
 import { startDelinquentAutomation } from "./huawei/delinquentAutomation.js";
 import { startReconnectionAutomation } from "./huawei/reconnectionAutomation.js";
+import { startDisconnectionEmailReminders } from "./email/disconnectionReminderAutomation.js";
 
 import type {
   Request,
@@ -2562,6 +2563,7 @@ const server = app.listen(PORT, HOST, () => {
 // This lets the API report the configured state consistently after restarts.
 const stopDelinquentAutomation = startDelinquentAutomation();
 const stopReconnectionAutomation = startReconnectionAutomation();
+const stopDisconnectionEmailReminders = startDisconnectionEmailReminders();
 
 /**
  * Containers are stopped with SIGTERM. Closing the HTTP server and the database
@@ -2571,6 +2573,7 @@ function shutdown(signal: string) {
   console.log(`${signal} received, shutting down.`);
   stopDelinquentAutomation();
   stopReconnectionAutomation();
+  stopDisconnectionEmailReminders();
 
   server.close(() => {
     pool.end().then(

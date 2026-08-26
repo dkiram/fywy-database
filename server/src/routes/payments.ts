@@ -221,7 +221,7 @@ async function deliverQueuedReceiptEmail(
 
 function receiptDeliveryError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message === "Receipt email is not configured on this server.") return message;
+  if (message === "Email delivery is not configured on this server.") return message;
   if (/invalid_grant|unauthorized|authentication|credentials/i.test(message)) {
     return "Receipt email authorization needs attention. Retry after an administrator reconnects Gmail.";
   }

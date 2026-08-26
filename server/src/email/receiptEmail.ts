@@ -1,5 +1,7 @@
 /** Sends one official payment receipt through the configured Google mailbox. */
-import { google } from "googleapis";
+import { isEmail, sendAutomatedEmail } from "./gmailClient.js";
+
+export { isEmail } from "./gmailClient.js";
 
 /**
  * One receipt as it comes back from the database.
@@ -26,38 +28,6 @@ export type EmailedReceipt = {
   customer_name: string | null;
 };
 
-type GmailConfig = {
-  clientId: string;
-  clientSecret: string;
-  refreshToken: string;
-  senderAddress: string;
-  senderName: string;
-};
-
-function requireGmailConfig(): GmailConfig {
-  const config = {
-    clientId: process.env.GMAIL_CLIENT_ID?.trim() ?? "",
-    clientSecret: process.env.GMAIL_CLIENT_SECRET?.trim() ?? "",
-    refreshToken: process.env.GMAIL_REFRESH_TOKEN?.trim() ?? "",
-    senderAddress: process.env.GMAIL_SENDER_ADDRESS?.trim() ?? "receipts@fywycable.com",
-    senderName: process.env.GMAIL_SENDER_NAME?.trim() ?? "SPCL/FYWY Cable - Do Not Reply",
-  };
-
-  if (!config.clientId || !config.clientSecret || !config.refreshToken) {
-    throw new Error("Receipt email is not configured on this server.");
-  }
-
-  if (!isEmail(config.senderAddress)) {
-    throw new Error("The configured receipt sender address is invalid.");
-  }
-
-  return config;
-}
-
-export function isEmail(value: string) {
-  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
 export async function sendReceiptEmail(
   recipientEmail: string,
   receipt: EmailedReceipt,
@@ -66,77 +36,13 @@ export async function sendReceiptEmail(
     throw new Error("Enter a valid receipt email address.");
   }
 
-  const config = requireGmailConfig();
-  const auth = new google.auth.OAuth2(config.clientId, config.clientSecret);
-  auth.setCredentials({ refresh_token: config.refreshToken });
-
-  const gmail = google.gmail({ version: "v1", auth });
-  const raw = buildMimeMessage(config, recipientEmail, receipt);
-  const result = await gmail.users.messages.send({
-    userId: "me",
-    requestBody: { raw },
+  return sendAutomatedEmail({
+    recipientEmail,
+    subject: `SPCL payment receipt ${receipt.receipt_number}`,
+    messageIdKey: `receipt-${receipt.payment_id}`,
+    plainText: buildPlainText(receipt),
+    html: buildHtml(receipt),
   });
-
-  if (!result.data.id) {
-    throw new Error("Gmail accepted the request without returning a message ID.");
-  }
-
-  return { providerMessageId: result.data.id };
-}
-
-function buildMimeMessage(
-  config: Pick<GmailConfig, "senderAddress" | "senderName">,
-  recipientEmail: string,
-  receipt: EmailedReceipt,
-) {
-  const boundary = `spcl_receipt_${receipt.payment_id}_${Date.now()}`;
-  const subject = `SPCL payment receipt ${receipt.receipt_number}`;
-  const plainText = buildPlainText(receipt);
-  const html = buildHtml(receipt);
-
-  const message = [
-    `From: ${config.senderName} <${config.senderAddress}>`,
-    `To: ${recipientEmail}`,
-    `Subject: ${subject}`,
-    `Message-ID: <receipt-${receipt.payment_id}@fywycable.com>`,
-    "MIME-Version: 1.0",
-    "Auto-Submitted: auto-generated",
-    "X-Auto-Response-Suppress: All",
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    "",
-    `--${boundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: base64",
-    "",
-    encodeBase64Body(plainText),
-    `--${boundary}`,
-    'Content-Type: text/html; charset="UTF-8"',
-    "Content-Transfer-Encoding: base64",
-    "",
-    encodeBase64Body(html),
-    `--${boundary}--`,
-  ].join("\r\n");
-
-  return Buffer.from(message, "utf8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-/**
- * Base64-encodes one MIME part, wrapped to legal line lengths.
- *
- * Buffer.toString("base64") returns the whole payload as a single line. For
- * the HTML receipt that was 5,368 characters - RFC 2045 asks base64 bodies to
- * wrap at 76, and RFC 5322 makes 998 a hard ceiling for any line in a message.
- * A message that breaks it is malformed, and whether it is accepted or refused
- * is up to whatever handles it next, which is not a coin worth flipping on a
- * customer's proof of payment.
- */
-function encodeBase64Body(value: string) {
-  const encoded = Buffer.from(value, "utf8").toString("base64");
-  return (encoded.match(/.{1,76}/g) ?? []).join("\r\n");
 }
 
 function buildPlainText(receipt: EmailedReceipt) {
