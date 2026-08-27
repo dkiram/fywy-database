@@ -88,6 +88,7 @@ const currentAssignmentSelect = `
     assignment.ont_id,
     assignment.ont_serial,
     customer.name AS customer_name,
+    customer.status AS customer_status,
     assignment.source,
     assignment.mapping_status,
     assignment.verified_at,
@@ -397,6 +398,11 @@ networkAccessRouter.post(
         }
 
         let reconciledAttemptIds: number[] = [];
+        let clearedAccountAttempts: Array<{
+          attemptId: number;
+          action: OntControlAction;
+          resolution: "failed" | "confirmed";
+        }> = [];
         if (verified && liveOnt) {
           const serialConflict = await client.query(
             `SELECT customer_ont_assignment_id
@@ -442,6 +448,97 @@ networkAccessRouter.post(
           );
           reconciledAttemptIds = reconciledResult.rows.map((row) =>
             Number(row.olt_action_attempt_id)
+          );
+
+          // An account-transition attempt that remains unresolved normally
+          // blocks every later action. When this read-only check proves the
+          // live ONT is still in the *opposite* state, the requested write did
+          // not take effect. It is therefore safe to mark that attempt failed
+          // and let staff retry the normal workflow. This never changes the
+          // customer account status and never sends a Huawei command.
+          const clearedResult = await client.query(
+            `UPDATE public.olt_action_attempts
+             SET outcome = 'failed',
+                 after_control_flag = $2,
+                 after_run_state = $3,
+                 result_message =
+                   'Resolved by a subsequent read-only live OLT verification: the requested state was not present, so the account action may be retried.',
+                 completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+             WHERE customer_ont_assignment_id = $1
+               AND workflow = 'account_transition'
+               AND account_status_applied_at IS NULL
+               AND (
+                 outcome = 'uncertain'
+                 OR (
+                   outcome = 'requested'
+                   AND requested_at <= CURRENT_TIMESTAMP - INTERVAL '10 minutes'
+                 )
+               )
+               AND (
+                 (action = 'activate' AND $2 = 'deactivated')
+                 OR (action = 'deactivate' AND $2 = 'active')
+               )
+             RETURNING olt_action_attempt_id, action;`,
+            [assignmentId, liveOnt.controlFlag, liveOnt.runState]
+          );
+          clearedAccountAttempts = clearedResult.rows.map((row) => ({
+            attemptId: Number(row.olt_action_attempt_id),
+            action: row.action as OntControlAction,
+            resolution: "failed" as const,
+          }));
+
+          // A prior account write may also be safely closed when both Huawei
+          // and the current account workflow already reflect it. Pending
+          // Reconnection is a legitimate later stage after a confirmed
+          // deactivation, so an old deactivation journal must not prevent the
+          // customer's subsequent activation.
+          const confirmedResult = await client.query(
+            `UPDATE public.olt_action_attempts
+             SET outcome = 'succeeded',
+                 after_control_flag = $2,
+                 after_run_state = $3,
+                 result_message =
+                   'Resolved by a subsequent read-only live OLT verification: Huawei and the current account workflow already reflect the requested state.',
+                 account_status_applied_at = COALESCE(account_status_applied_at, CURRENT_TIMESTAMP),
+                 completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+             WHERE customer_ont_assignment_id = $1
+               AND workflow = 'account_transition'
+               AND (
+                 outcome = 'uncertain'
+                 OR (
+                   outcome = 'requested'
+                   AND requested_at <= CURRENT_TIMESTAMP - INTERVAL '10 minutes'
+                 )
+               )
+               AND (
+                 (
+                   action = 'activate'
+                   AND $2 = 'active'
+                   AND $4 = 'active'
+                 )
+                 OR (
+                   action = 'deactivate'
+                   AND $2 = 'deactivated'
+                   AND ($4 = 'disconnected' OR $4 = 'pending_reconnection')
+                 )
+               )
+             RETURNING olt_action_attempt_id, action;`,
+            [
+              assignmentId,
+              liveOnt.controlFlag,
+              liveOnt.runState,
+              initial.customer_status,
+            ]
+          );
+          clearedAccountAttempts.push(
+            ...confirmedResult.rows.map((row) => ({
+              attemptId: Number(row.olt_action_attempt_id),
+              action: row.action as OntControlAction,
+              resolution: "confirmed" as const,
+            }))
+          );
+          reconciledAttemptIds.push(
+            ...clearedAccountAttempts.map((attempt) => attempt.attemptId)
           );
         }
 
@@ -492,6 +589,7 @@ networkAccessRouter.post(
               liveRunState: liveOnt?.runState ?? null,
               mismatchReasons,
               reconciledAttemptIds,
+              clearedAccountAttempts,
             },
             reason: verified
               ? "Read-only live OLT verification"
@@ -500,11 +598,27 @@ networkAccessRouter.post(
         }
         await client.query("COMMIT");
 
+        const failedAttempt = clearedAccountAttempts.find(
+          (attempt) => attempt.resolution === "failed"
+        );
+        const confirmedAttempt = clearedAccountAttempts.find(
+          (attempt) => attempt.resolution === "confirmed"
+        );
+        const clearedAttemptMessage = failedAttempt
+          ? ` ONT action #${failedAttempt.attemptId} was cleared because Huawei confirmed its requested ${
+              failedAttempt.action === "activate" ? "activation" : "deactivation"
+            } did not occur. You can safely retry the account action.`
+          : confirmedAttempt
+            ? ` ONT action #${confirmedAttempt.attemptId} was reconciled because Huawei and the account workflow already reflect its requested ${
+                confirmedAttempt.action === "activate" ? "activation" : "deactivation"
+              }. You can safely continue the account workflow.`
+            : "";
+
         return res.json({
           verification: {
             status: verified ? "verified" : "mismatch",
             message: verified
-              ? "The saved customer mapping matches the live OLT."
+              ? `The saved customer mapping matches the live OLT.${clearedAttemptMessage}`
               : mismatchReasons.join("; "),
             checkedAt: new Date().toISOString(),
             live: liveOnt
@@ -515,6 +629,7 @@ networkAccessRouter.post(
                 }
               : null,
             reconciledAttemptIds,
+            clearedAccountAttempts,
           },
           networkAccess: saved,
         });
