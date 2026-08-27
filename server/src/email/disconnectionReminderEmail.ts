@@ -1,4 +1,5 @@
 /** Builds the five-day outstanding-balance/disconnection warning email. */
+import { readFile } from "node:fs/promises";
 import { sendAutomatedEmail } from "./gmailClient.js";
 
 export type DisconnectionReminder = {
@@ -6,67 +7,101 @@ export type DisconnectionReminder = {
   customerName: string | null;
   recipientEmail: string;
   outstandingBalance: string;
-  scheduledDisconnectionDate: string | Date;
+  dueDate: string | Date;
+  graceEndDate: string | Date;
 };
 
-export function sendDisconnectionReminderEmail(reminder: DisconnectionReminder) {
-  const disconnectionDate = formatDate(reminder.scheduledDisconnectionDate);
-  const balance = formatCurrency(reminder.outstandingBalance);
-  const customerName = reminder.customerName?.trim() || "Customer";
+export async function sendDisconnectionReminderEmail(reminder: DisconnectionReminder) {
+  const dueDate = formatDate(reminder.dueDate);
+  const customerFirstName = firstName(reminder.customerName);
+  const greeting = customerFirstName ? `Hi ${customerFirstName}` : "Hi there";
+  const logo = await readFile(new URL("./assets/fywy-email-logo.png", import.meta.url));
 
   return sendAutomatedEmail({
     recipientEmail: reminder.recipientEmail,
-    subject: `Payment reminder: service disconnection scheduled for ${disconnectionDate}`,
-    messageIdKey: `disconnection-5-day-${reminder.customerId}-${toIsoDate(reminder.scheduledDisconnectionDate)}`,
+    subject: "Payment reminder for your FYWY account",
+    messageIdKey: `disconnection-5-day-${reminder.customerId}-${toIsoDate(reminder.graceEndDate)}`,
     plainText: [
-      "SPCL/FYWY Cable",
-      "PAYMENT REMINDER",
+      "FYWY WiFi & Cable",
       "",
-      `Dear ${customerName},`,
+      `${greeting},`,
       "",
-      `Our records show an outstanding balance of ${balance} on customer account #${reminder.customerId}.`,
-      `Unless the outstanding balance is paid, service is scheduled for disconnection on ${disconnectionDate}, which is five days from this notice.`,
+      `Payment for your FYWY bill on account #${reminder.customerId} was due on ${dueDate} and is now 5 days overdue.`,
       "",
-      "Please make payment before the scheduled disconnection date to avoid an interruption in service.",
-      "If you have already paid, please disregard this reminder or contact SPCL so we can verify the payment.",
+      "We understand this might have simply been overlooked. Please arrange payment as soon as possible. If payment is not received, your service may be disconnected after 48 hours.",
+      "",
+      "WHERE TO PAY",
+      "You’re welcome to make your payment in person at any of our offices, or pay securely online through our website:",
+      "Pay your bill online: https://fywycable.com/paymentpage",
+      "",
+      "Not sure how much you owe? Call or WhatsApp our office using the details below, or contact us through our website:",
+      "Contact us about your balance: https://fywycable.com/contact",
+      "",
+      "If payment has already been made, please disregard this reminder.",
+      "",
+      "Questions about your bill? WhatsApp us at 1-876-899-8867 or call 1-876-941-0043.",
+      "",
+      "Thank you,",
+      "FYWY WiFi & Cable",
       "",
       "This is an automated message. Please do not reply.",
-      "WhatsApp: 1-876-899-8867 or 1-876-880-0093",
-      "Telephone: 1-876-941-0043 or 1-876-965-7334",
     ].join("\n"),
     html: `<!doctype html>
 <html lang="en">
-  <body style="margin:0;background:#f4f5f3;font-family:Arial,sans-serif;color:#1d211f">
-    <div style="max-width:620px;margin:0 auto;padding:24px 12px">
-      <div style="background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #dde2de">
-        <div style="padding:26px 28px;border-bottom:3px solid #b45309">
-          <div style="font-size:12px;letter-spacing:2px;color:#176b50;font-weight:700">SPCL/FYWY CABLE</div>
-          <h1 style="margin:8px 0 2px;font-size:25px">Payment Reminder</h1>
-          <div style="color:#66706a;font-size:14px">Action required to avoid service interruption</div>
+  <body style="margin:0;background:#f4f2ed;font-family:Arial,Helvetica,sans-serif;color:#10202b">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f2ed">
+      <tr><td align="center" style="padding:28px 12px">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;background:#ffffff;border:1px solid #dde4e1;border-radius:16px;overflow:hidden">
+          <tr><td align="center" style="padding:24px 28px 18px;border-top:7px solid #3f615d">
+            <img src="cid:fywy-logo" width="150" alt="FYWY WiFi & Cable" style="display:block;width:150px;height:auto;border:0">
+          </td></tr>
+          <tr><td style="padding:8px 34px 32px;font-size:16px;line-height:1.6">
+            <h1 style="margin:0 0 18px;color:#10202b;font-size:25px;line-height:1.25">Payment Reminder</h1>
+            <p style="margin:0 0 16px">${escapeHtml(greeting)},</p>
+            <p style="margin:0 0 16px">Payment for your FYWY bill on account <strong>#${reminder.customerId}</strong> was due on <strong>${escapeHtml(dueDate)}</strong> and is now <strong>5 days overdue</strong>.</p>
+            <div style="margin:22px 0;padding:17px 18px;background:#fff7ed;border-left:4px solid #c65d1e;color:#7c2d12;font-size:14px;line-height:1.55">We understand this might have simply been overlooked. Please arrange payment as soon as possible. If payment is not received, your service may be disconnected after <strong>48 hours</strong>.</div>
+            <h2 style="margin:0 0 8px;color:#10202b;font-size:17px;line-height:1.3">Where to pay</h2>
+            <p style="margin:0 0 18px">You’re welcome to make your payment in person at any of our offices, or pay securely online through our website:</p>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 24px">
+              <tr><td bgcolor="#3f615d" style="border-radius:8px">
+                <a href="https://fywycable.com/paymentpage" style="display:inline-block;padding:13px 26px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700">Pay Bill Online</a>
+              </td></tr>
+            </table>
+            <p style="margin:0 0 16px">Not sure how much you owe? Call or WhatsApp our office using the details below, or contact us through our website:</p>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 24px">
+              <tr><td style="border:2px solid #3f615d;border-radius:8px">
+                <a href="https://fywycable.com/contact" style="display:inline-block;padding:11px 20px;color:#3f615d;text-decoration:none;font-size:14px;font-weight:700">Contact Us About Your Balance</a>
+              </td></tr>
+            </table>
+            <p style="margin:0 0 22px;color:#5d6967;font-size:14px">If payment has already been made, please disregard this reminder.</p>
+            <div style="padding-top:20px;border-top:1px solid #e1e6e4;font-size:14px;line-height:1.7">
+              Questions about your bill? WhatsApp us at <a href="https://wa.me/18768998867" style="color:#3f615d;font-weight:700">1-876-899-8867</a> or call <a href="tel:+18769410043" style="color:#3f615d;font-weight:700">1-876-941-0043</a>.
+              <p style="margin:16px 0 0">Thank you,<br><strong>FYWY WiFi &amp; Cable</strong></p>
+            </div>
+          </td></tr>
+        </table>
+        <div style="padding:16px 12px 0;color:#6b7572;font-size:11px;line-height:1.5">
+          This is an automated message. Please do not reply.<br>
+          <a href="https://fywycable.com/" style="color:#3f615d">fywycable.com</a>
         </div>
-        <div style="padding:26px 28px;font-size:15px;line-height:1.6">
-          <p style="margin-top:0">Dear ${escapeHtml(customerName)},</p>
-          <p>Our records show an outstanding balance on customer account <strong>#${reminder.customerId}</strong>.</p>
-          <div style="margin:22px 0;padding:20px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;text-align:center">
-            <div style="font-size:11px;letter-spacing:1.5px;color:#9a3412;font-weight:700">OUTSTANDING BALANCE</div>
-            <div style="margin-top:6px;font-size:32px;color:#9a3412;font-weight:700">${escapeHtml(balance)}</div>
-            <div style="margin-top:14px;font-size:12px;color:#7c2d12;font-weight:700">SCHEDULED DISCONNECTION</div>
-            <div style="margin-top:3px;font-size:19px;color:#7c2d12;font-weight:700">${escapeHtml(disconnectionDate)}</div>
-          </div>
-          <p>Unless the outstanding balance is paid, service is scheduled for disconnection on that date, which is <strong>five days from this notice</strong>.</p>
-          <p>Please make payment before the scheduled date to avoid an interruption in service.</p>
-          <p style="color:#66706a;font-size:13px">If you have already paid, please disregard this reminder or contact SPCL so we can verify the payment.</p>
-        </div>
-      </div>
-      <div style="padding:18px 12px;text-align:center;color:#66706a;font-size:12px;line-height:1.6">
-        <strong>This is an automated message. Please do not reply.</strong><br>
-        WhatsApp: 1-876-899-8867 or 1-876-880-0093<br>
-        Telephone: 1-876-941-0043 or 1-876-965-7334
-      </div>
-    </div>
+      </td></tr>
+    </table>
   </body>
 </html>`,
-  });
+    inlineImages: [{
+      contentId: "fywy-logo",
+      filename: "fywy-logo.png",
+      mimeType: "image/png",
+      content: logo,
+    }],
+  }, "reminders");
+}
+
+function firstName(value: string | null) {
+  const raw = value?.trim().split(/\s+/)[0] ?? "";
+  if (!raw) return null;
+  if (!/^[A-ZÀ-ÖØ-Þ'’-]+$/u.test(raw)) return raw;
+  return raw.toLocaleLowerCase("en-JM").replace(/(^|['’-])\p{L}/gu, (letter) => letter.toLocaleUpperCase("en-JM"));
 }
 
 function escapeHtml(value: string) {
@@ -76,13 +111,6 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
-
-function formatCurrency(value: string) {
-  return `J$${Number(value).toLocaleString("en-JM", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
 
 function toIsoDate(value: string | Date) {

@@ -69,17 +69,25 @@ services:
 
       # Gmail API credentials are generated once with
       # `npm run authorize:gmail` and kept only in .env.production on the NAS.
-      # The paid mailbox is spc@fywycable.com; the free Workspace send-as alias
-      # is what customers see on receipts and later automated reminders.
+      # Receipt email uses the spc@fywycable.com mailbox and its send-as alias.
       GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID:-}
       GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
       GMAIL_REFRESH_TOKEN: ${GMAIL_REFRESH_TOKEN:-}
       GMAIL_SENDER_ADDRESS: ${GMAIL_SENDER_ADDRESS:-receipts@fywycable.com}
       GMAIL_SENDER_NAME: ${GMAIL_SENDER_NAME:-SPCL/FYWY Cable - Do Not Reply}
 
+      # Reminders use their own licensed Workspace mailbox and refresh token,
+      # keeping reminder traffic and replies out of the receipt mailbox.
+      REMINDER_GMAIL_CLIENT_ID: ${REMINDER_GMAIL_CLIENT_ID:-}
+      REMINDER_GMAIL_CLIENT_SECRET: ${REMINDER_GMAIL_CLIENT_SECRET:-}
+      REMINDER_GMAIL_REFRESH_TOKEN: ${REMINDER_GMAIL_REFRESH_TOKEN:-}
+      REMINDER_GMAIL_SENDER_ADDRESS: ${REMINDER_GMAIL_SENDER_ADDRESS:-notifications@fywycable.com}
+      REMINDER_GMAIL_SENDER_NAME: ${REMINDER_GMAIL_SENDER_NAME:-SPCL/FYWY Cable - Do Not Reply}
+
       # Daily five-day disconnection warnings. Delivery is intentionally paced
       # so counter receipts continue to use Gmail immediately.
       EMAIL_REMINDERS_ENABLED: ${EMAIL_REMINDERS_ENABLED:-false}
+      EMAIL_REMINDERS_START_DATE: ${EMAIL_REMINDERS_START_DATE:-}
       EMAIL_REMINDERS_HOUR: ${EMAIL_REMINDERS_HOUR:-8}
       EMAIL_REMINDERS_MINUTE: ${EMAIL_REMINDERS_MINUTE:-0}
       EMAIL_REMINDERS_BATCH_SIZE: ${EMAIL_REMINDERS_BATCH_SIZE:-20}

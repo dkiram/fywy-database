@@ -26,10 +26,20 @@ GMAIL_REFRESH_TOKEN=
 GMAIL_SENDER_ADDRESS=receipts@fywycable.com
 GMAIL_SENDER_NAME=SPCL/FYWY Cable - Do Not Reply
 
+# Separate licensed mailbox used only for automated payment reminders. The
+# OAuth client ID/secret may be the same; its refresh token belongs to the new
+# notifications@fywycable.com user.
+REMINDER_GMAIL_CLIENT_ID=
+REMINDER_GMAIL_CLIENT_SECRET=
+REMINDER_GMAIL_REFRESH_TOKEN=
+REMINDER_GMAIL_SENDER_ADDRESS=notifications@fywycable.com
+REMINDER_GMAIL_SENDER_NAME=SPCL/FYWY Cable - Do Not Reply
+
 # --- Five-day disconnection email reminders --------------------------------
 # Keep disabled through the first deployment and preview the eligible customer
 # list before deliberately changing this to true on the NAS.
 EMAIL_REMINDERS_ENABLED=false
+EMAIL_REMINDERS_START_DATE=
 EMAIL_REMINDERS_HOUR=8
 EMAIL_REMINDERS_MINUTE=0
 EMAIL_REMINDERS_BATCH_SIZE=20

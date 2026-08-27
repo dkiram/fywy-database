@@ -11,7 +11,8 @@ const AUTOMATION_ACTOR = "SPCL Automatic Email Reminder Scheduler";
 type QueueRow = {
   customer_email_notification_id: number;
   customer_id: number;
-  scheduled_disconnection_date: string | Date;
+  due_date: string | Date;
+  grace_end_date: string | Date;
 };
 
 type EligibleCustomer = {
@@ -19,7 +20,8 @@ type EligibleCustomer = {
   customer_name: string | null;
   email: string | null;
   outstanding_balance: string;
-  scheduled_disconnection_date: string | Date;
+  due_date: string | Date;
+  grace_end_date: string | Date;
 };
 
 function isEnabled() {
@@ -33,12 +35,28 @@ function boundedInteger(value: string | undefined, fallback: number, min: number
 
 function configuration() {
   return {
+    startDate: configuredStartDate(),
     hour: boundedInteger(process.env.EMAIL_REMINDERS_HOUR, 8, 0, 23),
     minute: boundedInteger(process.env.EMAIL_REMINDERS_MINUTE, 0, 0, 59),
     batchSize: boundedInteger(process.env.EMAIL_REMINDERS_BATCH_SIZE, 20, 1, 50),
     dailyLimit: boundedInteger(process.env.EMAIL_REMINDERS_DAILY_LIMIT, 1500, 1, 1900),
     maxAttempts: boundedInteger(process.env.EMAIL_REMINDERS_MAX_ATTEMPTS, 3, 1, 5),
   };
+}
+
+function configuredStartDate() {
+  const value = process.env.EMAIL_REMINDERS_START_DATE?.trim() ?? "";
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    console.error("EMAIL_REMINDERS_START_DATE must use YYYY-MM-DD; reminder delivery is locked.");
+    return "9999-12-31";
+  }
+  const parsed = new Date(`${value}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    console.error("EMAIL_REMINDERS_START_DATE is not a real calendar date; reminder delivery is locked.");
+    return "9999-12-31";
+  }
+  return value;
 }
 
 function jamaicaClock() {
@@ -99,7 +117,7 @@ export async function queueFiveDayDisconnectionReminders(billingDate = jamaicaCl
     await client.query(
       `INSERT INTO public.customer_email_notifications (
          customer_email_notification_run_id, customer_id, notification_type,
-         deduplication_key, recipient_email, scheduled_disconnection_date,
+         deduplication_key, recipient_email, due_date, grace_end_date,
          outstanding_balance, status, completed_at
        )
        SELECT
@@ -107,9 +125,10 @@ export async function queueFiveDayDisconnectionReminders(billingDate = jamaicaCl
          customer.customer_id,
          'disconnection_5_day',
          'disconnection-5-day:' || customer.customer_id::TEXT || ':' ||
-           billing.scheduled_disconnection_date::TEXT,
+           billing.grace_end_date::TEXT,
          NULLIF(LOWER(BTRIM(customer.email)), ''),
-         billing.scheduled_disconnection_date,
+         billing.oldest_unpaid_due_date,
+         billing.grace_end_date,
          billing.outstanding_balance,
          CASE
            WHEN customer.email IS NOT NULL
@@ -130,7 +149,8 @@ export async function queueFiveDayDisconnectionReminders(billingDate = jamaicaCl
        WHERE customer.status = 'active'
          AND customer.hidden_from_app = FALSE
          AND billing.outstanding_balance > 0
-         AND billing.scheduled_disconnection_date = $2::DATE + 5
+         AND billing.oldest_unpaid_due_date = $2::DATE - 5
+         AND billing.grace_end_date = $2::DATE + 5
          AND billing.is_on_hold = FALSE
          AND billing.unverified_entries = 0
        ON CONFLICT (deduplication_key) DO NOTHING;`,
@@ -179,17 +199,19 @@ async function currentEligibility(client: PoolClient, item: QueueRow) {
        customer.name AS customer_name,
        NULLIF(LOWER(BTRIM(customer.email)), '') AS email,
        billing.outstanding_balance,
-       billing.scheduled_disconnection_date
+       billing.oldest_unpaid_due_date AS due_date,
+       billing.grace_end_date
      FROM public.customers customer
      JOIN public.customer_billing_status billing USING (customer_id)
      WHERE customer.customer_id = $1
        AND customer.status = 'active'
        AND customer.hidden_from_app = FALSE
        AND billing.outstanding_balance > 0
-       AND billing.scheduled_disconnection_date = $2::DATE
+       AND billing.oldest_unpaid_due_date = $2::DATE
+       AND billing.grace_end_date = $3::DATE
        AND billing.is_on_hold = FALSE
        AND billing.unverified_entries = 0;`,
-    [item.customer_id, toIsoDate(item.scheduled_disconnection_date)],
+    [item.customer_id, toIsoDate(item.due_date), toIsoDate(item.grace_end_date)],
   );
   return result.rows[0] ?? null;
 }
@@ -242,7 +264,8 @@ async function sendQueueItem(client: PoolClient, item: QueueRow) {
       customerName: eligible.customer_name,
       recipientEmail: eligible.email,
       outstandingBalance: eligible.outstanding_balance,
-      scheduledDisconnectionDate: eligible.scheduled_disconnection_date,
+      dueDate: eligible.due_date,
+      graceEndDate: eligible.grace_end_date,
     });
   } catch (error) {
     const config = configuration();
@@ -284,8 +307,8 @@ async function sendQueueItem(client: PoolClient, item: QueueRow) {
         AUTOMATION_ACTOR,
         String(eligible.customer_id),
         eligible.email,
-        `Outstanding ${eligible.outstanding_balance}; scheduled disconnection ${toIsoDate(eligible.scheduled_disconnection_date)}`,
-        `email-disconnection-5-day:${eligible.customer_id}:${toIsoDate(eligible.scheduled_disconnection_date)}`,
+        `Outstanding ${eligible.outstanding_balance}; due ${toIsoDate(eligible.due_date)}; grace ends ${toIsoDate(eligible.grace_end_date)}`,
+        `email-disconnection-5-day:${eligible.customer_id}:${toIsoDate(eligible.grace_end_date)}`,
       ],
     );
   } catch (error) {
@@ -336,7 +359,8 @@ export async function processDisconnectionReminderQueue() {
        ) selected
        WHERE notification.customer_email_notification_id = selected.customer_email_notification_id
        RETURNING notification.customer_email_notification_id,
-         notification.customer_id, notification.scheduled_disconnection_date;`,
+         notification.customer_id, notification.due_date,
+         notification.grace_end_date;`,
       [Math.min(config.batchSize, remaining)],
     );
 
@@ -370,6 +394,7 @@ async function tick() {
   try {
     const clock = jamaicaClock();
     const config = configuration();
+    if (config.startDate && clock.date < config.startDate) return;
     if (clock.hour > config.hour || (clock.hour === config.hour && clock.minute >= config.minute)) {
       await queueFiveDayDisconnectionReminders(clock.date);
     }
@@ -383,7 +408,7 @@ export function startDisconnectionEmailReminders() {
   const config = configuration();
   console.log(
     isEnabled()
-      ? `Five-day disconnection email reminders enabled for ${String(config.hour).padStart(2, "0")}:${String(config.minute).padStart(2, "0")} Jamaica time; ${config.batchSize}/minute; ${config.dailyLimit}/day.`
+      ? `Five-day disconnection email reminders enabled for ${String(config.hour).padStart(2, "0")}:${String(config.minute).padStart(2, "0")} Jamaica time${config.startDate ? ` starting ${config.startDate}` : ""}; ${config.batchSize}/minute; ${config.dailyLimit}/day.`
       : "Five-day disconnection email reminders are disabled.",
   );
   const startupTimer = setTimeout(() => void tick(), 20_000);
