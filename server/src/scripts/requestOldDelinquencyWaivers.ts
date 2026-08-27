@@ -31,8 +31,8 @@ type Candidate = {
   customer_name: string;
   monthly_fee: string;
   outstanding_balance: string;
-  first_charge_due_date: string;
-  fifo_oldest_unpaid_due_date: string;
+  oldest_unpaid_due_date: string;
+  latest_paid_month: string;
 };
 
 function argument(name: string) {
@@ -57,23 +57,17 @@ function usage() {
   ].join("\n");
 }
 
-// A missed payment counts as "old" when every one of the six most recent
-// monthly charges that has come due is paid in full and the account still owes
-// exactly one monthly fee. That remaining fee therefore belongs to a charge
-// more than six months back.
-//
-// The ledger's oldest-unpaid date cannot date the gap: payments apply
-// oldest-first (FIFO), so a customer who missed one month years ago and has
-// paid every month since shows the *newest* charge as unpaid. Only the
-// payment-by-month history says whether the gap is old or current.
-//
 // The paid-for month is stronger evidence than the receipt date: a late or
-// early counter visit should not turn a continuous payment run into a false
-// gap. The UI requires month_paid for every new monthly-fee payment.
+// early counter visit should not turn an otherwise continuous payment run into
+// a false gap. The UI requires month_paid for every new monthly-fee payment.
 const ELIGIBLE_CUSTOMERS_SQL = `
   WITH settings AS (
     SELECT
-      (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE AS today
+      (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE AS today,
+      DATE_TRUNC(
+        'month',
+        (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+      )::DATE AS this_month
   ),
   possible AS (
     SELECT
@@ -81,7 +75,8 @@ const ELIGIBLE_CUSTOMERS_SQL = `
       c.name AS customer_name,
       rate.monthly_fee,
       billing.outstanding_balance,
-      billing.oldest_unpaid_due_date
+      billing.oldest_unpaid_due_date,
+      paid.latest_paid_month
     FROM public.customers c
     JOIN public.customer_billing_status billing USING (customer_id)
     CROSS JOIN settings
@@ -94,21 +89,52 @@ const ELIGIBLE_CUSTOMERS_SQL = `
         history.customer_rate_history_id DESC
       LIMIT 1
     ) rate ON TRUE
+    JOIN LATERAL (
+      SELECT debit.entry_type
+      FROM (
+        SELECT
+          ledger.entry_type,
+          ledger.due_date,
+          ledger.account_ledger_entry_id,
+          SUM(ledger.amount) OVER (
+            ORDER BY ledger.due_date NULLS FIRST,
+              ledger.account_ledger_entry_id
+          ) AS cumulative_debits
+        FROM public.account_ledger_entries ledger
+        WHERE ledger.customer_id = c.customer_id
+          AND ledger.amount > 0
+      ) debit
+      CROSS JOIN LATERAL (
+        SELECT COALESCE(
+          -SUM(credit.amount) FILTER (WHERE credit.amount < 0),
+          0
+        ) AS total_credits
+        FROM public.account_ledger_entries credit
+        WHERE credit.customer_id = c.customer_id
+      ) credits
+      WHERE debit.cumulative_debits > credits.total_credits
+      ORDER BY debit.due_date NULLS FIRST, debit.account_ledger_entry_id
+      LIMIT 1
+    ) unpaid ON TRUE
+    JOIN LATERAL (
+      SELECT MAX(DATE_TRUNC('month', payment.month_paid)::DATE) AS latest_paid_month
+      FROM public.payments payment
+      WHERE payment.customer_id = c.customer_id
+        AND payment.voided_at IS NULL
+        AND COALESCE(payment.payment_type, payment.legacy_payment_type) = 'Monthly Fee'
+        AND payment.amount_paid > 0
+        AND payment.month_paid IS NOT NULL
+    ) paid ON paid.latest_paid_month BETWEEN
+      (settings.this_month - INTERVAL '1 month')::DATE AND settings.this_month
     WHERE c.status = 'active'
       AND c.hidden_from_app = FALSE
       AND ($2::INTEGER[] IS NULL OR c.customer_id = ANY($2::INTEGER[]))
       AND billing.is_delinquent
+      AND unpaid.entry_type = 'monthly_charge'
       AND rate.monthly_fee > 0
-      -- the real balance is exactly one monthly fee ...
       AND billing.outstanding_balance = rate.monthly_fee
-      -- ... and it is entirely explained by unpaid monthly charges: no
-      -- reconnection fee, adjustment, opening balance or waiver in the mix.
-      AND (
-        SELECT COALESCE(SUM(entry.amount), 0)
-        FROM public.account_ledger_entries entry
-        WHERE entry.customer_id = c.customer_id
-          AND entry.entry_type IN ('monthly_charge', 'monthly_payment')
-      ) = rate.monthly_fee
+      AND billing.oldest_unpaid_due_date <
+        (settings.today - INTERVAL '6 months')::DATE
       AND NOT EXISTS (
         SELECT 1
         FROM public.waiver_requests request
@@ -118,22 +144,6 @@ const ELIGIBLE_CUSTOMERS_SQL = `
             OR LOWER(TRIM(request.reason)) = LOWER($1)
           )
       )
-  ),
-  recent_charges AS (
-    SELECT
-      possible.customer_id,
-      DATE_TRUNC('month', charge.due_date)::DATE AS charge_month,
-      charge.amount AS charge_amount,
-      ROW_NUMBER() OVER (
-        PARTITION BY possible.customer_id
-        ORDER BY charge.due_date DESC, charge.account_ledger_entry_id DESC
-      ) AS recency
-    FROM possible
-    CROSS JOIN settings
-    JOIN public.account_ledger_entries charge
-      ON charge.customer_id = possible.customer_id
-      AND charge.entry_type = 'monthly_charge'
-      AND charge.due_date <= settings.today
   ),
   paid_months AS (
     SELECT
@@ -145,39 +155,34 @@ const ELIGIBLE_CUSTOMERS_SQL = `
     WHERE payment.voided_at IS NULL
       AND COALESCE(payment.payment_type, payment.legacy_payment_type) = 'Monthly Fee'
       AND payment.amount_paid > 0
-      AND payment.month_paid IS NOT NULL
+      AND DATE_TRUNC('month', payment.month_paid)::DATE BETWEEN
+        (possible.latest_paid_month - INTERVAL '5 months')::DATE
+        AND possible.latest_paid_month
     GROUP BY possible.customer_id, DATE_TRUNC('month', payment.month_paid)::DATE
-  ),
-  recent_coverage AS (
-    SELECT
-      recent_charges.customer_id,
-      COUNT(*) AS recent_months,
-      COUNT(*) FILTER (
-        WHERE paid_months.amount_paid = recent_charges.charge_amount
-      ) AS paid_in_full_months
-    FROM recent_charges
-    LEFT JOIN paid_months
-      ON paid_months.customer_id = recent_charges.customer_id
-      AND paid_months.paid_month = recent_charges.charge_month
-    WHERE recent_charges.recency <= 6
-    GROUP BY recent_charges.customer_id
   )
   SELECT
     possible.customer_id,
     possible.customer_name,
     possible.monthly_fee,
     possible.outstanding_balance,
-    possible.oldest_unpaid_due_date AS fifo_oldest_unpaid_due_date,
-    (
-      SELECT MIN(charge.due_date)
-      FROM public.account_ledger_entries charge
-      WHERE charge.customer_id = possible.customer_id
-        AND charge.entry_type = 'monthly_charge'
-    ) AS first_charge_due_date
+    possible.oldest_unpaid_due_date,
+    possible.latest_paid_month
   FROM possible
-  JOIN recent_coverage USING (customer_id)
-  WHERE recent_coverage.recent_months = 6
-    AND recent_coverage.paid_in_full_months = 6
+  JOIN paid_months USING (customer_id)
+  GROUP BY
+    possible.customer_id,
+    possible.customer_name,
+    possible.monthly_fee,
+    possible.outstanding_balance,
+    possible.oldest_unpaid_due_date,
+    possible.latest_paid_month
+  HAVING COUNT(*) = 6
+    AND COUNT(*) FILTER (
+      WHERE paid_months.amount_paid = possible.monthly_fee
+    ) = 6
+    AND MIN(paid_months.paid_month) =
+      (possible.latest_paid_month - INTERVAL '5 months')::DATE
+    AND MAX(paid_months.paid_month) = possible.latest_paid_month
   ORDER BY possible.customer_id;
 `;
 
@@ -192,21 +197,7 @@ async function findRequester(client: PoolClient, username: string): Promise<Requ
   );
   const requester = result.rows[0];
   if (!requester) {
-    const choices = await client.query<{ username: string; role: string }>(
-      `SELECT username, role
-       FROM public.employees
-       WHERE is_active = TRUE
-         AND username IS NOT NULL
-         AND role = ANY($1)
-       ORDER BY username;`,
-      [ELIGIBLE_REQUESTER_ROLES]
-    );
-    const list = choices.rows
-      .map((row) => `  ${row.username} (${row.role})`)
-      .join("\n");
-    throw new Error(
-      `No active employee has username "${username}". Use one of:\n${list}`
-    );
+    throw new Error(`No active employee has username "${username}".`);
   }
   if (!ELIGIBLE_REQUESTER_ROLES.includes(requester.role)) {
     throw new Error(
@@ -243,8 +234,8 @@ function printCandidates(candidates: Candidate[]) {
       name: candidate.customer_name,
       monthly_fee: candidate.monthly_fee,
       outstanding: candidate.outstanding_balance,
-      first_charge_due: candidate.first_charge_due_date,
-      fifo_oldest_unpaid: candidate.fifo_oldest_unpaid_due_date,
+      old_unpaid_due: candidate.oldest_unpaid_due_date,
+      latest_paid_month: candidate.latest_paid_month,
     }))
   );
   console.log(`Eligible customers: ${candidates.length}`);
