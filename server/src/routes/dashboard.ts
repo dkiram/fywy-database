@@ -109,6 +109,8 @@ dashboardRouter.get("/dashboard", requireAuth, requireAdmin, async (_req, res) =
       pool.query(`
         SELECT actor_name, action, entity_type, entity_id, occurred_at
         FROM public.audit_logs
+        WHERE source_key IS NULL
+          OR source_key NOT LIKE 'email-disconnection-5-day:%'
         ORDER BY occurred_at DESC, audit_log_id DESC
         LIMIT 6;
       `),

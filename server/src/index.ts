@@ -800,12 +800,16 @@ app.get("/api/audit-logs", requireAuth, async (req, res) => {
           ELSE NULL
         END
       WHERE
-        $1 = ''
-        OR audit.actor_name ILIKE $2
-        OR employee.first_name ILIKE $2
-        OR employee.last_name ILIKE $2
-        OR CONCAT_WS(' ', employee.first_name, employee.last_name) ILIKE $2
-        OR employee.username ILIKE $2
+        (audit.source_key IS NULL
+          OR audit.source_key NOT LIKE 'email-disconnection-5-day:%')
+        AND (
+          $1 = ''
+          OR audit.actor_name ILIKE $2
+          OR employee.first_name ILIKE $2
+          OR employee.last_name ILIKE $2
+          OR CONCAT_WS(' ', employee.first_name, employee.last_name) ILIKE $2
+          OR employee.username ILIKE $2
+        )
       ORDER BY audit.occurred_at DESC, audit.audit_log_id DESC
       LIMIT 100;
       `,
@@ -1156,6 +1160,10 @@ app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => 
           LEFT JOIN public.employees at_e
             ON at_e.employee_id = al.employee_id
           WHERE al.entity_type <> 'payment'
+            -- Automated email delivery remains permanently auditable in the
+            -- database, but is operational noise in staff-facing timelines.
+            AND (al.source_key IS NULL
+              OR al.source_key NOT LIKE 'email-disconnection-5-day:%')
             -- Notes have their own richer timeline row above. The audit entry
             -- remains globally searchable without appearing twice here.
             AND al.action NOT IN ('Added customer note', 'Edited customer note')
