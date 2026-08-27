@@ -14,7 +14,8 @@
     "import:operations": "tsx src/scripts/importLegacyOperations.ts",
     "parse:ont-log": "tsx src/scripts/parseHuaweiOntLog.ts",
     "import:ont-matches": "tsx src/scripts/importHuaweiOntMatches.ts",
-    "create:ont-import-sql": "tsx src/scripts/createHuaweiOntImportSql.ts"
+    "create:ont-import-sql": "tsx src/scripts/createHuaweiOntImportSql.ts",
+    "reconcile:old-delinquency-waivers": "tsx src/scripts/requestOldDelinquencyWaivers.ts"
   },
   "keywords": [],
   "author": "",
