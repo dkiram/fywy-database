@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && mkdir -p dist/email/assets && cp src/email/assets/*.png dist/email/assets/",
+    "build": "tsc && mkdir -p dist/email/assets && cp src/email/assets/*.png dist/email/assets/ && chmod 644 dist/email/assets/*.png",
     "start": "node dist/index.js",
     "authorize:gmail": "tsx src/scripts/authorizeGmail.ts",
     "check:gmail": "tsx src/scripts/checkGmailReceipts.ts",
