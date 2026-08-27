@@ -324,7 +324,7 @@ paymentsRouter.post(
 
       const customerResult = await client.query(
         `
-        SELECT customer_id, email
+        SELECT customer_id, email, status
         FROM public.customers
         WHERE customer_id = $1
         FOR SHARE;
@@ -335,6 +335,18 @@ paymentsRouter.post(
       if (customerResult.rows.length === 0) {
         await client.query("ROLLBACK");
         return res.status(404).json({ error: "Customer not found." });
+      }
+
+      // An offline account is not receiving service and its balance is frozen.
+      // Taking money against it would quietly reactivate billing expectations
+      // without anyone deciding to restore service. Restore it first.
+      if (customerResult.rows[0].status === "offline") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error:
+            "This account is marked offline (no service). Restore it from the " +
+            "Account Operations panel before recording a payment.",
+        });
       }
 
       const paymentResult = await client.query(

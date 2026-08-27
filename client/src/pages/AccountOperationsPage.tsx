@@ -13,7 +13,8 @@ type AccountStatus =
   | "disconnected"
   | "pending_reconnection"
   | "closed"
-  | "archived";
+  | "archived"
+  | "offline";
 
 type AccountRecord = {
   customer_id: number;
@@ -40,6 +41,7 @@ type AccountSummary = {
   active?: number;
   disconnected: number;
   pending_reconnection: number;
+  offline: number;
 };
 
 type WaiverApprovalRequest = {
@@ -80,6 +82,7 @@ type AccountView =
   | "attention"
   | "pending_reconnection"
   | "disconnected"
+  | "offline"
   | "active"
   | "all";
 
@@ -87,6 +90,7 @@ const emptySummary: AccountSummary = {
   active: 0,
   disconnected: 0,
   pending_reconnection: 0,
+  offline: 0,
 };
 
 const emptyPagination: Pagination = {
@@ -486,12 +490,13 @@ function AccountOperationsPage() {
         </section>
       )}
 
-      <div className={`grid grid-cols-1 gap-4 ${isAdmin ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+      <div className={`grid grid-cols-1 gap-4 ${isAdmin ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
         {isAdmin && (
           <SummaryCard label="Active" value={summary.active ?? 0} icon="check_circle" tone="positive" />
         )}
         <SummaryCard label="Disconnected" value={summary.disconnected} icon="link_off" tone="negative" />
         <SummaryCard label="Pending Reconnection" value={summary.pending_reconnection} icon="sync" tone="warning" />
+        <SummaryCard label="Offline" value={summary.offline} icon="cloud_off" tone="negative" />
       </div>
 
       <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
@@ -503,6 +508,7 @@ function AccountOperationsPage() {
                 ["attention", "Needs Attention"],
                 ["pending_reconnection", "Reconnection Queue"],
                 ["disconnected", "Disconnected"],
+                ["offline", "Offline"],
                 ...(isAdmin
                   ? ([
                       ["active", "Active"],
@@ -744,6 +750,7 @@ function StatusBadge({ status }: { status: AccountStatus }) {
     pending_reconnection: "bg-warning-container text-warning",
     closed: "bg-surface-container-high text-on-surface-variant",
     archived: "bg-surface-container-high text-on-surface-variant",
+    offline: "bg-[#8a2d5f]/10 text-[#8a2d5f]",
   };
   return (
     <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}>

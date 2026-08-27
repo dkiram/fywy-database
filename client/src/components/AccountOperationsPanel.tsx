@@ -9,7 +9,8 @@ export type AccountStatus =
   | "disconnected"
   | "pending_reconnection"
   | "closed"
-  | "archived";
+  | "archived"
+  | "offline";
 
 export type AccountStatusUpdate = {
   status: AccountStatus;
@@ -45,6 +46,7 @@ type BillingStatus = {
   offline_charge_review_amount: string;
   offline_charge_review_from: string | null;
   offline_charge_review_to: string | null;
+  no_service_since: string | null;
 };
 
 type LedgerEntry = {
@@ -91,7 +93,13 @@ type OltAccountActions = {
   reason: string | null;
 };
 
-type AccountAction = "deactivate" | "request-reconnection" | "reconnect" | "cancel-reconnection";
+type AccountAction =
+  | "deactivate"
+  | "request-reconnection"
+  | "reconnect"
+  | "cancel-reconnection"
+  | "mark-offline"
+  | "restore-from-offline";
 
 // Centralizing labels and endpoints keeps the modal generic while each action
 // still presents wording appropriate to its business meaning.
@@ -131,6 +139,19 @@ const actionDetails: Record<
     placeholder: "Why should this account remain disconnected?",
     destructive: true,
   },
+  "mark-offline": {
+    title: "Mark account offline",
+    button: "Mark Offline",
+    endpoint: "mark-offline",
+    placeholder:
+      "What shows the ONT has been offline (e.g. U2000 last-online date, site visit)...",
+  },
+  "restore-from-offline": {
+    title: "Restore account from offline",
+    button: "Restore Service",
+    endpoint: "restore-from-offline",
+    placeholder: "Reason for restoring this account to active...",
+  },
 };
 
 function AccountOperationsPanel({
@@ -166,6 +187,10 @@ function AccountOperationsPanel({
   // This mirrors server authorization. The server remains the final authority;
   // this check only prevents presenting actions the employee cannot perform.
   const canManage = employeeRole === "admin" || employeeRole === "head_office";
+  const canRequestDiscount =
+    employeeRole === "admin" ||
+    employeeRole === "head_office" ||
+    employeeRole === "branch";
 
   // Replace the old placeholder activity list with persisted status history.
   const loadAccountData = useCallback(async () => {
@@ -175,7 +200,7 @@ function AccountOperationsPanel({
         const [historyResponse, billingResponse, waiverResponse, reconnectionResponse, capabilityResponse] = await Promise.all([
           apiFetch(`/api/customers/${customerId}/account-history`),
           apiFetch(`/api/customers/${customerId}/billing-status`),
-          canManage
+          canRequestDiscount
             ? apiFetch(`/api/customers/${customerId}/waiver-requests`)
             : Promise.resolve(null),
           apiFetch(`/api/customers/${customerId}/reconnection-requests`),
@@ -206,7 +231,7 @@ function AccountOperationsPanel({
       } finally {
         setLoading(false);
       }
-  }, [canManage, customerId]);
+  }, [canRequestDiscount, customerId]);
 
   useEffect(() => { loadAccountData(); }, [loadAccountData]);
 
@@ -287,7 +312,7 @@ function AccountOperationsPanel({
     ? `DEACTIVATE ${customerId}`
     : `RECONNECT ${customerId}`;
 
-  // Management passes require an exact date or amount plus a permanent reason.
+  // Holds and discount requests require an exact date or amount plus a permanent reason.
   const submitException = async () => {
     if (!exceptionAction) return;
     try {
@@ -370,16 +395,43 @@ function AccountOperationsPanel({
           <div className="flex flex-wrap gap-2">
             {/* Role and current status together determine the next legal action. */}
             {status === "active" && canManage && (
-              <ActionButton
-                label="Deactivate"
-                icon="link_off"
-                destructive
-                disabled={oltAccountActions?.integrated === true && !oltAccountActions.ready}
-                title={oltAccountActions?.integrated === true && !oltAccountActions.ready
-                  ? oltAccountActions.reason || "Verify the OLT mapping first."
-                  : undefined}
-                onClick={() => startAction("deactivate")}
-              />
+              <>
+                <ActionButton
+                  label="Deactivate"
+                  icon="link_off"
+                  destructive
+                  disabled={oltAccountActions?.integrated === true && !oltAccountActions.ready}
+                  title={oltAccountActions?.integrated === true && !oltAccountActions.ready
+                    ? oltAccountActions.reason || "Verify the OLT mapping first."
+                    : undefined}
+                  onClick={() => startAction("deactivate")}
+                />
+                <ActionButton
+                  label="Mark Offline"
+                  icon="cloud_off"
+                  title="The OLT still shows this ONT active, but it has been physically offline and the customer is not getting service. Stops billing without a reconnection fee."
+                  onClick={() => startAction("mark-offline")}
+                />
+              </>
+            )}
+            {status === "offline" && canManage && (
+              <>
+                <ActionButton
+                  label="Restore Service"
+                  icon="cloud_done"
+                  onClick={() => startAction("restore-from-offline")}
+                />
+                <ActionButton
+                  label="Deactivate"
+                  icon="link_off"
+                  destructive
+                  disabled={oltAccountActions?.integrated === true && !oltAccountActions.ready}
+                  title={oltAccountActions?.integrated === true && !oltAccountActions.ready
+                    ? oltAccountActions.reason || "Verify the OLT mapping first."
+                    : "Formally cut this account off (sends the real OLT deactivate command when the ONT is mapped)."}
+                  onClick={() => startAction("deactivate")}
+                />
+              </>
             )}
             {status === "disconnected" && !pendingReconnectionRequest && (
               <ActionButton
@@ -438,7 +490,7 @@ function AccountOperationsPanel({
                 }}
               />
             )}
-            {canManage && !pendingWaiverRequest && (
+            {canRequestDiscount && !pendingWaiverRequest && (
               <ActionButton
                 label={
                   billing && Number(billing.offline_charge_review_amount) > 0
@@ -490,7 +542,7 @@ function AccountOperationsPanel({
             <div>
               <p className="font-semibold">Discount approval pending</p>
               <p className="mt-1 text-xs">
-                J${Number(pendingWaiverRequest.amount).toLocaleString()} requested by {pendingWaiverRequest.requested_by_name || "Management"}: {pendingWaiverRequest.reason}
+                J${Number(pendingWaiverRequest.amount).toLocaleString()} requested by {pendingWaiverRequest.requested_by_name || "an office employee"}: {pendingWaiverRequest.reason}
               </p>
             </div>
             <span className="whitespace-nowrap text-xs font-bold uppercase tracking-wider">Admin review required</span>
@@ -518,6 +570,16 @@ function AccountOperationsPanel({
         ))}
         {billing && (
           <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {status === "offline" && (
+              <div className="rounded-lg border border-[#8a2d5f]/30 bg-[#8a2d5f]/10 p-3 text-xs text-[#8a2d5f] sm:col-span-2 lg:col-span-4">
+                <p className="font-semibold">
+                  No service since {billing.no_service_since ? formatDate(billing.no_service_since) : "the last recorded payment"}
+                </p>
+                <p className="mt-1">
+                  The OLT still lists this ONT as active but it has been offline. Billing is paused and the balance is frozen. Payments are blocked until the account is restored to active.
+                </p>
+              </div>
+            )}
             {/* Balance and dates explain exactly why an account is delinquent. */}
             <BillingFact label="Outstanding" value={formatCurrency(billing.outstanding_balance)} />
             <BillingFact label="Credit" value={formatCurrency(billing.credit_balance)} />
@@ -539,7 +601,7 @@ function AccountOperationsPanel({
                   Possible no-service charges: {formatCurrency(billing.offline_charge_review_amount)} across {billing.offline_charge_review_count} billing date{billing.offline_charge_review_count === 1 ? "" : "s"}
                 </p>
                 <p className="mt-1">
-                  The system has not removed this money. Management should compare the status history, then use Review Offline Charges to request an audited discount when appropriate.
+                  The system has not removed this money. Staff should compare the status history, then use Review Offline Charges to request an audited discount when appropriate.
                 </p>
               </div>
             )}
@@ -799,6 +861,7 @@ function StatusBadge({ status }: { status: AccountStatus }) {
     pending_reconnection: "bg-warning-container text-warning",
     closed: "bg-surface-container-high text-on-surface-variant",
     archived: "bg-surface-container-high text-on-surface-variant",
+    offline: "bg-[#8a2d5f]/10 text-[#8a2d5f]",
   };
   return (
     <span

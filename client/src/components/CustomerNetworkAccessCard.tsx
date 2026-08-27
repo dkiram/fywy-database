@@ -7,7 +7,7 @@
  */
 import { useEffect, useId, useState } from "react";
 import { apiFetch } from "../lib/api";
-import type { AccountStatusUpdate } from "./AccountOperationsPanel";
+import type { AccountStatus, AccountStatusUpdate } from "./AccountOperationsPanel";
 
 type NetworkAccess = {
   customer_ont_assignment_id: number;
@@ -147,7 +147,7 @@ export default function CustomerNetworkAccessCard({
 }: {
   customerId: number;
   canEdit: boolean;
-  accountStatus: "active" | "disconnected" | "pending_reconnection" | "closed" | "archived";
+  accountStatus: AccountStatus;
   onStatusSynced?: (update: AccountStatusUpdate) => void;
 }) {
   const oltListId = useId();

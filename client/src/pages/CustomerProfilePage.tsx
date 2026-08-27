@@ -866,6 +866,7 @@ function statusPillClass(status: AccountStatus) {
     pending_reconnection: "bg-warning-container text-warning",
     closed: "bg-surface-container-high text-on-surface-variant",
     archived: "bg-surface-container-high text-on-surface-variant",
+    offline: "bg-[#8a2d5f]/10 text-[#8a2d5f]",
   };
   return styles[status];
 }

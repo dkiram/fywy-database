@@ -55,6 +55,9 @@ wrong, nothing is written. Re-runs skip accounts already disconnected.
 
 ### Options
 
+- `--include-ont-mapped` — also disconnect accounts that have a current ONT
+  assignment (DB status only; the ONT still needs the OLT deactivate command
+  afterwards). Default leaves those for the OLT workflow.
 - `--scheduled-before YYYY-MM-DD` — move the cutoff (default `2026-01-01`).
 - `--effective-date today|scheduled` — `today` (default) records the
   disconnection now; `scheduled` backdates it to the missed disconnection date

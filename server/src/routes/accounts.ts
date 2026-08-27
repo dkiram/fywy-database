@@ -23,13 +23,14 @@ import {
 // history, and writes an audit log inside one database transaction.
 const accountsRouter = Router();
 
-// Keep this union aligned with the database checks in migration 024.
+// Keep this union aligned with the database checks in migrations 024 and 063.
 type AccountStatus =
   | "active"
   | "disconnected"
   | "pending_reconnection"
   | "closed"
-  | "archived";
+  | "archived"
+  | "offline";
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.employee) {
@@ -52,6 +53,26 @@ function requireAccountManager(
   if (!["admin", "head_office"].includes(employee.role)) {
     return res.status(403).json({
       error: "Only Admin and Head Office can manage account operations.",
+    });
+  }
+  next();
+}
+
+// Requesting a discount is available to every signed-in office role. This is
+// intentionally narrower than account management: branch staff may propose an
+// amount and reason, but only Admin can review or apply the resulting waiver.
+function requireDiscountRequester(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const employee = req.session.employee;
+  if (!employee) {
+    return res.status(401).json({ error: "Not authenticated." });
+  }
+  if (!["admin", "head_office", "branch"].includes(employee.role)) {
+    return res.status(403).json({
+      error: "Your employee role cannot request balance discounts.",
     });
   }
   next();
@@ -826,6 +847,7 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
       AND NULLIF(BTRIM(c.name), '') IS NOT NULL`,
     pending_reconnection: "c.status = 'pending_reconnection'",
     disconnected: "c.status = 'disconnected'",
+    offline: "c.status = 'offline'",
     active: "c.status = 'active'",
     all: "TRUE",
   };
@@ -933,6 +955,7 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
           COUNT(*) FILTER (
             WHERE status = 'pending_reconnection'
           )::INTEGER AS pending_reconnection,
+          COUNT(*) FILTER (WHERE status = 'offline')::INTEGER AS offline,
           (SELECT COUNT(*)::INTEGER
             FROM public.customer_billing_status billing
             JOIN public.customers c2 USING (customer_id)
@@ -1222,11 +1245,21 @@ accountsRouter.get(
             COALESCE(review.charge_count, 0)::INTEGER AS offline_charge_review_count,
             COALESCE(review.charge_amount, 0)::NUMERIC(14,2) AS offline_charge_review_amount,
             review.first_charge_date AS offline_charge_review_from,
-            review.last_charge_date AS offline_charge_review_to
+            review.last_charge_date AS offline_charge_review_to,
+            -- Shown on the profile when the account is offline: the last month
+            -- the customer actually paid for is the honest "no service since"
+            -- date, regardless of when staff recorded the offline status.
+            last_paid.no_service_since
           FROM public.customer_billing_status billing
           JOIN public.customers c USING (customer_id)
           LEFT JOIN public.customer_offline_monthly_charge_review review
             USING (customer_id)
+          LEFT JOIN LATERAL (
+            SELECT MAX(p.payment_date) AS no_service_since
+            FROM public.payments p
+            WHERE p.customer_id = billing.customer_id
+              AND p.voided_at IS NULL
+          ) last_paid ON TRUE
           WHERE billing.customer_id = $1;
           `,
           [customerId]
@@ -1328,12 +1361,12 @@ accountsRouter.post(
   }
 );
 
-// Management submits the exact proposed discount. No balance changes until an
+// Office staff submit the exact proposed discount. No balance changes until an
 // administrator reviews the durable request and explicitly approves it.
 accountsRouter.post(
   "/customers/:customerId/waiver-requests",
   requireAuth,
-  requireAccountManager,
+  requireDiscountRequester,
   async (req, res) => {
     const customerId = parseCustomerId(req, res);
     if (customerId === null) return;
@@ -1428,7 +1461,7 @@ accountsRouter.post(
 accountsRouter.get(
   "/customers/:customerId/waiver-requests",
   requireAuth,
-  requireAccountManager,
+  requireDiscountRequester,
   async (req, res) => {
     const customerId = parseCustomerId(req, res);
     if (customerId === null) return;
@@ -1852,14 +1885,51 @@ accountsRouter.post(
       req,
       res,
       {
+        // Also reachable from 'offline': an account that drifted out of
+        // service can be formally cut off. When the customer has an ONT
+        // mapping the OLT still gets the real deactivate command here.
         action: "Deactivated customer account",
-        allowedFrom: ["active"],
+        allowedFrom: ["active", "offline"],
         toStatus: "disconnected",
         updateDateColumn: "deactivation_date",
       },
       "deactivate",
       "DEACTIVATE"
     )
+);
+
+// Management action: active -> offline. The OLT still shows this ONT as active,
+// but it has been physically dark long enough that the customer is not getting
+// service. No OLT command is sent and no reconnection fee is created. Billing
+// stops through the migration 054 service-timeline trigger, and the account
+// leaves the delinquency chase list because that list is active-only.
+accountsRouter.post(
+  "/customers/:customerId/mark-offline",
+  requireAuth,
+  requireAccountManager,
+  (req, res) =>
+    transitionAccount(req, res, {
+      action: "Marked customer account offline",
+      allowedFrom: ["active"],
+      toStatus: "offline",
+    })
+);
+
+// Management action: offline -> active. Service configuration was never removed
+// from the OLT, so this is only a records change: no OLT command, no
+// reconnection fee, and no cleared-balance requirement. Staff should verify the
+// live ONT separately.
+accountsRouter.post(
+  "/customers/:customerId/restore-from-offline",
+  requireAuth,
+  requireAccountManager,
+  (req, res) =>
+    transitionAccount(req, res, {
+      action: "Restored customer account from offline",
+      allowedFrom: ["offline"],
+      toStatus: "active",
+      updateDateColumn: "reactivation_date",
+    })
 );
 
 // A cleared account enters the queue immediately. An unpaid account creates an

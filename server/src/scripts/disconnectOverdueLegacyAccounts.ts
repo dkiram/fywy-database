@@ -213,6 +213,11 @@ async function run() {
     throw new Error('--effective-date must be "scheduled" or "today".');
   }
 
+  // By default accounts with a current ONT assignment are left for the OLT
+  // workflow. This sweeps them into the same status change (DB only — the ONT
+  // still needs the real deactivate command afterwards).
+  const includeOntMapped = process.argv.includes("--include-ont-mapped");
+
   if (!username) {
     throw new Error(`--performed-by is required.\n\n${usage()}`);
   }
@@ -251,10 +256,16 @@ async function run() {
     );
 
     const withOlt = rows.filter((row) => row.has_olt_mapping);
-    const toDisconnect = rows.filter((row) => !row.has_olt_mapping);
+    const noOlt = rows.filter((row) => !row.has_olt_mapping);
+    const toDisconnect = includeOntMapped ? rows : noOlt;
 
-    printGroup("HAS ONT ASSIGNMENT — left active for you to sync to the OLT", withOlt);
-    printGroup("NO ONT ASSIGNMENT — will be marked disconnected", toDisconnect);
+    printGroup(
+      includeOntMapped
+        ? "HAS ONT ASSIGNMENT — will be marked disconnected (ONT still needs the OLT deactivate command)"
+        : "HAS ONT ASSIGNMENT — left active for you to sync to the OLT",
+      withOlt
+    );
+    printGroup("NO ONT ASSIGNMENT — will be marked disconnected", noOlt);
 
     const totalOfflineCharges = toDisconnect.reduce(
       (sum, row) => sum + Number(row.offline_charge_amount),
@@ -280,7 +291,8 @@ async function run() {
           `To apply: --apply --expected-count ${toDisconnect.length} ` +
             `--confirmation "${expectedConfirmation}"` +
             (scheduledBeforeArg ? ` --scheduled-before ${scheduledBefore}` : "") +
-            (effectiveMode === "today" ? " --effective-date today" : "")
+            (effectiveMode === "today" ? " --effective-date today" : "") +
+            (includeOntMapped ? " --include-ont-mapped" : "")
         );
       }
       return;
@@ -374,8 +386,11 @@ async function run() {
 
     await client.query("COMMIT");
     console.log(
-      `\nMarked ${changed} account(s) disconnected. ${withOlt.length} account(s) with an ` +
-        `ONT assignment were left active for the OLT sync. No balances were changed.`
+      `\nMarked ${changed} account(s) disconnected. ` +
+        (includeOntMapped
+          ? `${withOlt.length} of them still need the OLT deactivate command. `
+          : `${withOlt.length} account(s) with an ONT assignment were left active for the OLT sync. `) +
+        "No balances were changed."
     );
   } catch (error) {
     await client.query("ROLLBACK");
