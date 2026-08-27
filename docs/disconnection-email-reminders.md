@@ -16,8 +16,11 @@ A customer is queued only when all of these are true:
 - the due date passed exactly five days ago;
 - the ten-day grace period ends exactly five days from today;
 - no disconnection hold is active;
-- the account ledger has no unverified entries; and
 - the account has a usable email address.
+
+Unverified historical billing entries do not block this reminder. The message
+does not state an outstanding amount, but SPCL still requires a recorded
+positive balance and the exact due/grace dates before sending.
 
 The worker checks those rules again immediately before sending. A payment,
 hold, status change, revised disconnection date, or hidden account therefore
@@ -26,10 +29,12 @@ uses the current address.
 
 ## Safety and delivery
 
-Migrations `059_add_disconnection_email_reminders.sql` and
-`060_align_email_reminders_to_grace_period.sql` create the durable queue and
-align it to the ten-day grace period. The unique key allows only one five-day
-warning per customer and grace-period end date, even after an API restart.
+Migrations `059_add_disconnection_email_reminders.sql`,
+`060_align_email_reminders_to_grace_period.sql`, and
+`061_version_email_reminder_eligibility.sql` create the durable queue, align it
+to the ten-day grace period, and safely version eligibility changes. The unique
+key allows only one five-day warning per customer and grace-period end date,
+even after an API restart.
 Failed Gmail requests retry up to three times by default; missing or invalid
 emails are recorded as skips.
 
@@ -77,7 +82,6 @@ WHERE c.status = 'active'
   AND b.grace_end_date =
       (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE + 5
   AND b.is_on_hold = FALSE
-  AND b.unverified_entries = 0
   AND c.email IS NOT NULL
   AND LENGTH(BTRIM(c.email)) <= 254
   AND BTRIM(c.email) ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'

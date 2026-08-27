@@ -5,6 +5,7 @@ import { isEmail } from "./gmailClient.js";
 import { sendDisconnectionReminderEmail } from "./disconnectionReminderEmail.js";
 
 const REMINDER_LOCK_ID = 821_005_005;
+const ELIGIBILITY_VERSION = 2;
 const MINUTE = 60_000;
 const AUTOMATION_ACTOR = "SPCL Automatic Email Reminder Scheduler";
 
@@ -101,11 +102,24 @@ export async function queueFiveDayDisconnectionReminders(billingDate = jamaicaCl
     await client.query(`SELECT public.spcl_generate_monthly_charges($1::DATE);`, [billingDate]);
     const runResult = await client.query(
       `INSERT INTO public.customer_email_notification_runs (
-         notification_type, billing_date
-       ) VALUES ('disconnection_5_day', $1)
-       ON CONFLICT (notification_type, billing_date) DO NOTHING
+         notification_type, billing_date, eligibility_version
+       ) VALUES ('disconnection_5_day', $1, $2)
+       ON CONFLICT (notification_type, billing_date) DO UPDATE SET
+         status = 'running',
+         eligibility_version = EXCLUDED.eligibility_version,
+         candidate_count = 0,
+         queued_count = 0,
+         skipped_count = 0,
+         error_message = NULL,
+         started_at = CURRENT_TIMESTAMP,
+         completed_at = NULL
+       WHERE customer_email_notification_runs.eligibility_version
+               < EXCLUDED.eligibility_version
+         AND customer_email_notification_runs.candidate_count = 0
+         AND customer_email_notification_runs.queued_count = 0
+         AND customer_email_notification_runs.skipped_count = 0
        RETURNING customer_email_notification_run_id;`,
-      [billingDate],
+      [billingDate, ELIGIBILITY_VERSION],
     );
     if (runResult.rows.length === 0) {
       await client.query("ROLLBACK");
@@ -152,7 +166,6 @@ export async function queueFiveDayDisconnectionReminders(billingDate = jamaicaCl
          AND billing.oldest_unpaid_due_date = $2::DATE - 5
          AND billing.grace_end_date = $2::DATE + 5
          AND billing.is_on_hold = FALSE
-         AND billing.unverified_entries = 0
        ON CONFLICT (deduplication_key) DO NOTHING;`,
       [runId, billingDate],
     );
@@ -209,8 +222,7 @@ async function currentEligibility(client: PoolClient, item: QueueRow) {
        AND billing.outstanding_balance > 0
        AND billing.oldest_unpaid_due_date = $2::DATE
        AND billing.grace_end_date = $3::DATE
-       AND billing.is_on_hold = FALSE
-       AND billing.unverified_entries = 0;`,
+       AND billing.is_on_hold = FALSE;`,
     [item.customer_id, toIsoDate(item.due_date), toIsoDate(item.grace_end_date)],
   );
   return result.rows[0] ?? null;
