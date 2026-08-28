@@ -558,21 +558,44 @@ networkAccessRouter.post(
           resolution: "failed" | "confirmed";
         }> = [];
         if (liveOnt && serialMatches) {
+          // Name the customer holding the serial. Almost always the previous
+          // occupant of this port whose mapping was never released, which is
+          // exactly what the reviewer needs to know to clear the conflict.
           const serialConflict = await client.query(
-            `SELECT customer_ont_assignment_id
-             FROM public.customer_ont_assignments
-             WHERE ended_at IS NULL
-               AND customer_ont_assignment_id <> $1
-               AND ont_serial IS NOT NULL
-               AND UPPER(TRIM(ont_serial)) = UPPER(TRIM($2))
+            `SELECT conflicting.customer_ont_assignment_id,
+                    holder.customer_id,
+                    holder.name AS customer_name,
+                    holder.status AS customer_status,
+                    conflictOlt.name AS olt_name,
+                    conflicting.frame_number,
+                    conflicting.slot_number,
+                    conflicting.pon_port_number,
+                    conflicting.ont_id
+             FROM public.customer_ont_assignments conflicting
+             JOIN public.customers holder
+               ON holder.customer_id = conflicting.customer_id
+             JOIN public.olts conflictOlt
+               ON conflictOlt.olt_id = conflicting.olt_id
+             WHERE conflicting.ended_at IS NULL
+               AND conflicting.customer_ont_assignment_id <> $1
+               AND conflicting.ont_serial IS NOT NULL
+               AND UPPER(TRIM(conflicting.ont_serial)) = UPPER(TRIM($2))
              LIMIT 1
-             FOR UPDATE;`,
+             FOR UPDATE OF conflicting;`,
             [assignmentId, liveOnt.ontSerial]
           );
           if (serialConflict.rows.length > 0) {
+            const holder = serialConflict.rows[0];
             serialAssignedElsewhere = true;
             verified = false;
-            mismatchReasons.push("ONT serial is already assigned to another customer");
+            mismatchReasons.push(
+              `ONT serial ${liveOnt.ontSerial} is already assigned to customer ` +
+                `#${holder.customer_id} ${holder.customer_name} ` +
+                `(${String(holder.customer_status).replace(/_/g, " ")}, on ` +
+                `${holder.olt_name} ${holder.frame_number}/${holder.slot_number}/` +
+                `${holder.pon_port_number}/${holder.ont_id}) — remove the OLT ` +
+                `information from that customer, then verify again`
+            );
           }
         }
 
