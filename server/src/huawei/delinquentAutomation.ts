@@ -26,6 +26,7 @@ type Candidate = {
   pon_port_number: number | null;
   ont_id: number | null;
   ont_serial: string | null;
+  ont_description_override: string | null;
   mapping_status: string | null;
   candidate_count: number;
 };
@@ -377,7 +378,8 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
          billing.unverified_entries,
          assignment.customer_ont_assignment_id,
          assignment.mapping_status,
-         assignment.ont_serial
+         assignment.ont_serial,
+         assignment.ont_description_override
        FROM public.customers customer
        JOIN public.customer_billing_status billing USING (customer_id)
        JOIN public.customer_ont_assignments assignment
@@ -395,7 +397,9 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
       current.eligible_for_disconnection !== true ||
       Number(current.unverified_entries) > 0 ||
       current.mapping_status !== "verified" ||
-      String(current.ont_serial ?? "").toUpperCase() !== String(candidate.ont_serial).toUpperCase()
+      String(current.ont_serial ?? "").toUpperCase() !== String(candidate.ont_serial).toUpperCase() ||
+      (current.ont_description_override ?? null) !==
+        (candidate.ont_description_override ?? null)
     ) {
       const message = "Customer was no longer safely eligible immediately before the OLT action; no command was sent.";
       await client.query(
@@ -419,7 +423,8 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
       },
       {
         ontSerial: String(candidate.ont_serial),
-        customerName: candidate.customer_name,
+        customerName:
+          candidate.ont_description_override ?? candidate.customer_name,
       },
       "deactivate"
     );
@@ -581,6 +586,7 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
          assignment.pon_port_number,
          assignment.ont_id,
          assignment.ont_serial,
+         assignment.ont_description_override,
          assignment.mapping_status,
          COUNT(*) OVER()::INTEGER AS candidate_count
        FROM public.customer_billing_status billing

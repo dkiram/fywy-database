@@ -87,6 +87,9 @@ const currentAssignmentSelect = `
     assignment.pon_port_number,
     assignment.ont_id,
     assignment.ont_serial,
+    assignment.ont_description_override,
+    assignment.description_override_reason,
+    assignment.description_overridden_at,
     customer.name AS customer_name,
     customer.status AS customer_status,
     assignment.source,
@@ -104,6 +107,12 @@ const currentAssignmentSelect = `
   WHERE assignment.customer_id = $1
     AND assignment.ended_at IS NULL
 `;
+
+function expectedOntDescription(assignment: any) {
+  return String(
+    assignment?.ont_description_override ?? assignment?.customer_name ?? ""
+  );
+}
 
 // Avoid running two interactive CLI sessions for the same imported mapping.
 // This is process-local; PostgreSQL row checks below remain the final guard.
@@ -364,8 +373,9 @@ networkAccessRouter.post(
       const descriptionMatches =
         !!liveOnt?.description &&
         normalizeExactCustomerName(liveOnt.description) ===
-          normalizeExactCustomerName(initial.customer_name ?? "");
+          normalizeExactCustomerName(expectedOntDescription(initial));
       let verified = !!liveOnt && serialMatches && descriptionMatches;
+      let serialAssignedElsewhere = false;
       const mismatchReasons: string[] = [];
       if (!liveOnt) mismatchReasons.push("ONT ID was not found at the saved location");
       if (liveOnt && !serialMatches) mismatchReasons.push("ONT serial does not match");
@@ -389,7 +399,9 @@ networkAccessRouter.post(
           Number(locked.frame_number) !== Number(initial.frame_number) ||
           Number(locked.slot_number) !== Number(initial.slot_number) ||
           Number(locked.pon_port_number) !== Number(initial.pon_port_number) ||
-          Number(locked.ont_id) !== Number(initial.ont_id)
+          Number(locked.ont_id) !== Number(initial.ont_id) ||
+          String(locked.ont_description_override ?? "") !==
+            String(initial.ont_description_override ?? "")
         ) {
           await client.query("ROLLBACK");
           return res.status(409).json({
@@ -403,7 +415,7 @@ networkAccessRouter.post(
           action: OntControlAction;
           resolution: "failed" | "confirmed";
         }> = [];
-        if (verified && liveOnt) {
+        if (liveOnt && serialMatches) {
           const serialConflict = await client.query(
             `SELECT customer_ont_assignment_id
              FROM public.customer_ont_assignments
@@ -416,6 +428,7 @@ networkAccessRouter.post(
             [assignmentId, liveOnt.ontSerial]
           );
           if (serialConflict.rows.length > 0) {
+            serialAssignedElsewhere = true;
             verified = false;
             mismatchReasons.push("ONT serial is already assigned to another customer");
           }
@@ -628,6 +641,12 @@ networkAccessRouter.post(
                   description: liveOnt.description,
                 }
               : null,
+            overrideEligible: Boolean(
+              liveOnt?.description &&
+                serialMatches &&
+                !serialAssignedElsewhere &&
+                !descriptionMatches
+            ),
             reconciledAttemptIds,
             clearedAccountAttempts,
           },
@@ -649,6 +668,228 @@ networkAccessRouter.post(
       }
       console.error("Could not verify customer OLT information:", error);
       return res.status(500).json({ error: "Could not verify OLT information." });
+    } finally {
+      verificationsInProgress.delete(assignmentId);
+    }
+  }
+);
+
+networkAccessRouter.post(
+  "/customers/:customerId/network-access/description-override",
+  requireAuth,
+  requireNetworkManager,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+
+    const reason = cleanText(req.body.reason);
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({
+        error: "A reason between 3 and 500 characters is required.",
+      });
+    }
+    const requiredConfirmation = `OVERRIDE DESCRIPTION ${customerId}`;
+    if (cleanText(req.body.confirmation) !== requiredConfirmation) {
+      return res.status(400).json({
+        error: `Type ${requiredConfirmation} exactly to confirm.`,
+      });
+    }
+
+    const initialResult = await pool.query(`${currentAssignmentSelect};`, [customerId]);
+    const initial = initialResult.rows[0] ?? null;
+    if (!initial) {
+      return res.status(404).json({ error: "No current OLT mapping exists for this customer." });
+    }
+
+    const assignmentId = Number(initial.customer_ont_assignment_id);
+    if (
+      verificationsInProgress.has(assignmentId) ||
+      ontActionsInProgress.has(assignmentId)
+    ) {
+      return res.status(409).json({
+        error: "This OLT mapping already has an operation in progress.",
+      });
+    }
+
+    const employee = req.session.employee!;
+    verificationsInProgress.add(assignmentId);
+    try {
+      // The browser never supplies the description being accepted. Re-read it
+      // from Huawei now so stale or altered page data cannot authorize one.
+      const liveOnt = await readOntFromOlt({
+        managementIp: initial.management_ip,
+        frameNumber: Number(initial.frame_number),
+        slotNumber: Number(initial.slot_number),
+        ponPortNumber: Number(initial.pon_port_number),
+        ontId: Number(initial.ont_id),
+      });
+      if (!liveOnt?.description?.trim()) {
+        return res.status(409).json({
+          error: "The live ONT or its Huawei description was not found. Nothing was overridden.",
+        });
+      }
+      if (
+        initial.ont_serial &&
+        String(initial.ont_serial).trim().toUpperCase() !== liveOnt.ontSerial
+      ) {
+        return res.status(409).json({
+          error: "The live ONT serial differs from the saved serial. Nothing was overridden.",
+        });
+      }
+      if (
+        normalizeExactCustomerName(liveOnt.description) ===
+        normalizeExactCustomerName(initial.customer_name ?? "")
+      ) {
+        return res.status(409).json({
+          error: "The live Huawei description already matches the customer name. Use normal verification.",
+        });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const lockedResult = await client.query(
+          `SELECT *
+           FROM public.customer_ont_assignments
+           WHERE customer_ont_assignment_id = $1
+             AND customer_id = $2
+             AND ended_at IS NULL
+           FOR UPDATE;`,
+          [assignmentId, customerId]
+        );
+        const locked = lockedResult.rows[0];
+        if (
+          !locked ||
+          Number(locked.olt_id) !== Number(initial.olt_id) ||
+          Number(locked.frame_number) !== Number(initial.frame_number) ||
+          Number(locked.slot_number) !== Number(initial.slot_number) ||
+          Number(locked.pon_port_number) !== Number(initial.pon_port_number) ||
+          Number(locked.ont_id) !== Number(initial.ont_id) ||
+          String(locked.ont_serial ?? "").trim().toUpperCase() !==
+            String(initial.ont_serial ?? "").trim().toUpperCase()
+        ) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            error: "The OLT mapping changed during the live check. Nothing was overridden.",
+          });
+        }
+
+        // These explicit checks are intentionally repeated under the row
+        // lock. A description exception can never resolve an occupied OLT
+        // location or a serial assigned to another current customer.
+        const locationConflict = await client.query(
+          `SELECT customer_ont_assignment_id
+           FROM public.customer_ont_assignments
+           WHERE ended_at IS NULL
+             AND customer_ont_assignment_id <> $1
+             AND olt_id = $2
+             AND frame_number = $3
+             AND slot_number = $4
+             AND pon_port_number = $5
+             AND ont_id = $6
+           LIMIT 1
+           FOR UPDATE;`,
+          [
+            assignmentId,
+            initial.olt_id,
+            initial.frame_number,
+            initial.slot_number,
+            initial.pon_port_number,
+            initial.ont_id,
+          ]
+        );
+        const serialConflict = await client.query(
+          `SELECT customer_ont_assignment_id
+           FROM public.customer_ont_assignments
+           WHERE ended_at IS NULL
+             AND customer_ont_assignment_id <> $1
+             AND ont_serial IS NOT NULL
+             AND UPPER(TRIM(ont_serial)) = UPPER(TRIM($2))
+           LIMIT 1
+           FOR UPDATE;`,
+          [assignmentId, liveOnt.ontSerial]
+        );
+        if (locationConflict.rows.length > 0 || serialConflict.rows.length > 0) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            error:
+              locationConflict.rows.length > 0
+                ? "That OLT location is assigned to another current customer. Nothing was overridden."
+                : "That ONT serial is assigned to another current customer. Nothing was overridden.",
+          });
+        }
+
+        await client.query(
+          `UPDATE public.customer_ont_assignments
+           SET ont_serial = COALESCE(ont_serial, $2),
+               ont_description_override = $3,
+               description_override_reason = $4,
+               description_overridden_at = CURRENT_TIMESTAMP,
+               description_overridden_by_employee_id = $5::BIGINT,
+               mapping_status = 'verified',
+               verified_at = CURRENT_TIMESTAMP,
+               verified_by_employee_id = $5::BIGINT,
+               updated_by_employee_id = $5::BIGINT,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE customer_ont_assignment_id = $1;`,
+          [
+            assignmentId,
+            liveOnt.ontSerial,
+            liveOnt.description.trim(),
+            reason,
+            employee.employeeId,
+          ]
+        );
+
+        const savedResult = await client.query(`${currentAssignmentSelect};`, [customerId]);
+        const saved = savedResult.rows[0];
+        await insertAudit(client, {
+          employeeId: employee.employeeId,
+          actorName: `${employee.firstName} ${employee.lastName}`,
+          customerId,
+          action: "Confirmed Huawei ONT description override",
+          oldValue: initial,
+          newValue: {
+            ...saved,
+            liveControlFlag: liveOnt.controlFlag,
+            liveRunState: liveOnt.runState,
+          },
+          reason,
+        });
+        await client.query("COMMIT");
+
+        return res.json({
+          networkAccess: saved,
+          verification: {
+            status: "verified",
+            message:
+              "The live location and serial matched. This exact Huawei description is now the approved identity for future checks.",
+            checkedAt: new Date().toISOString(),
+            live: {
+              controlFlag: liveOnt.controlFlag,
+              runState: liveOnt.runState,
+              description: liveOnt.description,
+            },
+            overrideEligible: false,
+          },
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      if (error instanceof OltVerificationError) {
+        return res.status(error.kind === "configuration" ? 503 : 502).json({
+          error: error.message,
+          code: `olt_${error.kind}_error`,
+        });
+      }
+      console.error("Could not confirm ONT description override:", error);
+      return res.status(500).json({
+        error: "Could not confirm the ONT description override.",
+      });
     } finally {
       verificationsInProgress.delete(assignmentId);
     }
@@ -771,7 +1012,7 @@ networkAccessRouter.post(
         },
         {
           ontSerial: String(initial.ont_serial),
-          customerName: String(initial.customer_name ?? ""),
+          customerName: expectedOntDescription(initial),
         },
         action
       );
@@ -790,8 +1031,15 @@ networkAccessRouter.post(
            WHERE customer_ont_assignment_id = $1
              AND customer_id = $2
              AND ended_at IS NULL
+             AND ont_serial = $3
+             AND ont_description_override IS NOT DISTINCT FROM $4
            FOR UPDATE;`,
-          [assignmentId, customerId]
+          [
+            assignmentId,
+            customerId,
+            initial.ont_serial,
+            initial.ont_description_override,
+          ]
         );
         if (lockResult.rows.length === 0) {
           throw new Error("The customer OLT mapping changed during the live operation.");

@@ -40,6 +40,7 @@ type ReconnectionJob = {
   pon_port_number: number | null;
   ont_id: number | null;
   ont_serial: string | null;
+  ont_description_override: string | null;
   mapping_status: string | null;
 };
 
@@ -221,6 +222,7 @@ async function loadJob(jobId: number) {
        assignment.pon_port_number,
        assignment.ont_id,
        assignment.ont_serial,
+       assignment.ont_description_override,
        assignment.mapping_status
      FROM public.olt_reconnection_automation_jobs job
      JOIN public.customers customer ON customer.customer_id = job.customer_id
@@ -390,7 +392,8 @@ async function processJob(jobId: number) {
          billing.ready_for_reconnection,
          assignment.customer_ont_assignment_id,
          assignment.mapping_status,
-         assignment.ont_serial
+         assignment.ont_serial,
+         assignment.ont_description_override
        FROM public.customers customer
        JOIN public.customer_billing_status billing USING (customer_id)
        JOIN public.customer_ont_assignments assignment
@@ -428,7 +431,9 @@ async function processJob(jobId: number) {
     }
     if (
       current.mapping_status !== "verified" ||
-      String(current.ont_serial ?? "").toUpperCase() !== String(job.ont_serial).toUpperCase()
+      String(current.ont_serial ?? "").toUpperCase() !== String(job.ont_serial).toUpperCase() ||
+      (current.ont_description_override ?? null) !==
+        (job.ont_description_override ?? null)
     ) {
       const message = "The verified OLT mapping changed before activation; no command was sent.";
       await client.query(
@@ -452,7 +457,7 @@ async function processJob(jobId: number) {
       },
       {
         ontSerial: String(job.ont_serial),
-        customerName: job.customer_name,
+        customerName: job.ont_description_override ?? job.customer_name,
       },
       "activate"
     );

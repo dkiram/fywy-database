@@ -14,6 +14,7 @@ import {
   readOntFromOlt,
   type OntControlAction,
 } from "../huawei/verifyOnt.js";
+import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
 
 // MVP 3 account-operations API.
 //
@@ -501,6 +502,7 @@ type AccountOntContext = {
   pon_port_number: number | null;
   ont_id: number | null;
   ont_serial: string | null;
+  ont_description_override: string | null;
   mapping_status: string | null;
 };
 
@@ -519,6 +521,7 @@ async function loadAccountOntContext(customerId: number) {
        assignment.pon_port_number,
        assignment.ont_id,
        assignment.ont_serial,
+       assignment.ont_description_override,
        assignment.mapping_status
      FROM public.customers customer
      LEFT JOIN public.customer_ont_assignments assignment
@@ -677,7 +680,7 @@ async function transitionAccountWithOnt(
       },
       {
         ontSerial: String(context.ont_serial),
-        customerName: context.customer_name,
+        customerName: context.ont_description_override ?? context.customer_name,
       },
       ontAction
     );
@@ -709,8 +712,14 @@ async function transitionAccountWithOnt(
            AND ended_at IS NULL
            AND mapping_status = 'verified'
            AND ont_serial = $3
+           AND ont_description_override IS NOT DISTINCT FROM $4
          FOR UPDATE;`,
-        [assignmentId, customerId, context.ont_serial]
+        [
+          assignmentId,
+          customerId,
+          context.ont_serial,
+          context.ont_description_override,
+        ]
       );
       if (assignmentLock.rows.length === 0) {
         throw new Error("The verified customer OLT mapping changed during the live action.");
@@ -2354,6 +2363,20 @@ accountsRouter.post(
       if (!liveOnt) {
         return res.status(409).json({
           error: "The ONT was not found at the saved OLT location. Re-verify the mapping first.",
+        });
+      }
+
+      const expectedDescription =
+        context.ont_description_override ?? context.customer_name;
+      if (
+        liveOnt.ontSerial !== String(context.ont_serial).trim().toUpperCase() ||
+        !liveOnt.description ||
+        normalizeExactCustomerName(liveOnt.description) !==
+          normalizeExactCustomerName(expectedDescription)
+      ) {
+        return res.status(409).json({
+          error:
+            "The live ONT identity differs from the verified serial or approved description. Re-verify the mapping before syncing the account.",
         });
       }
 

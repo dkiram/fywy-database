@@ -20,6 +20,9 @@ type NetworkAccess = {
   ont_id: number;
   source: "manual" | "u2000_import" | "api_sync";
   mapping_status: "unverified" | "verified" | "mismatch";
+  ont_description_override: string | null;
+  description_override_reason: string | null;
+  description_overridden_at: string | null;
   verified_at: string | null;
   verified_by_first_name: string | null;
   verified_by_last_name: string | null;
@@ -35,6 +38,7 @@ type VerificationResult = {
     runState: "online" | "offline";
     description: string | null;
   } | null;
+  overrideEligible?: boolean;
 };
 
 type OltOption = {
@@ -168,6 +172,10 @@ export default function CustomerNetworkAccessCard({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [showDescriptionOverride, setShowDescriptionOverride] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideConfirmation, setOverrideConfirmation] = useState("");
+  const [overridingDescription, setOverridingDescription] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -328,6 +336,44 @@ export default function CustomerNetworkAccessCard({
       );
     } finally {
       setControlling(false);
+    }
+  }
+
+  async function submitDescriptionOverride() {
+    try {
+      setOverridingDescription(true);
+      setError("");
+      setNotice("");
+      const response = await apiFetch(
+        `/api/customers/${customerId}/network-access/description-override`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reason: overrideReason,
+            confirmation: overrideConfirmation,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not confirm the Huawei description override.");
+      }
+      setNetworkAccess(data.networkAccess);
+      setVerification(data.verification);
+      setNotice(data.verification.message);
+      setShowDescriptionOverride(false);
+      setOverrideReason("");
+      setOverrideConfirmation("");
+      setExpanded(true);
+    } catch (overrideError) {
+      setError(
+        overrideError instanceof Error
+          ? overrideError.message
+          : "Could not confirm the Huawei description override."
+      );
+    } finally {
+      setOverridingDescription(false);
     }
   }
 
@@ -517,6 +563,20 @@ export default function CustomerNetworkAccessCard({
           <p className="mt-1 text-xs opacity-80">
             Sync uses Huawei’s Active/Deactivated control flag. Online/Offline only shows whether the ONT is currently registering and does not by itself change billing status.
           </p>
+          {canEdit && verification.overrideEligible && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowDescriptionOverride(true);
+                setOverrideReason("");
+                setOverrideConfirmation("");
+                setError("");
+              }}
+              className="mt-3 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
+            >
+              Confirm description override
+            </button>
+          )}
           {canEdit &&
             statusMismatch &&
             verification?.status !== "mismatch" &&
@@ -562,10 +622,22 @@ export default function CustomerNetworkAccessCard({
                   : "—"
               }
             />
+            {networkAccess.ont_description_override && (
+              <Value
+                label="Approved Huawei description"
+                value={networkAccess.ont_description_override}
+              />
+            )}
           </div>
+          {networkAccess.ont_description_override && (
+            <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-950">
+              Description override active: future verification and ONT actions must
+              match this exact Huawei description plus the saved serial and location.
+            </p>
+          )}
           <p className="mt-5 text-xs text-on-surface-variant">
             Location format: Frame / Card or Slot / PON Port / Virtual Port (ONT ID).
-            Live controls re-check the ONT serial and customer description before every command.
+            Live controls re-check the ONT serial, location, and approved description before every command.
           </p>
 
           {canEdit && ontControl?.allowlisted && (
@@ -728,6 +800,86 @@ export default function CustomerNetworkAccessCard({
                 }`}
               >
                 {controlling ? "Checking and applying..." : `${controlAction === "deactivate" ? "Deactivate" : "Activate"} ONT`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDescriptionOverride && networkAccess && verification?.live && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm Huawei ONT description override"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
+            <h3 className="text-xl font-semibold">Confirm description override</h3>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              The backend will re-read location {location} and its ONT serial. It will
+              accept only the exact live Huawei description shown below.
+            </p>
+            <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+              <p><strong>Live Huawei description:</strong> {verification.live.description || "—"}</p>
+              <p className="mt-2 text-xs">
+                This ignores only the customer-name mismatch. A duplicate serial,
+                occupied OLT location, missing ONT, or changed serial always blocks it.
+              </p>
+            </div>
+
+            <label className="mt-5 block text-sm font-semibold">
+              Reason <span className="text-error">*</span>
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={overrideReason}
+                onChange={(event) => setOverrideReason(event.target.value)}
+                className="mt-1.5 w-full resize-none rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
+                placeholder="Staff confirmed this legacy Huawei description belongs to this customer..."
+              />
+            </label>
+
+            <label className="mt-4 block text-sm font-semibold">
+              Type <strong>OVERRIDE DESCRIPTION {customerId}</strong> to confirm
+              <input
+                value={overrideConfirmation}
+                onChange={(event) => setOverrideConfirmation(event.target.value)}
+                autoComplete="off"
+                className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 font-mono text-sm"
+              />
+            </label>
+
+            {error && (
+              <p className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={overridingDescription}
+                onClick={() => {
+                  setShowDescriptionOverride(false);
+                  setOverrideReason("");
+                  setOverrideConfirmation("");
+                  setError("");
+                }}
+                className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  overridingDescription ||
+                  overrideReason.trim().length < 3 ||
+                  overrideConfirmation !== `OVERRIDE DESCRIPTION ${customerId}`
+                }
+                onClick={submitDescriptionOverride}
+                className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary disabled:opacity-50"
+              >
+                {overridingDescription ? "Rechecking live OLT..." : "Confirm override"}
               </button>
             </div>
           </div>
