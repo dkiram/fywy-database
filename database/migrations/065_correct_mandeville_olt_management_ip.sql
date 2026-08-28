@@ -4,13 +4,24 @@
 DO $$
 DECLARE
     mandeville_id BIGINT;
+    mandeville_row_count INTEGER;
     conflicting_olt TEXT;
     current_ip TEXT;
 BEGIN
+    SELECT COUNT(*)::INTEGER
+      INTO mandeville_row_count
+      FROM public.olts
+     WHERE normalized_name IN ('MANDEVILLE', 'MADEVILLE');
+
+    IF mandeville_row_count > 1 THEN
+        RAISE EXCEPTION
+            'Cannot correct Mandeville OLT: both Mandeville and Madeville inventory rows exist';
+    END IF;
+
     SELECT olt_id, host(management_ip)
       INTO mandeville_id, current_ip
       FROM public.olts
-     WHERE normalized_name = 'MANDEVILLE';
+     WHERE normalized_name IN ('MANDEVILLE', 'MADEVILLE');
 
     SELECT name
       INTO conflicting_olt
@@ -42,9 +53,13 @@ BEGIN
     END IF;
 
     UPDATE public.olts
-       SET management_ip = '192.168.1.4'::INET,
+       SET name = 'Mandeville',
+           management_ip = '192.168.1.4'::INET,
            updated_at = CURRENT_TIMESTAMP
      WHERE olt_id = mandeville_id
-       AND management_ip <> '192.168.1.4'::INET;
+       AND (
+           normalized_name <> 'MANDEVILLE'
+           OR management_ip <> '192.168.1.4'::INET
+       );
 END
 $$;
