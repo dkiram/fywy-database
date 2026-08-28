@@ -94,6 +94,7 @@ const TARGETS: ClarifiedTarget[] = [
       "Cassies Toiletries AN More",
       "Cassies Toiletries And More",
       "Cassandre McKenzie",
+      "Cassies Toiletries AN More/Cassandre McKenzie",
     ],
   },
   {
@@ -103,7 +104,7 @@ const TARGETS: ClarifiedTarget[] = [
     slotNumber: 2,
     ponPortNumber: 6,
     ontId: 8,
-    allowedCustomerNames: ["Oshane Whyte"],
+    allowedCustomerNames: ["Oshane Whyte", "Oshane Whyte-Manchester Rd"],
   },
   {
     label: "Roy Bromfield",
@@ -121,7 +122,11 @@ const TARGETS: ClarifiedTarget[] = [
     slotNumber: 2,
     ponPortNumber: 8,
     ontId: 31,
-    allowedCustomerNames: ["Nadine Williams-Hepburn", "Nadine Williams Hepburn"],
+    allowedCustomerNames: [
+      "Nadine Williams-Hepburn",
+      "Nadine Williams Hepburn",
+      "Nadine Williams -Hepburn",
+    ],
   },
   {
     label: "Ashaney Haughton/Mirriam Thompson",
@@ -133,6 +138,7 @@ const TARGETS: ClarifiedTarget[] = [
     allowedCustomerNames: [
       "Ashaney Haughton/Mirriam Thompson",
       "Ashaney Haughton / Mirriam Thompson",
+      "Ashaney Haughton&Mirriam Thompson",
       "Ashaney Haughton",
       "Mirriam Thompson",
     ],
@@ -148,6 +154,7 @@ const TARGETS: ClarifiedTarget[] = [
       "Marcus/Michele Miller",
       "Marcus / Michele Miller",
       "Marcus Miller/Michele Miller",
+      "Marcus Miller&Michele Miller",
       "Marcus Miller",
       "Michele Miller",
     ],
@@ -159,7 +166,7 @@ const TARGETS: ClarifiedTarget[] = [
     slotNumber: 2,
     ponPortNumber: 8,
     ontId: 74,
-    allowedCustomerNames: ["Rosalie Steele"],
+    allowedCustomerNames: ["Rosalie Steele", "Rosalie Steele-Georges Valley"],
   },
   {
     label: "Chrishia Davidson Powell",
@@ -171,6 +178,7 @@ const TARGETS: ClarifiedTarget[] = [
     allowedCustomerNames: [
       "Chrishia Davidson Powell",
       "Chrishia Davidson-Powell",
+      "Chrishia Davidson Powell (Richmond)",
     ],
   },
   {
@@ -184,6 +192,7 @@ const TARGETS: ClarifiedTarget[] = [
       "Forresters Windows and Door",
       "Forresters Windows & Door",
       "Forresters Windows and Doors",
+      "Forrestor's Windows &Doors\\Kenroy Forrester",
     ],
   },
 ];
@@ -702,9 +711,22 @@ async function main() {
       target: target.label,
       location,
       customerId:
-        mapping?.customer_id ?? clarifiedCustomer?.customer_id ?? "—",
+        mapping?.customer_id ??
+        clarifiedCustomer?.customer_id ??
+        (clarifiedCustomers.length > 1
+          ? clarifiedCustomers.map((customer) => customer.customer_id).join(" / ")
+          : "—"),
       appCustomer:
-        mapping?.customer_name ?? clarifiedCustomer?.customer_name ?? "—",
+        mapping?.customer_name ??
+        clarifiedCustomer?.customer_name ??
+        (clarifiedCustomers.length > 1
+          ? clarifiedCustomers
+              .map(
+                (customer) =>
+                  `${customer.customer_id}: ${customer.customer_name}`
+              )
+              .join(" | ")
+          : "—"),
       liveDescription: live?.description ?? "—",
       outcome,
     });
