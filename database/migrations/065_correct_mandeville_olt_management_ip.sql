@@ -12,21 +12,27 @@ BEGIN
       FROM public.olts
      WHERE normalized_name = 'MANDEVILLE';
 
-    IF mandeville_id IS NULL THEN
-        RAISE EXCEPTION
-            'Cannot correct Mandeville OLT IP: no Mandeville OLT inventory row exists';
-    END IF;
-
     SELECT name
       INTO conflicting_olt
       FROM public.olts
      WHERE management_ip = '192.168.1.4'::INET
-       AND olt_id <> mandeville_id;
+       AND (mandeville_id IS NULL OR olt_id <> mandeville_id);
 
     IF conflicting_olt IS NOT NULL THEN
         RAISE EXCEPTION
             'Cannot assign 192.168.1.4 to Mandeville: it already belongs to OLT %',
             conflicting_olt;
+    END IF;
+
+    -- The clarified records had not yet been attached in SPCL, so some live
+    -- databases contain only Newport in OLT inventory. In that case create the
+    -- shared Mandeville device now; assignment creation remains a separate,
+    -- read-only-live-verified batch operation.
+    IF mandeville_id IS NULL THEN
+        INSERT INTO public.olts (name, management_ip)
+        VALUES ('Mandeville', '192.168.1.4'::INET)
+        RETURNING olt_id, host(management_ip)
+             INTO mandeville_id, current_ip;
     END IF;
 
     IF current_ip NOT IN ('192.168.1.211', '192.168.1.4') THEN
