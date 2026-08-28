@@ -287,6 +287,44 @@ networkAccessRouter.put(
         );
       }
 
+      // Name the customer standing on this location instead of failing with an
+      // anonymous unique-violation. The current customer's own row was ended
+      // just above, so re-saving an unchanged location never trips this.
+      const locationHolderResult = await client.query(
+        `
+        SELECT holder.customer_id, holder.name, holder.status
+        FROM public.customer_ont_assignments occupying
+        JOIN public.customers holder
+          ON holder.customer_id = occupying.customer_id
+        WHERE occupying.ended_at IS NULL
+          AND occupying.olt_id = $1
+          AND occupying.frame_number = $2
+          AND occupying.slot_number = $3
+          AND occupying.pon_port_number = $4
+          AND occupying.ont_id = $5
+        LIMIT 1;
+        `,
+        [olt.olt_id, frame.value, slot.value, ponPort.value, ontId.value]
+      );
+      if (locationHolderResult.rows.length > 0) {
+        await client.query("ROLLBACK");
+        const holder = locationHolderResult.rows[0];
+        const location = `${frame.value}/${slot.value}/${ponPort.value}/${ontId.value}`;
+        return res.status(409).json({
+          error:
+            `${olt.name} ${location} is already assigned to customer #${holder.customer_id} ` +
+            `${holder.name} (${String(holder.status).replace(/_/g, " ")}). ` +
+            `Remove the OLT information from that customer first, then save it here.`,
+          conflict: {
+            customerId: Number(holder.customer_id),
+            customerName: holder.name,
+            customerStatus: holder.status,
+            oltName: olt.name,
+            location,
+          },
+        });
+      }
+
       await client.query(
         `
         INSERT INTO public.customer_ont_assignments (
@@ -326,12 +364,116 @@ networkAccessRouter.put(
     } catch (error: unknown) {
       await client.query("ROLLBACK");
       if (typeof error === "object" && error && "code" in error && error.code === "23505") {
+        // The named check above catches this in practice; this remains for a
+        // genuine race between two staff saving the same location at once.
         return res.status(409).json({
-          error: "That OLT location is already assigned to another customer.",
+          error:
+            "That OLT location was taken by another customer a moment ago. " +
+            "Reload the page to see who holds it.",
         });
       }
       console.error("Could not save customer OLT information:", error);
       res.status(500).json({ error: "Could not save OLT information." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// Releases a customer's current OLT location so it can be given to somebody
+// else. The row is ENDED, never deleted: customer_ont_assignments is the
+// history of who occupied a port, and olt_action_attempts references it with
+// ON DELETE RESTRICT. Ending the row clears both partial unique indexes (the
+// location and the ONT serial), which is what frees the port for the next
+// customer.
+networkAccessRouter.delete(
+  "/customers/:customerId/network-access",
+  requireAuth,
+  requireNetworkManager,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+
+    const reason = cleanText(req.body?.reason) || null;
+    if (reason && reason.length > 500) {
+      return res
+        .status(400)
+        .json({ error: "The optional change note must be 500 characters or fewer." });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `SELECT customer_ont_assignment_id
+         FROM public.customer_ont_assignments
+         WHERE customer_id = $1 AND ended_at IS NULL
+         FOR UPDATE;`,
+        [customerId]
+      );
+      const currentResult = await client.query(`${currentAssignmentSelect};`, [customerId]);
+      const current = currentResult.rows[0] ?? null;
+      if (!current) {
+        await client.query("ROLLBACK");
+        return res
+          .status(404)
+          .json({ error: "This customer has no OLT information to remove." });
+      }
+
+      // An action is committed to the journal before the OLT is contacted, so a
+      // 'requested' row means a write may be in flight against this exact
+      // location right now. Releasing it underneath that is not safe.
+      const inFlightResult = await client.query(
+        `SELECT olt_action_attempt_id
+         FROM public.olt_action_attempts
+         WHERE customer_ont_assignment_id = $1 AND outcome = 'requested'
+         LIMIT 1;`,
+        [current.customer_ont_assignment_id]
+      );
+      if (inFlightResult.rows.length > 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error:
+            "A live OLT action is still running for this mapping. " +
+            "Wait for it to finish before removing the OLT information.",
+        });
+      }
+
+      await client.query(
+        `UPDATE public.customer_ont_assignments
+         SET ended_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP,
+             updated_by_employee_id = $2
+         WHERE customer_ont_assignment_id = $1;`,
+        [current.customer_ont_assignment_id, employee.employeeId]
+      );
+
+      await insertAudit(client, {
+        employeeId: employee.employeeId,
+        actorName: `${employee.firstName} ${employee.lastName}`,
+        customerId,
+        action: "Removed customer OLT information",
+        oldValue: current,
+        newValue: null,
+        reason,
+      });
+
+      await client.query("COMMIT");
+      res.json({
+        networkAccess: null,
+        ontControl: getOntControlAvailability(customerId, null),
+        released: {
+          oltName: current.olt_name,
+          location:
+            `${current.frame_number}/${current.slot_number}/` +
+            `${current.pon_port_number}/${current.ont_id}`,
+        },
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not remove customer OLT information:", error);
+      res.status(500).json({ error: "Could not remove OLT information." });
     } finally {
       client.release();
     }

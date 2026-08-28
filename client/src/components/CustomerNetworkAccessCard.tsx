@@ -176,6 +176,9 @@ export default function CustomerNetworkAccessCard({
   const [overrideReason, setOverrideReason] = useState("");
   const [overrideConfirmation, setOverrideConfirmation] = useState("");
   const [overridingDescription, setOverridingDescription] = useState(false);
+  const [showRemove, setShowRemove] = useState(false);
+  const [removeReason, setRemoveReason] = useState("");
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -461,6 +464,43 @@ export default function CustomerNetworkAccessCard({
     }
   }
 
+  // Releasing ends the mapping rather than deleting it: the customer keeps the
+  // record that they used to sit on this port, and the location and ONT serial
+  // become free for the next customer immediately.
+  async function removeAssignment() {
+    if (!networkAccess) return;
+    const releasedOlt = networkAccess.olt_name;
+    const releasedLocation = `${networkAccess.frame_number}/${networkAccess.slot_number}/${networkAccess.pon_port_number}/${networkAccess.ont_id}`;
+    try {
+      setRemoving(true);
+      setError("");
+      setNotice("");
+      const response = await apiFetch(`/api/customers/${customerId}/network-access`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: removeReason.trim() || null }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not remove OLT information.");
+      setNetworkAccess(null);
+      setOntControl(data.ontControl ?? null);
+      setVerification(null);
+      setEditing(false);
+      setExpanded(false);
+      setShowRemove(false);
+      setRemoveReason("");
+      setNotice(
+        `OLT information removed. ${releasedOlt} ${releasedLocation} is now free to assign to another customer.`
+      );
+    } catch (removeError) {
+      setError(
+        removeError instanceof Error ? removeError.message : "Could not remove OLT information."
+      );
+    } finally {
+      setRemoving(false);
+    }
+  }
+
   const location = networkAccess
     ? `${networkAccess.frame_number}/${networkAccess.slot_number}/${networkAccess.pon_port_number}/${networkAccess.ont_id}`
     : null;
@@ -725,8 +765,88 @@ export default function CustomerNetworkAccessCard({
             >
               Cancel
             </button>
+            {networkAccess && (
+              <button
+                type="button"
+                disabled={saving || removing}
+                onClick={() => {
+                  setError("");
+                  setRemoveReason("");
+                  setShowRemove(true);
+                }}
+                className="ml-auto rounded-lg border border-error px-4 py-2.5 text-sm font-medium text-error transition hover:bg-error-container disabled:opacity-50"
+              >
+                Remove OLT information
+              </button>
+            )}
           </div>
         </form>
+      )}
+
+      {showRemove && networkAccess && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Remove OLT information"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
+            <h3 className="text-xl font-semibold">Remove OLT information</h3>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              This releases <strong>{networkAccess.olt_name} {location}</strong> from customer{" "}
+              {customerId} so it can be assigned to somebody else. No command is sent to the
+              OLT — this only frees the record. The mapping stays in this customer's history.
+            </p>
+
+            {accountStatus === "active" && (
+              <p className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">
+                This account is still <strong>active</strong>. Only remove the OLT information
+                if this customer is genuinely off the port on the U2000.
+              </p>
+            )}
+
+            <label className="mt-5 block text-sm font-semibold">
+              Change note
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={removeReason}
+                onChange={(event) => setRemoveReason(event.target.value)}
+                className="mt-1.5 w-full resize-none rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
+                placeholder="Optional — e.g. removed from the U2000, port reassigned"
+              />
+            </label>
+
+            {error && (
+              <p className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={removing}
+                onClick={() => {
+                  setShowRemove(false);
+                  setRemoveReason("");
+                  setError("");
+                }}
+                className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={removing}
+                onClick={removeAssignment}
+                className="rounded-lg bg-error px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {removing ? "Removing..." : "Remove OLT information"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {controlAction && networkAccess && (
