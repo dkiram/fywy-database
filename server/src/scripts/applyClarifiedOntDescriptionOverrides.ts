@@ -71,7 +71,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "S & N Isaacs Dental Lab",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 0,
@@ -84,7 +84,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "Cassies Toiletries",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 0,
@@ -98,7 +98,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "Oshane Whyte",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 6,
@@ -107,7 +107,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "Roy Bromfield",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 7,
@@ -116,7 +116,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "Nadine Williams-Hepburn",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 8,
@@ -125,7 +125,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "Ashaney Haughton/Mirriam Thompson",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 8,
@@ -139,7 +139,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "Marcus/Michele Miller",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 8,
@@ -154,7 +154,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "Rosalie Steele",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 8,
@@ -163,7 +163,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "Chrishia Davidson Powell",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 10,
@@ -175,7 +175,7 @@ const TARGETS: ClarifiedTarget[] = [
   },
   {
     label: "Forresters Windows and Door",
-    managementIp: "192.168.1.211",
+    managementIp: "192.168.1.4",
     frameNumber: 0,
     slotNumber: 2,
     ponPortNumber: 10,

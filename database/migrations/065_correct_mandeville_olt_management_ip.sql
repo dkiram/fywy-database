@@ -1,0 +1,44 @@
+-- PuTTY confirmed that Mandeville's working MA5680T CLI address is
+-- 192.168.1.4. The 192.168.1.211 value came from U2000 and is not accepting
+-- the direct SSH connection required by the SPCL backend.
+DO $$
+DECLARE
+    mandeville_id BIGINT;
+    conflicting_olt TEXT;
+    current_ip TEXT;
+BEGIN
+    SELECT olt_id, host(management_ip)
+      INTO mandeville_id, current_ip
+      FROM public.olts
+     WHERE normalized_name = 'MANDEVILLE';
+
+    IF mandeville_id IS NULL THEN
+        RAISE EXCEPTION
+            'Cannot correct Mandeville OLT IP: no Mandeville OLT inventory row exists';
+    END IF;
+
+    SELECT name
+      INTO conflicting_olt
+      FROM public.olts
+     WHERE management_ip = '192.168.1.4'::INET
+       AND olt_id <> mandeville_id;
+
+    IF conflicting_olt IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Cannot assign 192.168.1.4 to Mandeville: it already belongs to OLT %',
+            conflicting_olt;
+    END IF;
+
+    IF current_ip NOT IN ('192.168.1.211', '192.168.1.4') THEN
+        RAISE EXCEPTION
+            'Refusing unexpected Mandeville OLT IP change: current value is %',
+            current_ip;
+    END IF;
+
+    UPDATE public.olts
+       SET management_ip = '192.168.1.4'::INET,
+           updated_at = CURRENT_TIMESTAMP
+     WHERE olt_id = mandeville_id
+       AND management_ip <> '192.168.1.4'::INET;
+END
+$$;

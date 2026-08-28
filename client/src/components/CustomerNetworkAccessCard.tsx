@@ -689,7 +689,7 @@ export default function CustomerNetworkAccessCard({
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             <Field label="OLT name" value={form.oltName} onChange={selectOlt} required list={oltListId} placeholder="Example: MANDEVILLE" />
-            <Field label="OLT management IP" value={form.managementIp} onChange={(value) => updateForm("managementIp", value)} required placeholder="Example: 192.168.1.211" />
+            <Field label="OLT management IP" value={form.managementIp} onChange={(value) => updateForm("managementIp", value)} required placeholder="Example: 192.168.1.4" />
             <Field label="Frame" value={form.frameNumber} onChange={(value) => updateForm("frameNumber", value)} required type="number" />
             <Field label="Card / slot" value={form.slotNumber} onChange={(value) => updateForm("slotNumber", value)} required type="number" />
             <Field label="PON port" value={form.ponPortNumber} onChange={(value) => updateForm("ponPortNumber", value)} required type="number" />
