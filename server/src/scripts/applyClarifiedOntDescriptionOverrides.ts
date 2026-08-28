@@ -47,6 +47,18 @@ type SafeCandidate = {
   overrideNeeded: boolean;
 };
 
+type CustomerRow = {
+  customer_id: number;
+  customer_name: string;
+};
+
+type SafeNewMapping = {
+  target: ClarifiedTarget;
+  customer: CustomerRow;
+  live: ParsedOnt;
+  overrideNeeded: boolean;
+};
+
 const TARGETS: ClarifiedTarget[] = [
   {
     label: "Shaven Dryden #3",
@@ -221,6 +233,16 @@ async function loadCurrentMappings() {
   return result.rows;
 }
 
+async function loadVisibleCustomers() {
+  const result = await pool.query<CustomerRow>(
+    `SELECT customer_id, name AS customer_name
+     FROM public.customers
+     WHERE hidden_from_app = FALSE
+       AND NULLIF(BTRIM(name), '') IS NOT NULL;`
+  );
+  return result.rows;
+}
+
 async function applyCandidate(candidate: SafeCandidate) {
   const client = await pool.connect();
   const { target, mapping, live, overrideNeeded } = candidate;
@@ -368,17 +390,174 @@ async function applyCandidate(candidate: SafeCandidate) {
   }
 }
 
+async function applyNewMapping(candidate: SafeNewMapping) {
+  const client = await pool.connect();
+  const { target, customer, live, overrideNeeded } = candidate;
+  const reason =
+    "Staff clarified this legacy mapping in OLT Mapping Staff Review - Clarified (1).docx; the controlled batch verifier found one exact app customer and rechecked the live location and serial.";
+  try {
+    await client.query("BEGIN");
+    const customerLock = await client.query<CustomerRow>(
+      `SELECT customer_id, name AS customer_name
+       FROM public.customers
+       WHERE customer_id = $1
+         AND hidden_from_app = FALSE
+       FOR UPDATE;`,
+      [customer.customer_id]
+    );
+    const lockedCustomer = customerLock.rows[0];
+    if (
+      !lockedCustomer ||
+      !customerMatchesTarget(target, lockedCustomer.customer_name)
+    ) {
+      await client.query("ROLLBACK");
+      return "customer_changed_during_apply";
+    }
+
+    const oltResult = await client.query(
+      `SELECT olt_id, name
+       FROM public.olts
+       WHERE management_ip = $1::INET
+         AND is_active = TRUE
+       FOR UPDATE;`,
+      [target.managementIp]
+    );
+    if (oltResult.rows.length !== 1) {
+      await client.query("ROLLBACK");
+      return "olt_inventory_missing_or_ambiguous";
+    }
+    const oltId = Number(oltResult.rows[0].olt_id);
+
+    const conflict = await client.query(
+      `SELECT customer_ont_assignment_id, customer_id
+       FROM public.customer_ont_assignments
+       WHERE ended_at IS NULL
+         AND (
+           customer_id = $1
+           OR (
+             olt_id = $2
+             AND frame_number = $3
+             AND slot_number = $4
+             AND pon_port_number = $5
+             AND ont_id = $6
+           )
+           OR (
+             ont_serial IS NOT NULL
+             AND UPPER(TRIM(ont_serial)) = UPPER(TRIM($7))
+           )
+         )
+       LIMIT 1
+       FOR UPDATE;`,
+      [
+        customer.customer_id,
+        oltId,
+        target.frameNumber,
+        target.slotNumber,
+        target.ponPortNumber,
+        target.ontId,
+        live.ontSerial,
+      ]
+    );
+    if (conflict.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return "customer_location_or_serial_became_occupied";
+    }
+
+    const inserted = await client.query(
+      `INSERT INTO public.customer_ont_assignments (
+         customer_id, olt_id, frame_number, slot_number, pon_port_number,
+         ont_id, ont_serial, source, mapping_status, verified_at,
+         ont_description_override, description_override_reason,
+         description_overridden_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7, 'api_sync', 'verified',
+         CURRENT_TIMESTAMP,
+         CASE WHEN $8 THEN $9 ELSE NULL END,
+         CASE WHEN $8 THEN $10 ELSE NULL END,
+         CASE WHEN $8 THEN CURRENT_TIMESTAMP ELSE NULL END
+       )
+       RETURNING customer_ont_assignment_id;`,
+      [
+        customer.customer_id,
+        oltId,
+        target.frameNumber,
+        target.slotNumber,
+        target.ponPortNumber,
+        target.ontId,
+        live.ontSerial,
+        overrideNeeded,
+        live.description?.trim() ?? null,
+        reason,
+      ]
+    );
+    const assignmentId = Number(
+      inserted.rows[0].customer_ont_assignment_id
+    );
+
+    await client.query(
+      `INSERT INTO public.audit_logs (
+         employee_id, actor_name, action, entity_type, entity_id,
+         field_name, old_value, new_value, reason, occurred_at
+       ) VALUES (
+         NULL, 'SPCL Clarified OLT Review', $1, 'customer', $2,
+         'network_access', NULL, $3, $4, CURRENT_TIMESTAMP
+       );`,
+      [
+        overrideNeeded
+          ? "Batch added clarified OLT mapping with description override"
+          : "Batch added and verified clarified customer OLT information",
+        String(customer.customer_id),
+        JSON.stringify({
+          assignmentId,
+          mappingStatus: "verified",
+          location: locationKey(target),
+          ontSerial: live.ontSerial,
+          liveDescription: live.description,
+          descriptionOverride: overrideNeeded ? live.description : null,
+          liveControlFlag: live.controlFlag,
+          liveRunState: live.runState,
+        }),
+        reason,
+      ]
+    );
+    await client.query("COMMIT");
+    return "created";
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error(
+      `${target.label}: create failed:`,
+      error instanceof Error ? error.message : "unknown database error"
+    );
+    return "create_error";
+  } finally {
+    client.release();
+  }
+}
+
 async function main() {
   console.log(
     `Clarified mapping mode: ${apply ? "APPLY SAFE OVERRIDES" : "READ-ONLY DRY RUN"}`
   );
   console.log("No Huawei activate/deactivate command exists in this script.");
 
-  const mappings = await loadCurrentMappings();
+  const [mappings, customers] = await Promise.all([
+    loadCurrentMappings(),
+    loadVisibleCustomers(),
+  ]);
   const mappingByLocation = new Map(
     mappings.map((mapping) => [locationKeyForMapping(mapping), mapping])
   );
   const mappingsBySerial = new Map<string, MappingRow[]>();
+  const mappingByCustomer = new Map(
+    mappings.map((mapping) => [mapping.customer_id, mapping])
+  );
+  const customersByName = new Map<string, CustomerRow[]>();
+  for (const customer of customers) {
+    const key = normalizeExactCustomerName(customer.customer_name);
+    const matches = customersByName.get(key) ?? [];
+    matches.push(customer);
+    customersByName.set(key, matches);
+  }
   for (const mapping of mappings) {
     const serial = mapping.ont_serial?.trim().toUpperCase();
     if (!serial) continue;
@@ -421,15 +600,60 @@ async function main() {
   }
 
   const candidates: SafeCandidate[] = [];
+  const newMappings: SafeNewMapping[] = [];
   const report: Array<Record<string, string | number>> = [];
   for (const target of TARGETS) {
     const location = locationKey(target);
     const mapping = mappingByLocation.get(location);
     const live = liveByLocation.get(location);
+    const clarifiedCustomers = [
+      ...new Map(
+        target.allowedCustomerNames
+          .flatMap(
+            (name) =>
+              customersByName.get(normalizeExactCustomerName(name)) ?? []
+          )
+          .map((customer) => [customer.customer_id, customer])
+      ).values(),
+    ];
+    const clarifiedCustomer =
+      clarifiedCustomers.length === 1 ? clarifiedCustomers[0] : null;
     let outcome = "safe_description_override";
 
-    if (failedPorts.has(portKey(target))) outcome = "olt_port_read_failed";
-    else if (!mapping) outcome = "mapping_not_added_in_app";
+    if (!mapping && clarifiedCustomers.length === 0) {
+      outcome = "clarified_customer_not_found_in_app";
+    } else if (!mapping && clarifiedCustomers.length > 1) {
+      outcome = "clarified_customer_name_is_ambiguous";
+    } else if (
+      !mapping &&
+      clarifiedCustomer &&
+      mappingByCustomer.has(clarifiedCustomer.customer_id)
+    ) {
+      outcome = "clarified_customer_already_mapped_elsewhere";
+    } else if (failedPorts.has(portKey(target))) outcome = "olt_port_read_failed";
+    else if (!mapping && !live) outcome = "live_ont_not_found";
+    else if (!mapping && clarifiedCustomer && live) {
+      const otherSerialMappings = mappingsBySerial.get(live.ontSerial) ?? [];
+      if (otherSerialMappings.length > 0) {
+        outcome = "serial_assigned_to_another_customer";
+      } else if (!live.description?.trim()) {
+        outcome = "live_description_missing";
+      } else {
+        const descriptionMatches =
+          normalizeExactCustomerName(live.description) ===
+          normalizeExactCustomerName(clarifiedCustomer.customer_name);
+        const overrideNeeded = !descriptionMatches;
+        newMappings.push({
+          target,
+          customer: clarifiedCustomer,
+          live,
+          overrideNeeded,
+        });
+        outcome = overrideNeeded
+          ? "safe_create_with_description_override"
+          : "safe_create_exact_mapping";
+      }
+    } else if (!mapping) outcome = "mapping_not_added_in_app";
     else if (!customerMatchesTarget(target, mapping.customer_name)) {
       outcome = "location_assigned_to_different_customer";
     } else if (!live) outcome = "live_ont_not_found";
@@ -477,8 +701,10 @@ async function main() {
     report.push({
       target: target.label,
       location,
-      customerId: mapping?.customer_id ?? "—",
-      appCustomer: mapping?.customer_name ?? "—",
+      customerId:
+        mapping?.customer_id ?? clarifiedCustomer?.customer_id ?? "—",
+      appCustomer:
+        mapping?.customer_name ?? clarifiedCustomer?.customer_name ?? "—",
       liveDescription: live?.description ?? "—",
       outcome,
     });
@@ -486,7 +712,9 @@ async function main() {
 
   console.table(report);
   if (!apply) {
-    console.log(`Safe changes available: ${candidates.length}`);
+    console.log(
+      `Safe changes available: ${candidates.length + newMappings.length} (${candidates.length} existing, ${newMappings.length} new)`
+    );
     console.log("Dry run only: no mapping status or description override was changed.");
     return;
   }
@@ -494,6 +722,11 @@ async function main() {
   const applyCounts = new Map<string, number>();
   for (const candidate of candidates) {
     const result = await applyCandidate(candidate);
+    applyCounts.set(result, (applyCounts.get(result) ?? 0) + 1);
+    console.log(`${candidate.target.label}: ${result}`);
+  }
+  for (const candidate of newMappings) {
+    const result = await applyNewMapping(candidate);
     applyCounts.set(result, (applyCounts.get(result) ?? 0) + 1);
     console.log(`${candidate.target.label}: ${result}`);
   }
