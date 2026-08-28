@@ -8,21 +8,31 @@ function argument(name: string) {
 }
 
 const count = Number.parseInt(argument("--count") ?? "", 10);
+const maxScheduledDate = argument("--max-scheduled-date") ?? "";
 const confirmation = argument("--confirmation") ?? "";
-const expectedConfirmation = `RUN ADDITIONAL ${count}`;
+const expectedConfirmation = `RUN ADDITIONAL ${count} THROUGH ${maxScheduledDate}`;
 
 if (!Number.isInteger(count) || count < 1 || count > 500) {
-  console.error("Usage: runAdditionalOltAutomationBatch --count <1-500> --confirmation <text>");
+  console.error(
+    "Usage: runAdditionalOltAutomationBatch --count <1-500> --max-scheduled-date <YYYY-MM-DD> --confirmation <text>"
+  );
+  process.exit(2);
+}
+if (!/^\d{4}-\d{2}-\d{2}$/.test(maxScheduledDate) || Number.isNaN(Date.parse(maxScheduledDate))) {
+  console.error("--max-scheduled-date must be a real calendar date in YYYY-MM-DD form. Nothing was run.");
   process.exit(2);
 }
 if (confirmation !== expectedConfirmation) {
-  console.error("The one-time batch confirmation did not match. Nothing was run.");
+  console.error(
+    `The one-time batch confirmation did not match. Expected: "${expectedConfirmation}". Nothing was run.`
+  );
   process.exit(2);
 }
 
 runAutomaticDelinquentDisconnect({
   allowAdditionalRunToday: true,
   maxPerRunOverride: count,
+  maxScheduledDate,
 })
   .then((result) => {
     console.log("One-time additional OLT batch result:", JSON.stringify(result));

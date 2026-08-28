@@ -48,6 +48,14 @@ type AutomaticRunOptions = {
    */
   allowAdditionalRunToday?: boolean;
   maxPerRunOverride?: number;
+  /**
+   * Optional hard ceiling on scheduled_disconnection_date (YYYY-MM-DD). When
+   * set, only accounts due on or before this date are eligible, and accounts
+   * with no scheduled date are excluded. The one-time continuation batch uses
+   * this to stay strictly inside an explicitly confirmed window regardless of
+   * how the oldest-first ordering happens to fall.
+   */
+  maxScheduledDate?: string;
 };
 
 function isEnabled() {
@@ -616,12 +624,20 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
            OR billing.scheduled_disconnection_date IS NULL
            OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
          )
+         -- Optional hard ceiling for an explicitly confirmed continuation run.
+         -- A NULL scheduled date fails "<= $3" and is therefore excluded, which
+         -- is the intended behaviour: an undated account cannot be proven to
+         -- fall inside the confirmed window.
+         AND (
+           $3::DATE IS NULL
+           OR billing.scheduled_disconnection_date <= $3::DATE
+         )
        ORDER BY
          CASE WHEN assignment.mapping_status = 'verified' AND assignment.ont_serial IS NOT NULL THEN 0 ELSE 1 END,
          billing.scheduled_disconnection_date,
          customer.customer_id
        LIMIT $1;`,
-      [maxPerRun, clock.date]
+      [maxPerRun, clock.date, options.maxScheduledDate ?? null]
     );
     const candidateCount = Number(candidates.rows[0]?.candidate_count ?? 0);
     const selectedCount = candidates.rows.length;
