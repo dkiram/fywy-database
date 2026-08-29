@@ -16,6 +16,22 @@ import { getTestOntControlPolicy } from "../huawei/controlPolicy.js";
 
 const networkAccessRouter = Router();
 
+// "Verify with OLT" normally opens a fresh CLI session every time. Setting
+// HUAWEI_OLT_VERIFY_CACHE_SECONDS lets it reuse a port scan that recent
+// instead - meant for turning on during a bulk delinquency/OLT sweep so
+// hundreds of verifies for one port collapse into one read, then turning off
+// again. A control action through the app always drops the cached scan for
+// that port; only a change made directly on the OLT could read stale here.
+const VERIFY_CACHE_MS = (() => {
+  const parsed = Number.parseInt(
+    process.env.HUAWEI_OLT_VERIFY_CACHE_SECONDS ?? "",
+    10
+  );
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 3600
+    ? parsed * 1000
+    : 0;
+})();
+
 function getOntControlAvailability(customerId: number, assignment: any) {
   const { enabled, allowlisted } = getTestOntControlPolicy(customerId);
   const mappingReady =
@@ -501,13 +517,16 @@ networkAccessRouter.post(
 
     verificationsInProgress.add(assignmentId);
     try {
-      const liveOnt = await readOntFromOlt({
-        managementIp: initial.management_ip,
-        frameNumber: Number(initial.frame_number),
-        slotNumber: Number(initial.slot_number),
-        ponPortNumber: Number(initial.pon_port_number),
-        ontId: Number(initial.ont_id),
-      });
+      const liveOnt = await readOntFromOlt(
+        {
+          managementIp: initial.management_ip,
+          frameNumber: Number(initial.frame_number),
+          slotNumber: Number(initial.slot_number),
+          ponPortNumber: Number(initial.pon_port_number),
+          ontId: Number(initial.ont_id),
+        },
+        { cacheMaxAgeMs: VERIFY_CACHE_MS }
+      );
 
       const serialMatches =
         !initial.ont_serial ||

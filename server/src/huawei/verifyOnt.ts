@@ -2,7 +2,14 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import ssh2 from "ssh2";
 import type { Client as SshClient, ClientChannel, ConnectConfig } from "ssh2";
-import { parseHuaweiOntLog, type ParsedOnt } from "./parseOntLog.js";
+import { parseHuaweiOntLog, type OntLogResult, type ParsedOnt } from "./parseOntLog.js";
+import {
+  getCachedPortScan,
+  invalidatePortScan,
+  OltBusyError,
+  setCachedPortScan,
+  withOltLock,
+} from "./oltGateway.js";
 
 const { Client } = ssh2;
 
@@ -362,8 +369,52 @@ async function enterTargetGponInterface(
   await shell.command(`interface gpon ${target.frameNumber}/${target.slotNumber}`);
 }
 
-/** Read every ONT on one PON port with one read-only CLI session. */
-export async function readOntPortFromOlt(target: OntPortTarget) {
+// Every exported OLT operation funnels through here so at most one CLI session
+// per management IP runs at a time. A backlog past the queue cap surfaces as a
+// transient connection error rather than an unbounded wait.
+async function runOnOlt<T>(
+  managementIp: string,
+  task: () => Promise<T>
+): Promise<T> {
+  try {
+    return await withOltLock(managementIp, task);
+  } catch (error) {
+    if (error instanceof OltBusyError) {
+      throw new OltVerificationError("connection", error.message);
+    }
+    throw error;
+  }
+}
+
+/** Locate one ONT inside a parsed port scan. */
+function findOntInScan(
+  scan: OntLogResult,
+  target: OntVerificationTarget
+): ParsedOnt | null {
+  return (
+    scan.onts.find(
+      (ont) =>
+        ont.frameNumber === target.frameNumber &&
+        ont.slotNumber === target.slotNumber &&
+        ont.ponPortNumber === target.ponPortNumber &&
+        ont.ontId === target.ontId
+    ) ?? null
+  );
+}
+
+/**
+ * One read-only `display ont info <port> all` in a fresh CLI session, parsed
+ * and cached. Callers reach it either through the exported wrappers (which add
+ * the per-OLT lock) or already holding that lock - the post-write confirmation
+ * reads inside changeOntActivationState.
+ */
+async function scanOntPortUnlocked(
+  target: OntPortTarget,
+  cacheMaxAgeMs: number
+): Promise<OntLogResult> {
+  const cached = getCachedPortScan(target, cacheMaxAgeMs);
+  if (cached) return cached;
+
   const { connection, shell } = await openHuaweiShell(target);
   try {
     await enterTargetGponInterface(shell, target);
@@ -371,7 +422,9 @@ export async function readOntPortFromOlt(target: OntPortTarget) {
       `display ont info ${target.ponPortNumber} all`,
       45_000
     );
-    return parseHuaweiOntLog(displayOutput);
+    const parsed = parseHuaweiOntLog(displayOutput);
+    setCachedPortScan(target, parsed);
+    return parsed;
   } catch (error) {
     if (error instanceof OltVerificationError) throw error;
     throw new OltVerificationError(
@@ -384,6 +437,22 @@ export async function readOntPortFromOlt(target: OntPortTarget) {
   }
 }
 
+/**
+ * Read every ONT on one PON port with one read-only CLI session.
+ * Pass `cacheMaxAgeMs` to accept a recent cached scan instead of reconnecting.
+ */
+export function readOntPortFromOlt(
+  target: OntPortTarget,
+  options: { cacheMaxAgeMs?: number } = {}
+): Promise<OntLogResult> {
+  const maxAge = options.cacheMaxAgeMs ?? 0;
+  const cached = getCachedPortScan(target, maxAge);
+  if (cached) return Promise.resolve(cached);
+  return runOnOlt(target.managementIp, () =>
+    scanOntPortUnlocked(target, maxAge)
+  );
+}
+
 async function readTargetOnt(
   shell: HuaweiShell,
   target: OntVerificationTarget
@@ -392,43 +461,36 @@ async function readTargetOnt(
     `display ont info ${target.ponPortNumber} all`,
     45_000
   );
-  const parsed = parseHuaweiOntLog(displayOutput);
-  return (
-    parsed.onts.find(
-      (ont) =>
-        ont.frameNumber === target.frameNumber &&
-        ont.slotNumber === target.slotNumber &&
-        ont.ponPortNumber === target.ponPortNumber &&
-        ont.ontId === target.ontId
-    ) ?? null
-  );
+  return findOntInScan(parseHuaweiOntLog(displayOutput), target);
 }
 
 function pause(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
+async function readOntFromOltUnlocked(
+  target: OntVerificationTarget,
+  cacheMaxAgeMs: number
+): Promise<ParsedOnt | null> {
+  const scan = await scanOntPortUnlocked(target, cacheMaxAgeMs);
+  return findOntInScan(scan, target);
+}
+
 /**
  * Read one PON port and return only the requested ONT. No configuration or
- * service-changing command is accepted by this module.
+ * service-changing command is accepted by this module. Pass `cacheMaxAgeMs`
+ * to accept a recent cached scan instead of reconnecting.
  */
-export async function readOntFromOlt(
-  target: OntVerificationTarget
+export function readOntFromOlt(
+  target: OntVerificationTarget,
+  options: { cacheMaxAgeMs?: number } = {}
 ): Promise<ParsedOnt | null> {
-  const { connection, shell } = await openHuaweiShell(target);
-  try {
-    await enterTargetGponInterface(shell, target);
-    return await readTargetOnt(shell, target);
-  } catch (error) {
-    if (error instanceof OltVerificationError) throw error;
-    throw new OltVerificationError(
-      "command",
-      "The OLT connected, but its read-only ONT response could not be verified."
-    );
-  } finally {
-    shell.close();
-    connection.end();
-  }
+  const maxAge = options.cacheMaxAgeMs ?? 0;
+  const cached = getCachedPortScan(target, maxAge);
+  if (cached) return Promise.resolve(findOntInScan(cached, target));
+  return runOnOlt(target.managementIp, () =>
+    readOntFromOltUnlocked(target, maxAge)
+  );
 }
 
 /**
@@ -436,7 +498,7 @@ export async function readOntFromOlt(
  * Huawei's save command is global to the device, so callers must invoke this
  * once per affected OLT after a batch, never once per customer.
  */
-export async function saveOltConfiguration(managementIp: string) {
+async function saveOltConfigurationUnlocked(managementIp: string) {
   const { connection, shell } = await openHuaweiShell({ managementIp });
   try {
     const initialPrompt = await shell.waitForPrompt(20_000, true);
@@ -479,13 +541,21 @@ export async function saveOltConfiguration(managementIp: string) {
 }
 
 /**
+ * Persist one OLT's running configuration. Global to the device, so callers
+ * invoke it once per affected OLT after a batch, never once per customer.
+ */
+export function saveOltConfiguration(managementIp: string) {
+  return runOnOlt(managementIp, () => saveOltConfigurationUnlocked(managementIp));
+}
+
+/**
  * Change one ONT's administrative state after re-reading its live identity in
  * the SAME CLI session as the write. The command vocabulary is deliberately
  * closed: no caller-provided text is ever interpolated as a Huawei command.
  * Post-write confirmation uses a fresh session because this older MA5680T
  * stops returning reliable display output after a state-changing command.
  */
-export async function changeOntActivationState(
+async function changeOntActivationStateUnlocked(
   target: OntVerificationTarget,
   identity: { ontSerial: string; customerName: string },
   action: OntControlAction
@@ -551,7 +621,7 @@ export async function changeOntActivationState(
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await pause(attempt === 0 ? 1_000 : 1_500);
       try {
-        after = await readOntFromOlt(target);
+        after = await readOntFromOltUnlocked(target, 0);
         lastReadError = null;
         if (after) {
           const postSerialMatches =
@@ -601,4 +671,23 @@ export async function changeOntActivationState(
       connection.end();
     }
   }
+}
+
+/**
+ * Serialized entry point for a state change. Holds the per-OLT lock for the
+ * whole write-then-confirm sequence and drops the cached scan for the port
+ * afterwards so the next read reflects the new state.
+ */
+export function changeOntActivationState(
+  target: OntVerificationTarget,
+  identity: { ontSerial: string; customerName: string },
+  action: OntControlAction
+) {
+  return runOnOlt(target.managementIp, async () => {
+    try {
+      return await changeOntActivationStateUnlocked(target, identity, action);
+    } finally {
+      invalidatePortScan(target);
+    }
+  });
 }
