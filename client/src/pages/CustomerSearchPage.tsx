@@ -226,6 +226,8 @@ function StatusBadge({ status }: StatusBadgeProps) {
     closed: "bg-surface-container-high text-on-surface-variant",
     archived: "bg-surface-container-high text-on-surface-variant",
     offline: "bg-[#8a2d5f]/10 text-[#8a2d5f]",
+    suspended: "bg-warning-container text-warning",
+    terminated: "bg-surface-container-high text-on-surface-variant",
   };
 
   return (

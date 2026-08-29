@@ -14,7 +14,9 @@ type AccountStatus =
   | "pending_reconnection"
   | "closed"
   | "archived"
-  | "offline";
+  | "offline"
+  | "suspended"
+  | "terminated";
 
 type AccountRecord = {
   customer_id: number;
@@ -42,6 +44,7 @@ type AccountSummary = {
   disconnected: number;
   pending_reconnection: number;
   offline: number;
+  suspended: number;
 };
 
 type WaiverApprovalRequest = {
@@ -83,6 +86,7 @@ type AccountView =
   | "pending_reconnection"
   | "disconnected"
   | "offline"
+  | "suspended"
   | "active"
   | "all";
 
@@ -91,6 +95,7 @@ const emptySummary: AccountSummary = {
   disconnected: 0,
   pending_reconnection: 0,
   offline: 0,
+  suspended: 0,
 };
 
 const emptyPagination: Pagination = {
@@ -497,6 +502,8 @@ function AccountOperationsPage() {
         <SummaryCard label="Disconnected" value={summary.disconnected} icon="link_off" tone="negative" />
         <SummaryCard label="Pending Reconnection" value={summary.pending_reconnection} icon="sync" tone="warning" />
         <SummaryCard label="Offline" value={summary.offline} icon="cloud_off" tone="negative" />
+        {/* Warning, not negative: a suspension is working as intended. */}
+        <SummaryCard label="Suspended" value={summary.suspended} icon="pause_circle" tone="warning" />
       </div>
 
       <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
@@ -509,6 +516,7 @@ function AccountOperationsPage() {
                 ["pending_reconnection", "Reconnection Queue"],
                 ["disconnected", "Disconnected"],
                 ["offline", "Offline"],
+                ["suspended", "Suspended"],
                 ...(isAdmin
                   ? ([
                       ["active", "Active"],
@@ -751,6 +759,8 @@ function StatusBadge({ status }: { status: AccountStatus }) {
     closed: "bg-surface-container-high text-on-surface-variant",
     archived: "bg-surface-container-high text-on-surface-variant",
     offline: "bg-[#8a2d5f]/10 text-[#8a2d5f]",
+    suspended: "bg-warning-container text-warning",
+    terminated: "bg-surface-container-high text-on-surface-variant",
   };
   return (
     <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}>

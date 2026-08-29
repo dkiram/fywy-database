@@ -2422,7 +2422,7 @@ app.patch(
       await client.query("BEGIN");
 
       const customerResult = await client.query(
-        `SELECT c.customer_id, c.package_id, c.monthly_fee,
+        `SELECT c.customer_id, c.package_id, c.monthly_fee, c.status,
             old_package.name AS package_name
          FROM public.customers c
          LEFT JOIN public.packages old_package ON old_package.package_id = c.package_id
@@ -2448,6 +2448,12 @@ app.patch(
       }
 
       const customer = customerResult.rows[0];
+      if (customer.status === "terminated") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "A terminated subscription cannot be changed.",
+        });
+      }
       const selectedPackage = packageResult.rows[0];
       const newFee = Number(selectedPackage.default_monthly_charge).toFixed(2);
       if (

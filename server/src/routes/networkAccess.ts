@@ -245,12 +245,18 @@ networkAccessRouter.put(
     try {
       await client.query("BEGIN");
       const customerResult = await client.query(
-        `SELECT customer_id FROM public.customers WHERE customer_id = $1 FOR UPDATE;`,
+        `SELECT customer_id, status FROM public.customers WHERE customer_id = $1 FOR UPDATE;`,
         [customerId]
       );
       if (customerResult.rows.length === 0) {
         await client.query("ROLLBACK");
         return res.status(404).json({ error: "Customer not found." });
+      }
+      if (customerResult.rows[0].status === "terminated") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "OLT information cannot be added to a terminated subscription.",
+        });
       }
 
       // OLT names and management addresses are shared inventory. Reuse the

@@ -18,20 +18,26 @@ import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
 
 // MVP 3 account-operations API.
 //
-// This router owns the service-status state machine:
-// active -> disconnected -> pending_reconnection -> active.
+// This router owns the service-status state machine, including the terminal
+// subscription state: active -> disconnected -> pending_reconnection ->
+// active, with any non-terminated state able to end at terminated.
 // Every successful transition updates the customer, appends immutable status
 // history, and writes an audit log inside one database transaction.
 const accountsRouter = Router();
 
-// Keep this union aligned with the database checks in migrations 024 and 063.
+// Keep this union aligned with the database checks in migrations 024, 063, 067 and 068.
 type AccountStatus =
   | "active"
   | "disconnected"
   | "pending_reconnection"
   | "closed"
   | "archived"
-  | "offline";
+  | "offline"
+  // Migration 067. Physically identical to 'disconnected' - the ONT really is
+  // deactivated - but billed at a flat J$500 a month by arrangement, and
+  // priced to come back on how long the customer stayed away.
+  | "suspended"
+  | "terminated";
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.employee) {
@@ -189,6 +195,70 @@ async function insertStatusHistory(
   return result.rows[0];
 }
 
+/**
+ * Post the fee for ending a suspension, priced by how long it ran.
+ *
+ * A normal disconnection charges its reconnection fee at the moment of
+ * cutoff, because that fee is a fixed package property. A suspension cannot:
+ * on the day the customer leaves nobody knows yet whether they will be back
+ * inside three months at J$500 or after them at the full package rate. The
+ * price only exists at the moment they ask to come back, so that is when the
+ * ledger entry is written.
+ *
+ * Two things make this safe to call inside the reconnection transaction:
+ *
+ *   * source_key is the suspension's own immutable status-history ID, so a
+ *     retried reconnection cannot post the fee twice, and a customer who
+ *     suspends again next year gets a genuinely separate fee rather than one
+ *     silently swallowed by ON CONFLICT.
+ *   * It runs BEFORE the cleared-balance check and inside the same
+ *     transaction, so the fee is part of what the customer has to clear, and
+ *     a reconnection that fails that check rolls the fee back with everything
+ *     else instead of stranding a stale price on the account.
+ *
+ * spcl_suspension_reconnection_fee reads customers.status, which this
+ * transaction has locked but not yet updated, so it still sees 'suspended'.
+ */
+async function postSuspensionReconnectionFee(
+  client: PoolClient,
+  values: { customerId: number; employeeId: number }
+) {
+  const result = await client.query(
+    `
+    INSERT INTO public.account_ledger_entries (
+      customer_id, entry_type, amount, effective_date, due_date,
+      grace_end_date, description, created_by_employee_id, source_key
+    )
+    SELECT
+      episode.customer_id,
+      'suspension_reconnection_fee',
+      fee.amount,
+      (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+      (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+      (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+      'Reconnection fee to end the suspension that began '
+        || TO_CHAR(episode.suspended_on, 'DD Mon YYYY'),
+      $2,
+      'suspension-reconnection-fee:' || episode.suspension_history_id::TEXT
+    FROM public.customer_suspension_episodes episode
+    CROSS JOIN LATERAL (
+      SELECT public.spcl_suspension_reconnection_fee(
+        episode.customer_id,
+        (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+      ) AS amount
+    ) fee
+    WHERE episode.customer_id = $1
+      AND episode.ended_on IS NULL
+      AND fee.amount > 0
+    ON CONFLICT (source_key) DO NOTHING
+    RETURNING account_ledger_entry_id, amount, description;
+    `,
+    [values.customerId, values.employeeId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
 // Once an account has left the disconnected state, an older unpaid-request
 // approval is no longer waiting for an Admin decision. Resolve it alongside
 // the status change so it cannot linger in the Admin queue or block a later
@@ -294,6 +364,18 @@ async function applyAccountTransition(
       `This account cannot move from ${customer.status} to ${options.toStatus}.`
     );
   }
+
+    // Ending a suspension prices its fee here, before the balance is read, so
+    // the customer has to clear the fee along with their J$500 holding
+    // charges. See postSuspensionReconnectionFee for why it cannot be charged
+    // at the time of suspension like an ordinary reconnection fee.
+    let suspensionReconnectionFee: { amount: string } | null = null;
+    if (customer.status === "suspended" && options.toStatus === "active") {
+      suspensionReconnectionFee = await postSuspensionReconnectionFee(client, {
+        customerId,
+        employeeId: employee.employeeId,
+      });
+    }
 
     // Normal reconnection still requires a cleared balance. An Admin may make
     // an explicit, audited service exception; the balance itself is preserved
@@ -427,6 +509,7 @@ async function applyAccountTransition(
     return {
       customer: updatedResult.rows[0],
       statusHistory: history,
+      suspensionReconnectionFee,
       adminBalanceOverride: adminOverrideApplied
         ? {
             applied: true,
@@ -553,7 +636,7 @@ async function transitionAccountWithOnt(
   res: Response,
   options: TransitionOptions,
   ontAction: OntControlAction,
-  confirmationVerb: "DEACTIVATE" | "RECONNECT"
+  confirmationVerb: "DEACTIVATE" | "RECONNECT" | "SUSPEND"
 ) {
   const customerId = parseCustomerId(req, res);
   if (customerId === null) return;
@@ -820,7 +903,7 @@ function transitionAccountWithOptionalOnt(
   res: Response,
   options: TransitionOptions,
   ontAction: OntControlAction,
-  confirmationVerb: "DEACTIVATE" | "RECONNECT"
+  confirmationVerb: "DEACTIVATE" | "RECONNECT" | "SUSPEND"
 ) {
   const rawId = req.params.customerId;
   const customerId = typeof rawId === "string" && /^\d+$/.test(rawId) ? Number(rawId) : -1;
@@ -857,6 +940,10 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
     pending_reconnection: "c.status = 'pending_reconnection'",
     disconnected: "c.status = 'disconnected'",
     offline: "c.status = 'offline'",
+    // Its own tab rather than part of "attention". A suspension is a working
+    // arrangement that is behaving exactly as intended; nobody needs to chase
+    // it. Staff come here to see who is away and what they owe to return.
+    suspended: "c.status = 'suspended'",
     active: "c.status = 'active'",
     all: "TRUE",
   };
@@ -965,6 +1052,7 @@ accountsRouter.get("/account-operations", requireAuth, requireAccountManager, as
             WHERE status = 'pending_reconnection'
           )::INTEGER AS pending_reconnection,
           COUNT(*) FILTER (WHERE status = 'offline')::INTEGER AS offline,
+          COUNT(*) FILTER (WHERE status = 'suspended')::INTEGER AS suspended,
           (SELECT COUNT(*)::INTEGER
             FROM public.customer_billing_status billing
             JOIN public.customers c2 USING (customer_id)
@@ -1067,7 +1155,7 @@ accountsRouter.post(
     const customerId = parseCustomerId(req, res);
     if (customerId === null) return;
 
-    const note = cleanText(req.body.note);
+    const note = cleanText(req.body?.note);
     const noteDate = cleanText(req.body.noteDate);
 
     if (note.length < 3 || note.length > 2000) {
@@ -1883,6 +1971,185 @@ accountsRouter.get(
   }
 );
 
+// Permanently ends the current subscription without deleting the customer or
+// any financial/service history. OLT assignments are effective-dated, so
+// releasing one here removes it from the profile and frees the location while
+// retaining the historical row for audit and investigation.
+accountsRouter.post(
+  "/customers/:customerId/terminate",
+  requireAuth,
+  requireAccountManager,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+
+    const note = cleanText(req.body.note);
+    if (note.length > 500) {
+      return res.status(400).json({
+        error: "The optional termination note must be 500 characters or fewer.",
+      });
+    }
+
+    const employee = req.session.employee!;
+    const reason = note || "Customer subscription terminated";
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const customerResult = await client.query(
+        `SELECT customer_id, status, pole_box_number, port_number
+         FROM public.customers
+         WHERE customer_id = $1
+         FOR UPDATE;`,
+        [customerId]
+      );
+      const customer = customerResult.rows[0];
+      if (!customer) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Customer not found." });
+      }
+      if (customer.status === "terminated") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "This subscription is already terminated." });
+      }
+
+      const assignmentResult = await client.query(
+        `SELECT customer_ont_assignment_id, olt_id, frame_number, slot_number,
+                pon_port_number, ont_id, ont_serial
+         FROM public.customer_ont_assignments
+         WHERE customer_id = $1
+           AND ended_at IS NULL
+         FOR UPDATE;`,
+        [customerId]
+      );
+      const assignment = assignmentResult.rows[0] ?? null;
+
+      if (assignment) {
+        const inFlightResult = await client.query(
+          `SELECT olt_action_attempt_id
+           FROM public.olt_action_attempts
+           WHERE customer_ont_assignment_id = $1
+             AND outcome = 'requested'
+           LIMIT 1;`,
+          [assignment.customer_ont_assignment_id]
+        );
+        if (inFlightResult.rows.length > 0) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            error:
+              "A live OLT action is still running for this customer. " +
+              "Wait for it to finish before terminating the subscription.",
+          });
+        }
+      }
+
+      const transition = await applyAccountTransition(client, {
+        customerId,
+        reason,
+        employee,
+        options: {
+          action: "Terminated customer subscription",
+          allowedFrom: [
+            "active",
+            "disconnected",
+            "pending_reconnection",
+            "closed",
+            "archived",
+            "offline",
+            "suspended",
+          ],
+          toStatus: "terminated",
+          chargeReconnectionFee: false,
+        },
+      });
+
+      if (assignment) {
+        await client.query(
+          `UPDATE public.customer_ont_assignments
+           SET ended_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP,
+               updated_by_employee_id = $2
+           WHERE customer_ont_assignment_id = $1;`,
+          [assignment.customer_ont_assignment_id, employee.employeeId]
+        );
+      }
+
+      const clearedCustomerResult = await client.query(
+        `UPDATE public.customers
+         SET deactivation_date = CASE
+               WHEN $2 = 'active'
+               THEN (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+               ELSE COALESCE(
+                 deactivation_date,
+                 (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+               )
+             END,
+             pole_box_number = NULL,
+             port_number = NULL
+         WHERE customer_id = $1
+         RETURNING customer_id, status, deactivation_date, reactivation_date,
+                   pole_box_number, port_number;`,
+        [customerId, customer.status]
+      );
+
+      // A terminated subscription cannot keep a reconnection decision open.
+      await client.query(
+        `UPDATE public.reconnection_requests
+         SET status = 'rejected',
+             reviewed_by_employee_id = $2,
+             reviewed_at = CURRENT_TIMESTAMP,
+             review_note = 'Subscription terminated before reconnection'
+         WHERE customer_id = $1
+           AND status = 'pending';`,
+        [customerId, employee.employeeId]
+      );
+
+      if (assignment || customer.pole_box_number || customer.port_number) {
+        await client.query(
+          `INSERT INTO public.audit_logs (
+             employee_id, actor_name, action, entity_type, entity_id,
+             field_name, old_value, new_value, reason, occurred_at
+           ) VALUES (
+             $1, $2, 'Removed OLT information during subscription termination',
+             'customer', $3, 'network_access', $4, NULL, $5,
+             CURRENT_TIMESTAMP
+           );`,
+          [
+            employee.employeeId,
+            `${employee.firstName} ${employee.lastName}`,
+            String(customerId),
+            JSON.stringify({
+              assignment,
+              poleBoxNumber: customer.pole_box_number,
+              portNumber: customer.port_number,
+            }),
+            note || null,
+          ]
+        );
+      }
+
+      await client.query("COMMIT");
+      res.json({
+        customer: clearedCustomerResult.rows[0],
+        statusHistory: transition.statusHistory,
+        oltInformationRemoved: Boolean(
+          assignment || customer.pole_box_number || customer.port_number
+        ),
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (error instanceof AccountTransitionError) {
+        return res.status(error.status).json({ error: error.message });
+      }
+      console.error("Could not terminate customer subscription:", error);
+      res.status(500).json({ error: "Could not terminate the subscription." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // Management action: active -> disconnected. When the separate production
 // rollout gate includes this customer, the ONT is confirmed first.
 accountsRouter.post(
@@ -1897,14 +2164,127 @@ accountsRouter.post(
         // Also reachable from 'offline': an account that drifted out of
         // service can be formally cut off. When the customer has an ONT
         // mapping the OLT still gets the real deactivate command here.
+        //
+        // And from 'suspended': the escape hatch for a customer who went
+        // away, stopped answering and stopped paying their J$500. This ends
+        // the suspension, stops the holding fee accruing and posts the normal
+        // package reconnection fee, which is exactly what a write-off should
+        // do. The ONT is already deactivated, so the OLT reports no_change.
         action: "Deactivated customer account",
-        allowedFrom: ["active", "offline"],
+        allowedFrom: ["active", "offline", "suspended"],
         toStatus: "disconnected",
         updateDateColumn: "deactivation_date",
       },
       "deactivate",
       "DEACTIVATE"
     )
+);
+
+// Management action: active -> suspended. A customer who will be away asks to
+// stop service rather than keep paying their package rate. The ONT really is
+// deactivated - this is not a records-only state like 'offline' - so when the
+// rollout gate covers this customer the OLT gets the same deactivate command a
+// disconnection sends.
+//
+// Nothing is charged here on purpose. The fee to come back depends on how long
+// the suspension runs and is priced at the other end, in
+// postSuspensionReconnectionFee. What starts here is the J$500 monthly holding
+// charge, raised by spcl_generate_suspension_charges on each monthly
+// anniversary of today, beginning today.
+accountsRouter.post(
+  "/customers/:customerId/suspend",
+  requireAuth,
+  requireAccountManager,
+  (req, res) =>
+    transitionAccountWithOptionalOnt(
+      req,
+      res,
+      {
+        action: "Suspended customer account",
+        // Deliberately active-only. A customer who is already cut off for
+        // non-payment does not get to convert that into a J$500 arrangement
+        // after the fact; suspension is for an account in good standing.
+        allowedFrom: ["active"],
+        toStatus: "suspended",
+        // deactivation_date is the date service physically ended, and for a
+        // suspension it genuinely did. It also feeds the service_ended_on
+        // fallback in the 065/066/067 charge generators.
+        updateDateColumn: "deactivation_date",
+      },
+      "deactivate",
+      "SUSPEND"
+    )
+);
+
+// Management action: suspended -> active. One direct transition, not a trip
+// through the pending-reconnection queue - see the header of migration 067 for
+// why. applyAccountTransition posts the duration-priced fee first, so the
+// cleared-balance check below covers the fee, every J$500 holding charge, and
+// anything the customer already owed before they left. An Admin can still make
+// an audited exception with adminBalanceOverride, which forgives nothing.
+accountsRouter.post(
+  "/customers/:customerId/end-suspension",
+  requireAuth,
+  requireAccountManager,
+  (req, res) =>
+    transitionAccountWithOptionalOnt(
+      req,
+      res,
+      {
+        action: "Ended customer account suspension",
+        allowedFrom: ["suspended"],
+        toStatus: "active",
+        updateDateColumn: "reactivation_date",
+        requireClearedBalance: true,
+      },
+      "activate",
+      "RECONNECT"
+    )
+);
+
+// Read-only quote for the counter. Answers the two questions a suspended
+// customer actually asks - what do I owe to come back on, and how long before
+// that goes up - from one place, so the profile card and the operations queue
+// cannot drift apart on the number. Writes nothing; the fee is only posted
+// when the reconnection itself commits.
+accountsRouter.get(
+  "/customers/:customerId/suspension",
+  requireAuth,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+    try {
+      // The holding charges have to be up to date or the quoted total is
+      // short by however many anniversaries have passed since the last run.
+      await pool.query(
+        `SELECT public.spcl_generate_suspension_charges(
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+        );`
+      );
+      const result = await pool.query(
+        `SELECT
+           customer_id,
+           suspension_history_id,
+           suspended_on,
+           months_suspended,
+           extended_fee_starts_after,
+           reconnection_fee_today,
+           reconnection_fee_after,
+           suspension_monthly_fee,
+           suspension_charges_to_date,
+           total_due_to_reconnect
+         FROM public.customer_suspension_status
+         WHERE customer_id = $1;`,
+        [customerId]
+      );
+      // Null rather than 404: "this customer is not suspended" is a normal
+      // answer for a card the profile renders unconditionally.
+      res.json({ suspension: result.rows[0] ?? null });
+    } catch (error) {
+      console.error("Could not load customer suspension status:", error);
+      res.status(500).json({ error: "Could not load the suspension details." });
+    }
+  }
 );
 
 // Management action: active -> offline. The OLT still shows this ONT as active,

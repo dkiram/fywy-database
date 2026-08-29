@@ -340,6 +340,12 @@ paymentsRouter.post(
       // An offline account is not receiving service and its balance is frozen.
       // Taking money against it would quietly reactivate billing expectations
       // without anyone deciding to restore service. Restore it first.
+      //
+      // 'suspended' deliberately does NOT belong in this check, however
+      // similar the two look from the outside. A suspended customer is
+      // actively billed J$500 a month and has to clear that plus the
+      // reconnection fee before service can resume, so blocking their
+      // payments would leave them permanently unable to come back.
       if (customerResult.rows[0].status === "offline") {
         await client.query("ROLLBACK");
         return res.status(409).json({

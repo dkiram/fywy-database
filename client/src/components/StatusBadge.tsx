@@ -35,6 +35,12 @@ const TONE_BY_STATUS: Record<string, BadgeTone> = {
   pending_reconnection: "warning",
   closed: "neutral",
   archived: "neutral",
+  // Service is off for both of these, but neither is a fault: 'offline' is an
+  // unresolved outage awaiting a decision, 'suspended' is a paying customer who
+  // asked us to stop. Warning, not danger.
+  offline: "warning",
+  suspended: "warning",
+  terminated: "neutral",
 
   // Service tickets
   open: "neutral",

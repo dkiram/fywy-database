@@ -10,7 +10,9 @@ export type AccountStatus =
   | "pending_reconnection"
   | "closed"
   | "archived"
-  | "offline";
+  | "offline"
+  | "suspended"
+  | "terminated";
 
 export type AccountStatusUpdate = {
   status: AccountStatus;
@@ -47,6 +49,21 @@ type BillingStatus = {
   offline_charge_review_from: string | null;
   offline_charge_review_to: string | null;
   no_service_since: string | null;
+};
+
+// The counter quote from GET /api/customers/:id/suspension, backed by the
+// customer_suspension_status view. Null whenever the customer is not
+// currently suspended.
+type SuspensionStatus = {
+  suspension_history_id: number;
+  suspended_on: string;
+  months_suspended: number;
+  extended_fee_starts_after: string;
+  reconnection_fee_today: string;
+  reconnection_fee_after: string;
+  suspension_monthly_fee: string;
+  suspension_charges_to_date: string;
+  total_due_to_reconnect: string;
 };
 
 type LedgerEntry = {
@@ -99,7 +116,9 @@ type AccountAction =
   | "reconnect"
   | "cancel-reconnection"
   | "mark-offline"
-  | "restore-from-offline";
+  | "restore-from-offline"
+  | "suspend"
+  | "end-suspension";
 
 // Centralizing labels and endpoints keeps the modal generic while each action
 // still presents wording appropriate to its business meaning.
@@ -152,6 +171,22 @@ const actionDetails: Record<
     endpoint: "restore-from-offline",
     placeholder: "Reason for restoring this account to active...",
   },
+  suspend: {
+    title: "Suspend account",
+    button: "Suspend Account",
+    endpoint: "suspend",
+    placeholder:
+      "Why is the customer suspending (e.g. travelling overseas until March)...",
+    // Destructive because service really does stop: the ONT is deactivated
+    // exactly as it is for a disconnection. Only the billing differs.
+    destructive: true,
+  },
+  "end-suspension": {
+    title: "End suspension",
+    button: "Reconnect Account",
+    endpoint: "end-suspension",
+    placeholder: "Reason for bringing this account back into service...",
+  },
 };
 
 function AccountOperationsPanel({
@@ -175,6 +210,7 @@ function AccountOperationsPanel({
   const [adminBalanceOverride, setAdminBalanceOverride] = useState(false);
   const [saving, setSaving] = useState(false);
   const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [suspension, setSuspension] = useState<SuspensionStatus | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [exceptionAction, setExceptionAction] = useState<"hold" | "waiver" | null>(null);
   const [exceptionValue, setExceptionValue] = useState("");
@@ -197,7 +233,7 @@ function AccountOperationsPanel({
       try {
         setLoading(true);
         setError("");
-        const [historyResponse, billingResponse, waiverResponse, reconnectionResponse, capabilityResponse] = await Promise.all([
+        const [historyResponse, billingResponse, waiverResponse, reconnectionResponse, capabilityResponse, suspensionResponse] = await Promise.all([
           apiFetch(`/api/customers/${customerId}/account-history`),
           apiFetch(`/api/customers/${customerId}/billing-status`),
           canRequestDiscount
@@ -205,16 +241,18 @@ function AccountOperationsPanel({
             : Promise.resolve(null),
           apiFetch(`/api/customers/${customerId}/reconnection-requests`),
           apiFetch(`/api/customers/${customerId}/account-action-capabilities`),
+          apiFetch(`/api/customers/${customerId}/suspension`),
         ]);
-        const [historyData, billingData, waiverData, reconnectionData, capabilityData] = await Promise.all([
+        const [historyData, billingData, waiverData, reconnectionData, capabilityData, suspensionData] = await Promise.all([
           historyResponse.json(),
           billingResponse.json(),
           waiverResponse ? waiverResponse.json() : Promise.resolve({ waiverRequests: [] }),
           reconnectionResponse.json(),
           capabilityResponse.json(),
+          suspensionResponse.json(),
         ]);
-        if (!historyResponse.ok || !billingResponse.ok || (waiverResponse && !waiverResponse.ok) || !reconnectionResponse.ok || !capabilityResponse.ok) {
-          throw new Error(historyData.error || billingData.error || waiverData.error || reconnectionData.error || capabilityData.error || "Could not load account information.");
+        if (!historyResponse.ok || !billingResponse.ok || (waiverResponse && !waiverResponse.ok) || !reconnectionResponse.ok || !capabilityResponse.ok || !suspensionResponse.ok) {
+          throw new Error(historyData.error || billingData.error || waiverData.error || reconnectionData.error || capabilityData.error || suspensionData.error || "Could not load account information.");
         }
         setHistory(historyData.statusHistory);
         setBilling(billingData.billing);
@@ -222,6 +260,7 @@ function AccountOperationsPanel({
         setWaiverRequests(waiverData.waiverRequests);
         setReconnectionRequests(reconnectionData.reconnectionRequests);
         setOltAccountActions(capabilityData.oltAccountActions);
+        setSuspension(suspensionData.suspension);
       } catch (loadError) {
         setError(
           loadError instanceof Error
@@ -305,12 +344,20 @@ function AccountOperationsPanel({
     setAction(nextAction);
   };
 
+  // Suspending and ending a suspension both drive the ONT, so they need the
+  // same live-equipment warning and typed confirmation the older pair use.
   const actionUsesOlt =
     oltAccountActions?.integrated === true &&
-    (action === "deactivate" || action === "reconnect");
-  const requiredConfirmation = action === "deactivate"
-    ? `DEACTIVATE ${customerId}`
-    : `RECONNECT ${customerId}`;
+    (action === "deactivate" ||
+      action === "reconnect" ||
+      action === "suspend" ||
+      action === "end-suspension");
+  const requiredConfirmation =
+    action === "deactivate"
+      ? `DEACTIVATE ${customerId}`
+      : action === "suspend"
+        ? `SUSPEND ${customerId}`
+        : `RECONNECT ${customerId}`;
 
   // Holds and discount requests require an exact date or amount plus a permanent reason.
   const submitException = async () => {
@@ -411,6 +458,38 @@ function AccountOperationsPanel({
                   icon="cloud_off"
                   title="The OLT still shows this ONT active, but it has been physically offline and the customer is not getting service. Stops billing without a reconnection fee."
                   onClick={() => startAction("mark-offline")}
+                />
+                <ActionButton
+                  label="Suspend"
+                  icon="pause_circle"
+                  disabled={oltAccountActions?.integrated === true && !oltAccountActions.ready}
+                  title={oltAccountActions?.integrated === true && !oltAccountActions.ready
+                    ? oltAccountActions.reason || "Verify the OLT mapping first."
+                    : "The customer is going away and wants service stopped. Deactivates the ONT and bills a flat holding fee each month instead of the package rate."}
+                  onClick={() => startAction("suspend")}
+                />
+              </>
+            )}
+            {status === "suspended" && canManage && (
+              <>
+                <ActionButton
+                  label="End Suspension"
+                  icon="play_circle"
+                  disabled={oltAccountActions?.integrated === true && !oltAccountActions.ready}
+                  title={oltAccountActions?.integrated === true && !oltAccountActions.ready
+                    ? oltAccountActions.reason || "Verify the OLT mapping first."
+                    : "Bring the customer back. The reconnection fee is posted as part of this step and has to be paid along with the balance."}
+                  onClick={() => startAction("end-suspension")}
+                />
+                <ActionButton
+                  label="Deactivate"
+                  icon="link_off"
+                  destructive
+                  disabled={oltAccountActions?.integrated === true && !oltAccountActions.ready}
+                  title={oltAccountActions?.integrated === true && !oltAccountActions.ready
+                    ? oltAccountActions.reason || "Verify the OLT mapping first."
+                    : "The customer has stopped paying the holding fee. Ends the suspension, stops it accruing, and charges the normal reconnection fee."}
+                  onClick={() => startAction("deactivate")}
                 />
               </>
             )}
@@ -570,6 +649,33 @@ function AccountOperationsPanel({
         ))}
         {billing && (
           <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {status === "suspended" && suspension && (
+              <div className="rounded-lg border border-warning/30 bg-warning-container p-3 text-xs text-warning sm:col-span-2 lg:col-span-4">
+                <p className="font-semibold">
+                  Suspended since {formatDate(suspension.suspended_on)} — {suspension.months_suspended} month
+                  {suspension.months_suspended === 1 ? "" : "s"} so far
+                </p>
+                <p className="mt-1">
+                  Billed {formatCurrency(suspension.suspension_monthly_fee)} a month instead of the package
+                  rate; {formatCurrency(suspension.suspension_charges_to_date)} charged so far.
+                </p>
+                {/* The two numbers a customer at the counter actually asks for.
+                    total_due_to_reconnect already includes the fee, because
+                    ending a suspension posts the fee and then requires a
+                    cleared balance - quoting the balance alone sends them away
+                    short. */}
+                <p className="mt-2 font-semibold">
+                  To reconnect today: {formatCurrency(suspension.total_due_to_reconnect)}
+                  {" "}({formatCurrency(suspension.reconnection_fee_today)} reconnection fee plus the balance)
+                </p>
+                {suspension.reconnection_fee_today !== suspension.reconnection_fee_after && (
+                  <p className="mt-1">
+                    The fee rises to {formatCurrency(suspension.reconnection_fee_after)} after{" "}
+                    {formatDate(suspension.extended_fee_starts_after)}.
+                  </p>
+                )}
+              </div>
+            )}
             {status === "offline" && (
               <div className="rounded-lg border border-[#8a2d5f]/30 bg-[#8a2d5f]/10 p-3 text-xs text-[#8a2d5f] sm:col-span-2 lg:col-span-4">
                 <p className="font-semibold">
@@ -862,6 +968,9 @@ function StatusBadge({ status }: { status: AccountStatus }) {
     closed: "bg-surface-container-high text-on-surface-variant",
     archived: "bg-surface-container-high text-on-surface-variant",
     offline: "bg-[#8a2d5f]/10 text-[#8a2d5f]",
+    // Amber, not red: service is off, but by arrangement and still earning.
+    suspended: "bg-warning-container text-warning",
+    terminated: "bg-surface-container-high text-on-surface-variant",
   };
   return (
     <span

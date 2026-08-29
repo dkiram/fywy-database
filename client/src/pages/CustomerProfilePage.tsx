@@ -80,6 +80,10 @@ const [selectedPackageId, setSelectedPackageId] = useState("");
 const [subscriptionReason, setSubscriptionReason] = useState("");
 const [savingSubscription, setSavingSubscription] = useState(false);
 const [subscriptionError, setSubscriptionError] = useState("");
+const [showTermination, setShowTermination] = useState(false);
+const [terminationNote, setTerminationNote] = useState("");
+const [terminating, setTerminating] = useState(false);
+const [terminationError, setTerminationError] = useState("");
 const [editingActivation, setEditingActivation] = useState(false);
 const [activationInput, setActivationInput] = useState("");
 const [activationReason, setActivationReason] = useState("");
@@ -132,6 +136,52 @@ const [showPaymentForm, setShowPaymentForm] = useState(false);
 
 const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceipt | null>(null);
 const [paymentRefreshKey, setPaymentRefreshKey] = useState(0);
+
+const terminateSubscription = async () => {
+  if (!customer) return;
+
+  try {
+    setTerminating(true);
+    setTerminationError("");
+    const response = await apiFetch(
+      `/api/customers/${customer.customer_id}/terminate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: terminationNote.trim() || null }),
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Could not terminate the subscription.");
+    }
+
+    setCustomer((current) =>
+      current
+        ? {
+            ...current,
+            status: data.customer.status,
+            deactivation_date: data.customer.deactivation_date,
+            reactivation_date: data.customer.reactivation_date,
+            next_billing_date: null,
+            pole_box_number: null,
+            port_number: null,
+          }
+        : current
+    );
+    setShowPaymentForm(false);
+    setShowTermination(false);
+    setTerminationNote("");
+  } catch (terminationFailure) {
+    setTerminationError(
+      terminationFailure instanceof Error
+        ? terminationFailure.message
+        : "Could not terminate the subscription."
+    );
+  } finally {
+    setTerminating(false);
+  }
+};
 
 
 useEffect(() => {
@@ -269,14 +319,16 @@ if (error || !customer) {
       Record Payment
     </button>
   ) : (
-    <button
-      type="button"
-      onClick={() => navigate(`/service-requests?customerId=${customer.customer_id}`)}
-      className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container"
-    >
-      <span className="material-symbols-outlined text-lg">add</span>
-      New Service Ticket
-    </button>
+    customer.status !== "terminated" ? (
+      <button
+        type="button"
+        onClick={() => navigate(`/service-requests?customerId=${customer.customer_id}`)}
+        className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container"
+      >
+        <span className="material-symbols-outlined text-lg">add</span>
+        New Service Ticket
+      </button>
+    ) : null
   )}
 
   <button
@@ -526,8 +578,9 @@ if (error || !customer) {
           </div>
 
           <CustomerNetworkAccessCard
+            key={`${customer.customer_id}-${customer.status}`}
             customerId={customer.customer_id}
-            canEdit={canManageSubscription}
+            canEdit={canManageSubscription && customer.status !== "terminated"}
             accountStatus={customer.status}
             onStatusSynced={(update: AccountStatusUpdate) => {
               setCustomer((current) =>
@@ -592,13 +645,13 @@ if (error || !customer) {
               </span>
 
               <h2 className="text-lg font-semibold">
-                Current Package
+                {customer.status === "terminated" ? "Former Package" : "Current Package"}
               </h2>
             </div>
 
             <div className="mb-6">
               <p className="text-xs uppercase tracking-wider opacity-70">
-                Subscribed Plan
+                {customer.status === "terminated" ? "Last Subscribed Plan" : "Subscribed Plan"}
               </p>
 
               <p className="mt-2 text-2xl font-medium">
@@ -631,7 +684,9 @@ if (error || !customer) {
   </div>
 
   <p className="mt-2 text-xs opacity-70">
-    This customer&apos;s current billed monthly rate
+    {customer.status === "terminated"
+      ? "Last monthly rate before termination"
+      : "This customer’s current billed monthly rate"}
   </p>
 
 </div>
@@ -664,16 +719,20 @@ if (error || !customer) {
     ? formatDate(customer.next_billing_date)
     : customer.status === "active"
       ? "Activation date required"
+      : customer.status === "terminated"
+        ? "No future charges"
       : "Billing paused"}
 </p>
 {!customer.next_billing_date && customer.status !== "active" && (
   <p className="mt-1 text-xs opacity-70">
-    Recurring charges resume when the account is active.
+    {customer.status === "terminated"
+      ? "The subscription has ended; previous balances and history are retained."
+      : "Recurring charges resume when the account is active."}
   </p>
 )}
             </div>
 
-            {canManageSubscription && !editingSubscription && (
+            {canManageSubscription && customer.status !== "terminated" && !editingSubscription && (
               <button
                 type="button"
                 onClick={() => {
@@ -801,6 +860,121 @@ if (error || !customer) {
   <CustomerActivityHistory customerId={customer.customer_id} />
 )}
 
+      {canManageSubscription && (
+        <section className="rounded-2xl border border-error/25 bg-error/5 p-6 shadow-sm">
+          {customer.status === "terminated" ? (
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-on-surface-variant">
+                person_cancel
+              </span>
+              <div>
+                <h2 className="font-semibold text-on-surface">Subscription terminated</h2>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  This customer remains in the database, but recurring charges,
+                  package changes, and OLT assignments are disabled. Existing
+                  balances can still be settled.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+              <div>
+                <h2 className="font-semibold text-on-surface">Terminate subscription</h2>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  Keep the customer record and history, but stop future billing
+                  and remove any saved OLT information.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setTerminationNote("");
+                  setTerminationError("");
+                  setShowTermination(true);
+                }}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-error px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                <span className="material-symbols-outlined text-lg">person_cancel</span>
+                Terminate
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {showTermination && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !terminating) {
+              setShowTermination(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="terminate-subscription-title"
+            className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined rounded-full bg-error/10 p-2 text-error">
+                person_cancel
+              </span>
+              <div>
+                <h2 id="terminate-subscription-title" className="text-xl font-semibold">
+                  Terminate this subscription?
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-on-surface-variant">
+                  {customer.name || `Customer #${customer.customer_id}`} will remain searchable
+                  with all existing history. No new recurring charges will be created,
+                  and any current OLT information will be released and removed from the profile.
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-5 block text-sm font-medium text-on-surface">
+              Termination note <span className="font-normal text-on-surface-variant">(optional)</span>
+              <textarea
+                rows={4}
+                maxLength={500}
+                value={terminationNote}
+                disabled={terminating}
+                onChange={(event) => setTerminationNote(event.target.value)}
+                placeholder="Reason or other details..."
+                className="mt-2 w-full resize-none rounded-lg border border-outline-variant bg-surface px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
+              />
+            </label>
+
+            {terminationError && (
+              <p className="mt-3 rounded-lg bg-error/10 p-3 text-sm text-error">
+                {terminationError}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={terminating}
+                onClick={() => setShowTermination(false)}
+                className="rounded-lg border border-outline-variant px-4 py-2.5 text-sm font-medium transition hover:bg-surface-container disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={terminating}
+                onClick={terminateSubscription}
+                className="rounded-lg bg-error px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+              >
+                {terminating ? "Terminating..." : "Terminate"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {showPaymentForm && employee && (
         <RecordPaymentDrawer
           customer={customer}
@@ -867,6 +1041,8 @@ function statusPillClass(status: AccountStatus) {
     closed: "bg-surface-container-high text-on-surface-variant",
     archived: "bg-surface-container-high text-on-surface-variant",
     offline: "bg-[#8a2d5f]/10 text-[#8a2d5f]",
+    suspended: "bg-warning-container text-warning",
+    terminated: "bg-surface-container-high text-on-surface-variant",
   };
   return styles[status];
 }
