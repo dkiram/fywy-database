@@ -216,9 +216,11 @@ class HuaweiShell {
     expectedCommand = ""
   ) {
     // Examples: MA5680T>, MA5680T#, MA5680T(config)#,
-    // MA5680T(config-if-gpon-0/11)#
+    // MA5680T(config-if-gpon-0/11)#. Keep this deliberately narrower than
+    // "any line ending in >": Huawei command help contains tokens such as
+    // configuration<K>, which must never be mistaken for a returned prompt.
     return this.waitForPattern(
-      /(?:^|[\r\n])[^\r\n]{1,200}[>#]\s*$/,
+      /(?:^|[\r\n])[A-Za-z0-9._-]{1,64}(?:\([A-Za-z0-9._\/-]{1,120}\))?[>#]\s*$/,
       timeoutMs,
       includeBufferedOutput,
       expectedCommand
@@ -269,6 +271,16 @@ class HuaweiShell {
     // Confirmation replies are not consistently echoed by older MA5680T
     // software, so completion is based only on the returning CLI prompt.
     const response = this.waitForPrompt(timeoutMs);
+    this.stream.write(`${responseText}\r`);
+    return response;
+  }
+
+  async respondUntil(
+    responseText: string,
+    completionPattern: RegExp,
+    timeoutMs = 20_000
+  ) {
+    const response = this.waitForPattern(completionPattern, timeoutMs);
     this.stream.write(`${responseText}\r`);
     return response;
   }
@@ -504,11 +516,22 @@ async function saveOltConfigurationUnlocked(managementIp: string) {
     const initialPrompt = await shell.waitForPrompt(20_000, true);
     if (initialPrompt.trim().endsWith(">")) await shell.command("enable");
 
-    const confirmationOrCompletion = await shell.commandUntil(
+    const confirmationChoiceOrCompletion = await shell.commandUntil(
       "save",
-      /(?:continue|sure)[^\r\n]{0,160}(?:y\s*\/\s*n|y\/n)[^\r\n]*[:?]?\s*$|(?:^|[\r\n])[^\r\n]{1,200}[>#]\s*$/i,
+      /\{[^\r\n]{0,240}<cr>[^\r\n]{0,240}\}\s*:\s*$|(?:continue|sure)[^\r\n]{0,160}(?:y\s*\/\s*n|y\/n)[^\r\n]*[:?]?\s*$|(?:^|[\r\n])[A-Za-z0-9._-]{1,64}(?:\([A-Za-z0-9._\/-]{1,120}\))?[>#]\s*$/i,
       60_000
     );
+    const needsDefaultChoice =
+      /\{[^\r\n]{0,240}<cr>[^\r\n]{0,240}\}\s*:\s*$/i.test(
+        confirmationChoiceOrCompletion
+      );
+    const confirmationOrCompletion = needsDefaultChoice
+      ? await shell.respondUntil(
+          "",
+          /(?:continue|sure)[^\r\n]{0,160}(?:y\s*\/\s*n|y\/n)[^\r\n]*[:?]?\s*$|(?:^|[\r\n])[A-Za-z0-9._-]{1,64}(?:\([A-Za-z0-9._\/-]{1,120}\))?[>#]\s*$/i,
+          5 * 60_000
+        )
+      : confirmationChoiceOrCompletion;
     const needsConfirmation =
       /(?:continue|sure)[^\r\n]{0,160}(?:y\s*\/\s*n|y\/n)/i.test(
         confirmationOrCompletion
@@ -517,11 +540,20 @@ async function saveOltConfigurationUnlocked(managementIp: string) {
       ? await shell.respond("y", 5 * 60_000)
       : confirmationOrCompletion;
 
-    if (
-      !/(?:sav(?:e|ed|ing)[^\r\n]{0,120}success|success[^\r\n]{0,120}sav)/i.test(
+    const reportsSuccess =
+      /(?:sav(?:e|ed|ing)[^\r\n]{0,120}success|success[^\r\n]{0,120}sav)/i.test(
         finalOutput
-      )
-    ) {
+      );
+    // This MA5680T firmware is silent on success: after the explicit <cr>
+    // selection it prints "Command: save" and returns to the real CLI prompt.
+    // Require both, so a help token, disconnect, or unrelated bare prompt can
+    // never be recorded as a successful persistence operation.
+    const reportsAcceptedCommand =
+      /(?:^|[\r\n])\s*Command:\s*save\s*(?:[\r\n]|$)/i.test(finalOutput) &&
+      /(?:^|[\r\n])[A-Za-z0-9._-]{1,64}(?:\([A-Za-z0-9._\/-]{1,120}\))?[>#]\s*$/i.test(
+        finalOutput
+      );
+    if (!reportsSuccess && !reportsAcceptedCommand) {
       throw new OltVerificationError(
         "command",
         "The OLT returned to the CLI, but configuration-save success could not be confirmed."
