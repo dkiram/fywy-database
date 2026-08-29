@@ -209,9 +209,11 @@ class HuaweiShell {
     expectedCommand = ""
   ) {
     // Examples: MA5680T>, MA5680T#, MA5680T(config)#,
-    // MA5680T(config-if-gpon-0/11)#
+    // MA5680T(config-if-gpon-0/11)#. Keep this deliberately narrower than
+    // "any line ending in >": Huawei command help contains tokens such as
+    // configuration<K>, which must never be mistaken for a returned prompt.
     return this.waitForPattern(
-      /(?:^|[\r\n])[^\r\n]{1,200}[>#]\s*$/,
+      /(?:^|[\r\n])[A-Za-z0-9._-]{1,64}(?:\([A-Za-z0-9._\/-]{1,120}\))?[>#]\s*$/,
       timeoutMs,
       includeBufferedOutput,
       expectedCommand
