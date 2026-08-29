@@ -4,8 +4,6 @@
 -- package, service, OLT-assignment and audit history. Only the current
 -- subscription ends: the account can no longer be billed or assigned an OLT.
 
-BEGIN;
-
 -- Widen the current-status and immutable-history constraints. Discover the
 -- constraints by definition because older installations may still carry the
 -- generated names from migrations 007/024 rather than the later named ones.
@@ -105,5 +103,3 @@ ALTER TABLE public.olt_action_attempts
 -- termination endpoint writes that history row in the same transaction as the
 -- customer snapshot, so dates before termination remain reconstructable while
 -- the termination date and every date after it are permanently non-billable.
-
-COMMIT;

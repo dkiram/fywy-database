@@ -56,8 +56,6 @@
 -- application layer. This migration provides the statuses, the money, and the
 -- functions that price it.
 
-BEGIN;
-
 -- ===========================================================================
 -- 1. Widen the status CHECK constraints
 --
@@ -217,7 +215,8 @@ ALTER TABLE public.account_ledger_entries
     ADD CONSTRAINT account_ledger_entries_entry_type_check
     CHECK (entry_type IN (
         'opening_balance', 'monthly_charge', 'monthly_payment',
-        'reconnection_fee', 'reconnection_payment', 'waiver', 'adjustment',
+        'reconnection_fee', 'reconnection_payment', 'payment_void',
+        'waiver', 'adjustment',
         'suspension_charge', 'suspension_reconnection_fee'
     ));
 
@@ -780,6 +779,3 @@ BEGIN
     RETURN inserted_count;
 END;
 $function$;
-
-
-COMMIT;
