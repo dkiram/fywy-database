@@ -71,7 +71,7 @@ function configuration() {
   return {
     hour: boundedInteger(process.env.HUAWEI_OLT_AUTOMATION_HOUR, 9, 0, 23),
     minute: boundedInteger(process.env.HUAWEI_OLT_AUTOMATION_MINUTE, 0, 0, 59),
-    maxPerRun: boundedInteger(process.env.HUAWEI_OLT_AUTOMATION_MAX_PER_RUN, 100, 1, 500),
+    maxPerRun: boundedInteger(process.env.HUAWEI_OLT_AUTOMATION_MAX_PER_RUN, 300, 1, 500),
     saveDelayMinutes: boundedInteger(
       process.env.HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES,
       120,

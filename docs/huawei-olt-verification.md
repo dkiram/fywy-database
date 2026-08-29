@@ -157,7 +157,7 @@ delinquent list. It has a third independent master switch and defaults off:
 HUAWEI_OLT_AUTOMATION_ENABLED=false
 HUAWEI_OLT_AUTOMATION_HOUR=9
 HUAWEI_OLT_AUTOMATION_MINUTE=0
-HUAWEI_OLT_AUTOMATION_MAX_PER_RUN=100
+HUAWEI_OLT_AUTOMATION_MAX_PER_RUN=300
 HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES=120
 ```
 
@@ -212,4 +212,7 @@ NAS-only maintenance script when a small pilot should be continued that same
 day. The server records a separate run and excludes every customer already
 journaled in any earlier run for that billing date. The advisory lock, payment
 row lock, live identity verification, durable action journal, and post-command
-confirmation remain mandatory for every customer.
+confirmation remain mandatory for every customer. The continuation also
+requires an explicit maximum scheduled-disconnection date and includes that
+date in its confirmation phrase, preventing it from spilling into a later
+disconnect window.
