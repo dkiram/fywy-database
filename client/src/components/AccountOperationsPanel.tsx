@@ -249,10 +249,19 @@ function AccountOperationsPanel({
           waiverResponse ? waiverResponse.json() : Promise.resolve({ waiverRequests: [] }),
           reconnectionResponse.json(),
           capabilityResponse.json(),
-          suspensionResponse.json(),
+          // Tolerant on purpose: an un-restarted server answers this route
+          // with an HTML 404 page, and .json() would reject on it.
+          suspensionResponse.json().catch(() => null),
         ]);
-        if (!historyResponse.ok || !billingResponse.ok || (waiverResponse && !waiverResponse.ok) || !reconnectionResponse.ok || !capabilityResponse.ok || !suspensionResponse.ok) {
-          throw new Error(historyData.error || billingData.error || waiverData.error || reconnectionData.error || capabilityData.error || suspensionData.error || "Could not load account information.");
+        // The suspension quote is deliberately NOT in this list. It is an
+        // extra detail on one card, and the whole panel - the status
+        // timeline, the balance, every service-control button - must not go
+        // dark because that one lookup failed. It failed exactly this way
+        // before migration 067 was applied: the view did not exist yet, the
+        // endpoint returned 500, and Account Operations refused to load at
+        // all on every customer.
+        if (!historyResponse.ok || !billingResponse.ok || (waiverResponse && !waiverResponse.ok) || !reconnectionResponse.ok || !capabilityResponse.ok) {
+          throw new Error(historyData.error || billingData.error || waiverData.error || reconnectionData.error || capabilityData.error || "Could not load account information.");
         }
         setHistory(historyData.statusHistory);
         setBilling(billingData.billing);
@@ -260,7 +269,9 @@ function AccountOperationsPanel({
         setWaiverRequests(waiverData.waiverRequests);
         setReconnectionRequests(reconnectionData.reconnectionRequests);
         setOltAccountActions(capabilityData.oltAccountActions);
-        setSuspension(suspensionData.suspension);
+        setSuspension(
+          suspensionResponse.ok ? (suspensionData?.suspension ?? null) : null
+        );
       } catch (loadError) {
         setError(
           loadError instanceof Error
