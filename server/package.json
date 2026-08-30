@@ -17,7 +17,8 @@
     "create:ont-import-sql": "tsx src/scripts/createHuaweiOntImportSql.ts",
     "reconcile:old-delinquency-waivers": "tsx src/scripts/requestOldDelinquencyWaivers.ts",
     "disconnect:overdue-legacy": "tsx src/scripts/disconnectOverdueLegacyAccounts.ts",
-    "reconcile:olt-disconnected": "tsx src/scripts/reconcileDisconnectedFromOlt.ts"
+    "reconcile:olt-disconnected": "tsx src/scripts/reconcileDisconnectedFromOlt.ts",
+    "test:disconnection-calendar": "tsx --test test/jamaicaDisconnectionCalendar.test.ts"
   },
   "keywords": [],
   "author": "",

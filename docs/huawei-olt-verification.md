@@ -158,8 +158,17 @@ HUAWEI_OLT_AUTOMATION_ENABLED=false
 HUAWEI_OLT_AUTOMATION_HOUR=9
 HUAWEI_OLT_AUTOMATION_MINUTE=0
 HUAWEI_OLT_AUTOMATION_MAX_PER_RUN=300
+HUAWEI_OLT_AUTOMATION_ADDITIONAL_HOLIDAYS=
 HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES=120
 ```
+
+The disconnection scheduler never starts at Sunday 12:00 AM Jamaica time
+(Saturday night into Sunday). Saturday 12:00 AM remains eligible unless the
+date is itself a Jamaican public holiday. The ten recurring nationwide public
+holidays and their statutory observed dates are calculated in the application.
+Add any one-off holiday appointed by Gazette to
+`HUAWEI_OLT_AUTOMATION_ADDITIONAL_HOLIDAYS` as a comma-separated `YYYY-MM-DD`
+list. Invalid dates fail closed and block disconnections until corrected.
 
 When enabled, the API runs once per Jamaica calendar day at or after the
 configured time. It generates charges through that day and processes customers

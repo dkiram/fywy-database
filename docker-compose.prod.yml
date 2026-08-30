@@ -113,6 +113,8 @@ services:
       HUAWEI_OLT_AUTOMATION_HOUR: ${HUAWEI_OLT_AUTOMATION_HOUR:-9}
       HUAWEI_OLT_AUTOMATION_MINUTE: ${HUAWEI_OLT_AUTOMATION_MINUTE:-0}
       HUAWEI_OLT_AUTOMATION_MAX_PER_RUN: ${HUAWEI_OLT_AUTOMATION_MAX_PER_RUN:-300}
+      # Comma-separated YYYY-MM-DD dates for one-off holidays declared by Gazette.
+      HUAWEI_OLT_AUTOMATION_ADDITIONAL_HOLIDAYS: ${HUAWEI_OLT_AUTOMATION_ADDITIONAL_HOLIDAYS:-}
       # One global Huawei `save` per affected OLT, this many minutes after a
       # completed run. The durable job survives an API/container restart.
       HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES: ${HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES:-120}

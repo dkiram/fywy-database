@@ -2,6 +2,7 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
 import { OLT_AUTOMATION_LOCK_ID } from "./automationLock.js";
+import { disconnectionDayBlock } from "./jamaicaDisconnectionCalendar.js";
 import {
   changeOntActivationState,
   OltControlError,
@@ -552,6 +553,16 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
 export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOptions = {}) {
   if (!isEnabled()) return { ran: false, reason: "disabled" };
 
+  const clock = jamaicaClock();
+  const dayBlock = disconnectionDayBlock(clock.date);
+  if (dayBlock.blocked) {
+    return {
+      ran: false,
+      reason: "non_disconnection_day",
+      blockedReason: dayBlock.reason,
+    };
+  }
+
   const lockClient = await pool.connect();
   let runId: number | null = null;
   try {
@@ -561,7 +572,6 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
     );
     if (!lock.rows[0]?.acquired) return { ran: false, reason: "already_running" };
 
-    const clock = jamaicaClock();
     const existing = await lockClient.query(
       `SELECT olt_automation_run_id
        FROM public.olt_automation_runs
@@ -742,7 +752,7 @@ export function startDelinquentAutomation() {
   const config = configuration();
   console.log(
     isEnabled()
-      ? `Automatic delinquent OLT disconnection enabled for ${String(config.hour).padStart(2, "0")}:${String(config.minute).padStart(2, "0")} Jamaica time; maximum ${config.maxPerRun} customers per day; affected OLTs save ${config.saveDelayMinutes} minutes after each run.`
+      ? `Automatic delinquent OLT disconnection enabled for ${String(config.hour).padStart(2, "0")}:${String(config.minute).padStart(2, "0")} Jamaica time; maximum ${config.maxPerRun} customers per day; Sunday 00:00 and Jamaican public holidays are blocked; affected OLTs save ${config.saveDelayMinutes} minutes after each run.`
       : "Automatic delinquent OLT disconnection is disabled."
   );
   const startupTimer = setTimeout(() => void tick(), 15_000);
