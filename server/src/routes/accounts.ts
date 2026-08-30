@@ -295,6 +295,11 @@ type TransitionOptions = {
   allowedFrom: AccountStatus[];
   toStatus: AccountStatus;
   updateDateColumn?: "deactivation_date" | "reactivation_date";
+  // Suspension may be entered after the customer already left. Its selected
+  // date becomes both the durable status-history date and the billing anchor.
+  allowBackdatedEffectiveDate?: boolean;
+  replacePackageChargesFromEffectiveDate?: boolean;
+  requireOntActionWhenMapped?: boolean;
   requireClearedBalance?: boolean;
   chargeReconnectionFee?: boolean;
   // account_status_history is the definitive, per-customer service timeline
@@ -324,6 +329,7 @@ async function applyAccountTransition(
     employee: TransitionEmployee;
     options: TransitionOptions;
     allowOutstandingBalance?: boolean;
+    effectiveDate?: string;
   }
 ) {
   const {
@@ -332,6 +338,7 @@ async function applyAccountTransition(
     employee,
     options,
     allowOutstandingBalance = false,
+    effectiveDate,
   } = values;
 
   if (allowOutstandingBalance && employee.role !== "admin") {
@@ -345,7 +352,18 @@ async function applyAccountTransition(
     // from a stale status at the same time.
   const customerResult = await client.query(
       `
-      SELECT customer_id, status
+      SELECT
+        customer_id,
+        status,
+        activation_date,
+        (
+          SELECT history.effective_date
+          FROM public.account_status_history history
+          WHERE history.customer_id = customers.customer_id
+          ORDER BY history.effective_date DESC, history.changed_at DESC,
+                   history.account_status_history_id DESC
+          LIMIT 1
+        ) AS current_status_since
       FROM public.customers
       WHERE customer_id = $1
       FOR UPDATE;
@@ -363,6 +381,19 @@ async function applyAccountTransition(
       409,
       `This account cannot move from ${customer.status} to ${options.toStatus}.`
     );
+  }
+
+  if (effectiveDate) {
+    const earliestDate = [customer.activation_date, customer.current_status_since]
+      .filter((value): value is string => typeof value === "string")
+      .sort()
+      .at(-1);
+    if (earliestDate && effectiveDate < earliestDate) {
+      throw new AccountTransitionError(
+        409,
+        `The suspension cannot start before ${earliestDate}, when the current active period began.`
+      );
+    }
   }
 
     // Ending a suspension prices its fee here, before the balance is read, so
@@ -408,7 +439,10 @@ async function applyAccountTransition(
 
     const dateAssignment = options.updateDateColumn
       ? `, ${options.updateDateColumn} =
-          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE`
+          COALESCE(
+            NULLIF($3, '')::DATE,
+            (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+          )`
       : "";
 
     // Deactivation/reactivation dates are maintained only on the transitions
@@ -425,7 +459,9 @@ async function applyAccountTransition(
         deactivation_date,
         reactivation_date;
       `,
-      [options.toStatus, customerId]
+      options.updateDateColumn
+        ? [options.toStatus, customerId, effectiveDate ?? ""]
+        : [options.toStatus, customerId]
     );
 
     const history = await insertStatusHistory(client, {
@@ -434,7 +470,76 @@ async function applyAccountTransition(
       toStatus: options.toStatus,
       reason: recordedReason,
       employeeId: employee.employeeId,
+      effectiveDate,
     });
+
+    // A backdated suspension replaces full package billing from its selected
+    // start date. Payments and every other ledger entry remain untouched; if
+    // those package charges were already paid, removing them correctly leaves
+    // a credit after the J$500 suspension charges are generated.
+    let suspensionBillingAdjustment: {
+      removedPackageCharges: number;
+      removedPackageAmount: string;
+      suspensionChargesAdded: number;
+    } | null = null;
+    if (options.replacePackageChargesFromEffectiveDate && effectiveDate) {
+      const removedResult = await client.query(
+        `DELETE FROM public.account_ledger_entries
+         WHERE customer_id = $1
+           AND entry_type = 'monthly_charge'
+           AND effective_date >= $2::DATE
+         RETURNING amount;`,
+        [customerId, effectiveDate]
+      );
+      const removedAmount = removedResult.rows.reduce(
+        (total, row) => total + Number(row.amount),
+        0
+      );
+      await client.query(
+        `SELECT public.spcl_generate_suspension_charges(
+           (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+         );`
+      );
+      const suspensionChargeResult = await client.query(
+        `SELECT COUNT(*)::INTEGER AS charge_count
+         FROM public.account_ledger_entries
+         WHERE customer_id = $1
+           AND entry_type = 'suspension_charge'
+           AND source_key LIKE $2;`,
+        [
+          customerId,
+          `suspension-charge:${history.account_status_history_id}:%`,
+        ]
+      );
+      suspensionBillingAdjustment = {
+        removedPackageCharges: removedResult.rowCount ?? 0,
+        removedPackageAmount: removedAmount.toFixed(2),
+        suspensionChargesAdded: Number(
+          suspensionChargeResult.rows[0]?.charge_count ?? 0
+        ),
+      };
+
+      if ((removedResult.rowCount ?? 0) > 0) {
+        await client.query(
+          `INSERT INTO public.audit_logs (
+             employee_id, actor_name, action, entity_type, entity_id,
+             field_name, old_value, new_value, reason, occurred_at
+           ) VALUES (
+             $1, $2, 'Replaced package charges for backdated suspension',
+             'customer', $3, 'billing_schedule', $4, $5, $6,
+             CURRENT_TIMESTAMP
+           );`,
+          [
+            employee.employeeId,
+            `${employee.firstName} ${employee.lastName}`,
+            String(customerId),
+            `${removedResult.rowCount} package charge(s), J$${removedAmount.toFixed(2)}`,
+            `J$500 monthly suspension billing from ${effectiveDate}`,
+            reason,
+          ]
+        );
+      }
+    }
 
     if (customer.status === "pending_reconnection" && options.toStatus === "active") {
       await resolvePendingReconnectionRequests(client, {
@@ -510,6 +615,7 @@ async function applyAccountTransition(
       customer: updatedResult.rows[0],
       statusHistory: history,
       suspensionReconnectionFee,
+      suspensionBillingAdjustment,
       adminBalanceOverride: adminOverrideApplied
         ? {
             applied: true,
@@ -518,6 +624,29 @@ async function applyAccountTransition(
           }
         : null,
     };
+}
+
+// Only the suspension workflow accepts a staff-selected effective date. A
+// blank value means today; future dates would claim service stopped before the
+// OLT action has happened, so they are rejected before any live command runs.
+function transitionEffectiveDate(
+  req: Request,
+  res: Response,
+  options: TransitionOptions
+) {
+  if (!options.allowBackdatedEffectiveDate) return undefined;
+  const value = cleanText(req.body?.effectiveDate) || jamaicaToday();
+  if (!isValidDateOnly(value)) {
+    res.status(400).json({ error: "Choose a valid suspension start date." });
+    return null;
+  }
+  if (value > jamaicaToday()) {
+    res.status(400).json({
+      error: "The suspension start date cannot be in the future.",
+    });
+    return null;
+  }
+  return value;
 }
 
 // Apply one permitted account-status transition atomically. Endpoint wrappers
@@ -529,6 +658,8 @@ async function transitionAccount(
 ) {
   const customerId = parseCustomerId(req, res);
   if (customerId === null) return;
+  const effectiveDate = transitionEffectiveDate(req, res, options);
+  if (effectiveDate === null) return;
 
   const reason = cleanText(req.body.reason);
   if (reason.length < 3) {
@@ -559,6 +690,7 @@ async function transitionAccount(
       employee,
       options,
       allowOutstandingBalance,
+      effectiveDate,
     });
     await client.query("COMMIT");
     res.json(result);
@@ -640,6 +772,8 @@ async function transitionAccountWithOnt(
 ) {
   const customerId = parseCustomerId(req, res);
   if (customerId === null) return;
+  const effectiveDate = transitionEffectiveDate(req, res, options);
+  if (effectiveDate === null) return;
 
   const reason = cleanText(req.body.reason);
   if (reason.length < 3 || reason.length > 500) {
@@ -782,6 +916,7 @@ async function transitionAccountWithOnt(
         employee,
         options,
         allowOutstandingBalance,
+        effectiveDate,
       });
 
       // Ensure staff did not edit the mapping between live preflight and the
@@ -898,7 +1033,7 @@ async function transitionAccountWithOnt(
   }
 }
 
-function transitionAccountWithOptionalOnt(
+async function transitionAccountWithOptionalOnt(
   req: Request,
   res: Response,
   options: TransitionOptions,
@@ -907,7 +1042,18 @@ function transitionAccountWithOptionalOnt(
 ) {
   const rawId = req.params.customerId;
   const customerId = typeof rawId === "string" && /^\d+$/.test(rawId) ? Number(rawId) : -1;
-  if (!getAccountOntControlPolicy(customerId).integrated) {
+  const policy = getAccountOntControlPolicy(customerId);
+  if (!policy.integrated) {
+    if (options.requireOntActionWhenMapped && customerId >= 0) {
+      const context = await loadAccountOntContext(customerId);
+      if (context?.customer_ont_assignment_id) {
+        return res.status(409).json({
+          error:
+            "This customer has OLT information, but live account actions are not enabled for them. " +
+            "Enable the verified OLT workflow before suspending the account.",
+        });
+      }
+    }
     return transitionAccount(req, res, options);
   }
   return transitionAccountWithOnt(req, res, options, ontAction, confirmationVerb);
@@ -1957,8 +2103,11 @@ accountsRouter.get(
           allowlisted: policy.allowlisted,
           integrated: policy.integrated,
           ready: policy.integrated && mappingReady,
+          hasMapping: Boolean(context.customer_ont_assignment_id),
           reason: !policy.integrated
-            ? "This customer uses the existing account-only workflow."
+            ? context.customer_ont_assignment_id
+              ? "Live OLT account actions are not enabled for this mapped customer."
+              : "This customer uses the existing account-only workflow."
             : !mappingReady
               ? "Verify this customer's OLT mapping before changing service."
               : null,
@@ -2190,7 +2339,7 @@ accountsRouter.post(
 // the suspension runs and is priced at the other end, in
 // postSuspensionReconnectionFee. What starts here is the J$500 monthly holding
 // charge, raised by spcl_generate_suspension_charges on each monthly
-// anniversary of today, beginning today.
+// anniversary of the staff-selected suspension date, beginning on that date.
 accountsRouter.post(
   "/customers/:customerId/suspend",
   requireAuth,
@@ -2206,6 +2355,9 @@ accountsRouter.post(
         // after the fact; suspension is for an account in good standing.
         allowedFrom: ["active"],
         toStatus: "suspended",
+        allowBackdatedEffectiveDate: true,
+        replacePackageChargesFromEffectiveDate: true,
+        requireOntActionWhenMapped: true,
         // deactivation_date is the date service physically ended, and for a
         // suspension it genuinely did. It also feeds the service_ended_on
         // fallback in the 065/066/067 charge generators.

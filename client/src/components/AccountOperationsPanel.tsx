@@ -107,6 +107,7 @@ type OltAccountActions = {
   allowlisted: boolean;
   integrated: boolean;
   ready: boolean;
+  hasMapping: boolean;
   reason: string | null;
 };
 
@@ -207,6 +208,7 @@ function AccountOperationsPanel({
   const [action, setAction] = useState<AccountAction | null>(null);
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [suspensionStartDate, setSuspensionStartDate] = useState(jamaicaToday());
   const [adminBalanceOverride, setAdminBalanceOverride] = useState(false);
   const [saving, setSaving] = useState(false);
   const [billing, setBilling] = useState<BillingStatus | null>(null);
@@ -303,6 +305,7 @@ function AccountOperationsPanel({
             reason,
             confirmation,
             adminBalanceOverride,
+            effectiveDate: action === "suspend" ? suspensionStartDate : undefined,
           }),
         }
       );
@@ -324,9 +327,23 @@ function AccountOperationsPanel({
           setNotice(
             `Admin override applied. Service is active, but J$${Number(data.adminBalanceOverride.outstandingBalance).toLocaleString()} remains on the account. Add a disconnection hold or approve a valid service-outage discount if the balance is under review.`
           );
-        } else if (data.ontAction?.message) {
-          setNotice(data.ontAction.message);
+        } else {
+          const messages: string[] = [];
+          if (data.ontAction?.message) messages.push(data.ontAction.message);
+          if (action === "suspend") {
+            const adjustment = data.suspensionBillingAdjustment;
+            messages.push(
+              `Suspension billing starts ${formatDate(data.statusHistory.effective_date)} at J$500 per month.`
+            );
+            if (adjustment?.removedPackageCharges > 0) {
+              messages.push(
+                `${adjustment.removedPackageCharges} full-package charge${adjustment.removedPackageCharges === 1 ? " was" : "s were"} replaced from that date.`
+              );
+            }
+          }
+          if (messages.length > 0) setNotice(messages.join(" "));
         }
+        if (action === "suspend") await loadAccountData();
       }
       setAction(null);
       setReason("");
@@ -349,6 +366,7 @@ function AccountOperationsPanel({
   ) => {
     setReason("");
     setConfirmation("");
+    setSuspensionStartDate(nextAction === "suspend" ? jamaicaToday() : "");
     setAdminBalanceOverride(options?.adminBalanceOverride === true);
     setError("");
     setNotice("");
@@ -473,8 +491,11 @@ function AccountOperationsPanel({
                 <ActionButton
                   label="Suspend"
                   icon="pause_circle"
-                  disabled={oltAccountActions?.integrated === true && !oltAccountActions.ready}
-                  title={oltAccountActions?.integrated === true && !oltAccountActions.ready
+                  disabled={
+                    oltAccountActions?.hasMapping === true &&
+                    (!oltAccountActions.integrated || !oltAccountActions.ready)
+                  }
+                  title={oltAccountActions?.hasMapping === true && (!oltAccountActions.integrated || !oltAccountActions.ready)
                     ? oltAccountActions.reason || "Verify the OLT mapping first."
                     : "The customer is going away and wants service stopped. Deactivates the ONT and bills a flat holding fee each month instead of the package rate."}
                   onClick={() => startAction("suspend")}
@@ -797,6 +818,23 @@ function AccountOperationsPanel({
                 </p>
               </div>
             )}
+            {action === "suspend" && (
+              <label className="mt-5 block text-sm font-semibold text-on-surface">
+                Suspension starting date <span className="text-error">*</span>
+                <input
+                  type="date"
+                  required
+                  max={jamaicaToday()}
+                  value={suspensionStartDate}
+                  onChange={(event) => setSuspensionStartDate(event.target.value)}
+                  className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm focus:border-primary"
+                />
+                <span className="mt-1.5 block text-xs font-normal leading-5 text-on-surface-variant">
+                  Defaults to today. If the suspension already started, choose that earlier date.
+                  Full package charges from this date are replaced by the J$500 monthly suspension fee.
+                </span>
+              </label>
+            )}
             <label className="mt-5 block text-sm font-semibold text-on-surface">
               Reason <span className="text-error">*</span>
               <textarea
@@ -833,6 +871,7 @@ function AccountOperationsPanel({
                   setAction(null);
                   setReason("");
                   setConfirmation("");
+                  setSuspensionStartDate(jamaicaToday());
                   setAdminBalanceOverride(false);
                   setError("");
                 }}
@@ -842,7 +881,7 @@ function AccountOperationsPanel({
               </button>
               <button
                 type="button"
-                disabled={saving || reason.trim().length < 3 || (actionUsesOlt && confirmation !== requiredConfirmation)}
+                disabled={saving || reason.trim().length < 3 || (action === "suspend" && !suspensionStartDate) || (actionUsesOlt && confirmation !== requiredConfirmation)}
                 onClick={submitAction}
                 className={`rounded-lg px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50 ${
                   actionDetails[action].destructive ? "bg-error" : "bg-primary"

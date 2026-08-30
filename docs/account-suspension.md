@@ -62,10 +62,15 @@ active ──suspend──> suspended ──end-suspension──> active
 ```
 
 * `POST /api/customers/:id/suspend` — Admin and Head Office, from `active`
-  only. A customer already cut off for non-payment does not get to convert that
-  into a J$500 arrangement after the fact. Sends the real OLT deactivate
-  command when the rollout gate covers the customer; confirmation is
-  `SUSPEND <id>`.
+  only. `effectiveDate` defaults to today and may be set to an earlier date in
+  the current active period when an existing suspension is being entered late.
+  Full package charges on and after that date are removed and replaced by the
+  J$500 suspension schedule in the same transaction; payments remain, so an
+  already-paid difference becomes account credit. A customer already cut off
+  for non-payment does not get to convert that into a J$500 arrangement after
+  the fact. A customer with OLT information must pass through the verified live
+  OLT workflow: the ONT is deactivated, or confirmed already deactivated,
+  before the database status and billing change. Confirmation is `SUSPEND <id>`.
 * `POST /api/customers/:id/end-suspension` — one direct transition back to
   `active`, gated on a cleared balance, with the usual audited
   `adminBalanceOverride` available. Confirmation is `RECONNECT <id>`.
