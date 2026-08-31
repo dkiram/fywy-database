@@ -213,7 +213,7 @@ function AccountOperationsPanel({
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [suspension, setSuspension] = useState<SuspensionStatus | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
-  const [exceptionAction, setExceptionAction] = useState<"hold" | "waiver" | null>(null);
+  const [exceptionAction, setExceptionAction] = useState<"hold" | "waiver" | "credit" | null>(null);
   const [exceptionValue, setExceptionValue] = useState("");
   const [exceptionReason, setExceptionReason] = useState("");
   const [waiverRequests, setWaiverRequests] = useState<WaiverRequest[]>([]);
@@ -393,7 +393,14 @@ function AccountOperationsPanel({
     try {
       setSaving(true);
       setError("");
-      const endpoint = exceptionAction === "hold" ? "disconnection-holds" : "waiver-requests";
+      // A credit is applied straight away; a waiver only becomes a pending
+      // request. Both send the same {amount, reason} body.
+      const endpoint =
+        exceptionAction === "hold"
+          ? "disconnection-holds"
+          : exceptionAction === "credit"
+            ? "credits"
+            : "waiver-requests";
       const body = exceptionAction === "hold"
         ? { expiresOn: exceptionValue, reason: exceptionReason }
         : { amount: exceptionValue, reason: exceptionReason };
@@ -404,6 +411,11 @@ function AccountOperationsPanel({
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save management pass.");
+      if (exceptionAction === "credit") {
+        setNotice(
+          `J$${Number(exceptionValue).toLocaleString()} credit applied. It is reversible from the approved-discount strip below.`
+        );
+      }
       setExceptionAction(null);
       setExceptionValue("");
       setExceptionReason("");
@@ -417,6 +429,12 @@ function AccountOperationsPanel({
 
   const pendingWaiverRequest = waiverRequests.find((request) => request.status === "pending");
   const reversibleWaivers = waiverRequests.filter((request) => request.status === "approved");
+  // Only the two most recent concessions get a full-width strip. Admin credits
+  // made this list grow quickly, and an account with a long discount history
+  // was pushing the balance tiles and service controls off the screen. The
+  // older ones stay reversible inside Recent balance entries.
+  const featuredWaivers = reversibleWaivers.slice(0, 2);
+  const olderWaivers = reversibleWaivers.slice(2);
   const pendingReconnectionRequest = reconnectionRequests.find((request) => request.status === "pending");
 
   const reverseWaiver = async (waiverRequestId: number) => {
@@ -623,6 +641,18 @@ function AccountOperationsPanel({
                 }}
               />
             )}
+            {employeeRole === "admin" && (
+              <ActionButton
+                label="Add Credit"
+                icon="add_card"
+                title="Apply a credit to this account immediately"
+                onClick={() => {
+                  setExceptionAction("credit");
+                  setExceptionValue("");
+                  setExceptionReason("");
+                }}
+              />
+            )}
           </div>
         </div>
 
@@ -658,7 +688,7 @@ function AccountOperationsPanel({
             <span className="whitespace-nowrap text-xs font-bold uppercase tracking-wider">Admin review required</span>
           </div>
         )}
-        {reversibleWaivers.map((request) => (
+        {featuredWaivers.map((request) => (
           <div key={request.waiver_request_id} className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold text-on-surface">Approved discount · J${Number(request.amount).toLocaleString()}</p>
@@ -775,9 +805,40 @@ function AccountOperationsPanel({
             No account status history yet.
           </p>
         )}
-        {ledger.length > 0 && (
+        {(ledger.length > 0 || olderWaivers.length > 0) && (
           <details className="mt-6 border-t border-surface-container pt-4">
-            <summary className="cursor-pointer text-sm font-medium text-primary">Recent balance entries</summary>
+            <summary className="cursor-pointer text-sm font-medium text-primary">
+              Recent balance entries
+              {olderWaivers.length > 0
+                ? ` · ${olderWaivers.length} earlier discount${olderWaivers.length === 1 ? "" : "s"}`
+                : ""}
+            </summary>
+            {olderWaivers.length > 0 && (
+              <div className="mt-3 space-y-2 border-b border-surface-container pb-3">
+                {olderWaivers.map((request) => (
+                  <div key={request.waiver_request_id} className="flex items-start justify-between gap-4 text-xs">
+                    <div>
+                      <p className="font-semibold text-on-surface">
+                        Approved discount · J${Number(request.amount).toLocaleString()}
+                      </p>
+                      <p className="text-on-surface-variant">
+                        {formatDate(request.reviewed_at ?? request.requested_at)} · {request.reviewed_by_name || "Admin"}: {request.reason}
+                      </p>
+                    </div>
+                    {employeeRole === "admin" && (
+                      <button
+                        type="button"
+                        disabled={reversingWaiverId !== null}
+                        onClick={() => reverseWaiver(request.waiver_request_id)}
+                        className="whitespace-nowrap rounded-lg bg-error/10 px-2 py-1 text-[11px] font-semibold text-error disabled:opacity-50"
+                      >
+                        {reversingWaiverId === request.waiver_request_id ? "Reversing..." : "Reverse"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="mt-3 space-y-2">
               {ledger.slice(0, 8).map((entry) => (
                 <div key={entry.account_ledger_entry_id} className="flex items-start justify-between gap-4 text-xs">
@@ -897,16 +958,26 @@ function AccountOperationsPanel({
         <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/45 p-4" role="dialog" aria-modal="true">
           <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
             <h2 className="text-xl font-semibold text-on-surface">
-              {exceptionAction === "hold" ? "Postpone disconnection" : "Request balance discount"}
+              {exceptionAction === "hold"
+                ? "Postpone disconnection"
+                : exceptionAction === "credit"
+                  ? "Add credit to account"
+                  : "Request balance discount"}
             </h2>
             <p className="mt-2 text-sm text-on-surface-variant">
               {exceptionAction === "hold"
                 ? "A reason is required and will be recorded in Activity History."
-                : "Submitting this request does not change the balance. An Admin must review it and choose Approve & Apply."}
+                : exceptionAction === "credit"
+                  ? "This reduces the balance immediately. It is filed as an approved discount, so it stays reversible and is recorded in Activity History."
+                  : "Submitting this request does not change the balance. An Admin must review it and choose Approve & Apply."}
             </p>
 
             <label className="mt-5 block text-sm font-semibold text-on-surface">
-              {exceptionAction === "hold" ? "Hold until" : "Waiver amount"}
+              {exceptionAction === "hold"
+                ? "Hold until"
+                : exceptionAction === "credit"
+                  ? "Credit amount"
+                  : "Waiver amount"}
               <input
                 type={exceptionAction === "hold" ? "date" : "number"}
                 min={exceptionAction === "hold" ? jamaicaToday() : "0.01"}
@@ -925,9 +996,24 @@ function AccountOperationsPanel({
                 value={exceptionReason}
                 onChange={(event) => setExceptionReason(event.target.value)}
                 className="mt-1.5 w-full resize-none rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
-                placeholder={exceptionAction === "hold" ? "Why is this pass being approved?" : "Why should this customer receive a discount?"}
+                placeholder={
+                  exceptionAction === "hold"
+                    ? "Why is this pass being approved?"
+                    : exceptionAction === "credit"
+                      ? "Why is this credit being applied?"
+                      : "Why should this customer receive a discount?"
+                }
               />
             </label>
+
+            {exceptionAction === "credit" && (
+              <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <p className="text-sm font-semibold text-primary">Applied immediately</p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  No second approval is needed. The credit appears under Recent balance entries and can be undone with Reverse Discount.
+                </p>
+              </div>
+            )}
 
             {exceptionAction === "waiver" && (
               <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
@@ -961,7 +1047,13 @@ function AccountOperationsPanel({
                 onClick={submitException}
                 className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary disabled:opacity-50"
               >
-                {saving ? "Saving..." : exceptionAction === "waiver" ? "Send for Admin Approval" : "Approve Pass"}
+                {saving
+                  ? "Saving..."
+                  : exceptionAction === "waiver"
+                    ? "Send for Admin Approval"
+                    : exceptionAction === "credit"
+                      ? "Add Credit"
+                      : "Approve Pass"}
               </button>
             </div>
           </div>

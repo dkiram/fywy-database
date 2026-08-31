@@ -1734,6 +1734,111 @@ accountsRouter.get(
   }
 );
 
+// Admin-only direct credit. Unlike a discount request this needs no second
+// reviewer - an Admin applying it IS the approval. It is written as an already
+// approved waiver so the money stays reversible through the existing Reverse
+// Discount control and lands in the same discount audit trail as every other
+// concession, rather than becoming an untracked balance edit.
+accountsRouter.post(
+  "/customers/:customerId/credits",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+
+    const amount = Number(req.body.amount);
+    const reason = cleanText(req.body.reason);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: "Enter a credit amount greater than zero." });
+    }
+    if (Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
+      return res.status(400).json({ error: "A credit cannot be finer than one cent." });
+    }
+    if (amount > 1000000) {
+      return res.status(400).json({ error: "A single credit cannot exceed J$1,000,000." });
+    }
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({ error: "A reason between 3 and 500 characters is required." });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const customerResult = await client.query(
+        `SELECT customer_id FROM public.customers WHERE customer_id = $1 FOR UPDATE;`,
+        [customerId]
+      );
+      if (customerResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Customer not found." });
+      }
+
+      const entryResult = await client.query(
+        `INSERT INTO public.account_ledger_entries (
+          customer_id, entry_type, amount, effective_date, description,
+          created_by_employee_id, reason, is_verified
+        ) VALUES ($1, 'waiver', -ABS($2::NUMERIC),
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+          'Admin-applied account credit', $3, $4, TRUE)
+        RETURNING account_ledger_entry_id, customer_id, amount, effective_date,
+          description, reason;`,
+        [customerId, amount, employee.employeeId, reason]
+      );
+      const entry = entryResult.rows[0];
+
+      // Recorded as an already-approved request so the credit is reversible and
+      // sits beside every other discount this customer has been given.
+      const requestResult = await client.query(
+        `INSERT INTO public.waiver_requests (
+          customer_id, amount, reason, status,
+          requested_by_employee_id, requested_at,
+          reviewed_by_employee_id, reviewed_at, review_note,
+          waiver_ledger_entry_id
+        ) VALUES ($1, ABS($2::NUMERIC), $3, 'approved',
+          $4, CURRENT_TIMESTAMP, $4, CURRENT_TIMESTAMP,
+          'Credit applied directly by an administrator.', $5)
+        RETURNING waiver_request_id;`,
+        [customerId, amount, reason, employee.employeeId, entry.account_ledger_entry_id]
+      );
+
+      await client.query(
+        `INSERT INTO public.audit_logs (
+          employee_id, actor_name, action, entity_type, entity_id,
+          field_name, old_value, new_value, reason, occurred_at
+        ) VALUES ($1, $2, 'Applied account credit', 'customer', $3,
+          'account_credit', NULL, $4, $5, CURRENT_TIMESTAMP);`,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(customerId),
+          String(entry.amount),
+          reason,
+        ]
+      );
+
+      const billingResult = await client.query(
+        `SELECT balance, credit_balance, outstanding_balance
+         FROM public.customer_billing_status WHERE customer_id = $1;`,
+        [customerId]
+      );
+      await client.query("COMMIT");
+      res.status(201).json({
+        credit: entry,
+        waiverRequestId: requestResult.rows[0].waiver_request_id,
+        billing: billingResult.rows[0] ?? null,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not apply account credit:", error);
+      res.status(500).json({ error: "Could not apply account credit." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // Admin-only queue used by the approval panel on Account Operations.
 accountsRouter.get("/waiver-requests", requireAuth, requireAdmin, async (_req, res) => {
   try {
