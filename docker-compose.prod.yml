@@ -108,7 +108,7 @@ services:
       # a staff confirmation. The normal account-action gate still applies.
       HUAWEI_OLT_RECONNECTION_AUTOMATION_ENABLED: ${HUAWEI_OLT_RECONNECTION_AUTOMATION_ENABLED:-false}
       HUAWEI_OLT_RECONNECTION_AUTOMATION_MAX_PER_TICK: ${HUAWEI_OLT_RECONNECTION_AUTOMATION_MAX_PER_TICK:-10}
-      # Actual scheduled disconnection of the billing-eligible delinquent list.
+      # Automatic disconnection of the billing-eligible delinquent list.
       HUAWEI_OLT_AUTOMATION_ENABLED: ${HUAWEI_OLT_AUTOMATION_ENABLED:-false}
       HUAWEI_OLT_AUTOMATION_HOUR: ${HUAWEI_OLT_AUTOMATION_HOUR:-9}
       HUAWEI_OLT_AUTOMATION_MINUTE: ${HUAWEI_OLT_AUTOMATION_MINUTE:-0}

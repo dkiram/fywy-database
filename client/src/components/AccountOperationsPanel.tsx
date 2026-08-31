@@ -38,7 +38,6 @@ type BillingStatus = {
   credit_balance: string;
   oldest_unpaid_due_date: string | null;
   grace_end_date: string | null;
-  scheduled_disconnection_date: string | null;
   is_delinquent: boolean;
   eligible_for_disconnection: boolean;
   is_on_hold: boolean;
@@ -722,7 +721,6 @@ function AccountOperationsPanel({
             <BillingFact label="Outstanding" value={formatCurrency(billing.outstanding_balance)} />
             <BillingFact label="Credit" value={formatCurrency(billing.credit_balance)} />
             <BillingFact label="Grace Ends" value={billing.grace_end_date ? formatDate(billing.grace_end_date) : "—"} />
-            <BillingFact label="Disconnect On" value={billing.scheduled_disconnection_date ? formatDate(billing.scheduled_disconnection_date) : "—"} />
             {billing.is_on_hold && (
               <p className="rounded-lg bg-warning-container p-3 text-xs font-semibold text-warning sm:col-span-2 lg:col-span-4">
                 Disconnection pass active through {billing.hold_expires_on ? formatDate(billing.hold_expires_on) : "the approved date"}.

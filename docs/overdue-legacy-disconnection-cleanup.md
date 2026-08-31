@@ -14,8 +14,8 @@ All of these must be true:
 
 - `status = 'active'`, not hidden, and a legacy account (`source_staging_id` set);
 - currently delinquent, with a balance greater than zero;
-- `customer_billing_status.scheduled_disconnection_date` is before the cutoff
-  (default `2026-01-01` — i.e. the account was due to be cut off during 2025 or
+- `customer_billing_status.grace_end_date` is before the cutoff
+  (default `2026-01-01` — i.e. the account's grace period ended during 2025 or
   earlier);
 - not covered by an active disconnection hold;
 - no discount request pending.
@@ -58,9 +58,9 @@ wrong, nothing is written. Re-runs skip accounts already disconnected.
 - `--include-ont-mapped` — also disconnect accounts that have a current ONT
   assignment (DB status only; the ONT still needs the OLT deactivate command
   afterwards). Default leaves those for the OLT workflow.
-- `--scheduled-before YYYY-MM-DD` — move the cutoff (default `2026-01-01`).
-- `--effective-date today|scheduled` — `today` (default) records the
-  disconnection now; `scheduled` backdates it to the missed disconnection date
+- `--grace-ended-before YYYY-MM-DD` — move the cutoff (default `2026-01-01`).
+- `--effective-date today|eligible` — `today` (default) records the
+  disconnection now; `eligible` backdates it to the day after grace ended
   (never before the account's most recent status-history event), which also
   flags every monthly charge since then as raised while offline.
 

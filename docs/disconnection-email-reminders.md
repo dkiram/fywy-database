@@ -23,7 +23,7 @@ does not state an outstanding amount, but SPCL still requires a recorded
 positive balance and the exact due/grace dates before sending.
 
 The worker checks those rules again immediately before sending. A payment,
-hold, status change, revised disconnection date, or hidden account therefore
+hold, status change, revised grace-period date, or hidden account therefore
 cancels a queued warning. If the account email changes before delivery, SPCL
 uses the current address.
 

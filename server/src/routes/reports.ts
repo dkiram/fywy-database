@@ -37,7 +37,6 @@ const REPORT_SORTS: Record<string, Record<string, string>> = {
   "delinquent-customers": {
     oldest_unpaid_due_date: "billing.oldest_unpaid_due_date %DIR% NULLS LAST, c.customer_id",
     grace_end_date: "billing.grace_end_date %DIR% NULLS LAST, c.customer_id",
-    scheduled_disconnection_date: "billing.scheduled_disconnection_date %DIR% NULLS LAST, c.customer_id",
     outstanding_balance: "billing.outstanding_balance %DIR%, c.customer_id",
     last_payment_date: "MAX(p.payment_date) %DIR% NULLS LAST, c.customer_id",
     customer_name: "c.name %DIR%, c.customer_id",
@@ -233,7 +232,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
         // from the rest of the app; chasing a customer with no name is not a
         // thing anyone can act on.
         //
-        // Legacy rows whose displayed Disconnect On date predates 2025 are
+        // Legacy rows whose grace period ended before 2025 are
         // retained in the database and everywhere else in the app, but are no
         // longer actionable delinquency work. New-system customers are never
         // excluded by this historical cutoff.
@@ -247,15 +246,14 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             AND c.hidden_from_app = FALSE
             AND (
               c.source_staging_id IS NULL
-              OR billing.scheduled_disconnection_date IS NULL
-              OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
+              OR billing.grace_end_date >= DATE '2025-01-01'
             )
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2);`;
         rowsSql = `
           SELECT c.customer_id, c.name AS customer_name, c.telephone, c.status,
             billing.outstanding_balance, billing.oldest_unpaid_due_date,
-            billing.grace_end_date, billing.scheduled_disconnection_date,
+            billing.grace_end_date,
             billing.eligible_for_disconnection, billing.is_on_hold,
             billing.hold_expires_on, billing.unverified_entries,
             MAX(p.payment_date) AS last_payment_date
@@ -268,17 +266,16 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             AND c.hidden_from_app = FALSE
             AND (
               c.source_staging_id IS NULL
-              OR billing.scheduled_disconnection_date IS NULL
-              OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
+              OR billing.grace_end_date >= DATE '2025-01-01'
             )
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2)
           GROUP BY c.customer_id, billing.customer_id, billing.outstanding_balance,
             billing.oldest_unpaid_due_date, billing.grace_end_date,
-            billing.scheduled_disconnection_date, billing.eligible_for_disconnection,
-            billing.is_on_hold, billing.hold_expires_on, billing.unverified_entries
+            billing.eligible_for_disconnection, billing.is_on_hold,
+            billing.hold_expires_on, billing.unverified_entries
           ORDER BY ${orderBy || `billing.eligible_for_disconnection DESC,
-            billing.scheduled_disconnection_date, billing.outstanding_balance DESC,
+            billing.grace_end_date, billing.outstanding_balance DESC,
             c.customer_id`}
           LIMIT $3 OFFSET $4;`;
         // Deliberately counts the customers but not the money. The total owed
@@ -294,8 +291,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             AND c.hidden_from_app = FALSE
             AND (
               c.source_staging_id IS NULL
-              OR billing.scheduled_disconnection_date IS NULL
-              OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
+              OR billing.grace_end_date >= DATE '2025-01-01'
             )
             AND ($1 = '' OR c.name ILIKE $2 OR c.customer_id::TEXT ILIKE $2
               OR COALESCE(c.telephone, '') ILIKE $2);`;

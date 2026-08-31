@@ -16,7 +16,7 @@ SELECT
     b.outstanding_balance,
     b.is_delinquent,
     b.unverified_entries > 0                   AS has_unverified_charges,
-    b.scheduled_disconnection_date,
+    b.grace_end_date,
     b.is_on_hold
 FROM public.customers c
 LEFT JOIN public.customer_billing_status b ON b.customer_id = c.customer_id
@@ -30,7 +30,7 @@ WHERE NOT EXISTS (
   -- AND c.hidden_from_app = FALSE    -- uncomment to hide archived-from-app rows
 ORDER BY
     c.status,
-    b.scheduled_disconnection_date NULLS LAST,
+    b.grace_end_date NULLS LAST,
     c.customer_id;
 
 
@@ -42,7 +42,7 @@ ORDER BY
 --     COUNT(*)                                              AS customers_without_olt,
 --     COUNT(*) FILTER (WHERE b.is_delinquent)               AS delinquent,
 --     COUNT(*) FILTER (WHERE b.unverified_entries > 0)      AS with_unverified_charges,
---     COUNT(*) FILTER (WHERE b.scheduled_disconnection_date <= CURRENT_DATE) AS past_due_date
+--     COUNT(*) FILTER (WHERE b.grace_end_date < CURRENT_DATE) AS past_grace
 -- FROM public.customers c
 -- LEFT JOIN public.customer_billing_status b ON b.customer_id = c.customer_id
 -- WHERE NOT EXISTS (

@@ -1,4 +1,4 @@
--- Eligible OLT-disconnection candidates due on or before 2026-07-20.
+-- Eligible OLT-disconnection candidates whose grace ended by 2026-07-20.
 -- Mirrors the automation's candidate filter, adds the hard date ceiling,
 -- and splits by whether a verified OLT mapping exists (only mapping-ready
 -- accounts actually get an OLT command; the rest are skipped).
@@ -8,7 +8,7 @@ WITH today AS (
 candidate AS (
   SELECT
     customer.customer_id,
-    billing.scheduled_disconnection_date AS due,
+    billing.grace_end_date,
     (assignment.customer_ont_assignment_id IS NOT NULL
       AND assignment.mapping_status = 'verified'
       AND assignment.ont_serial IS NOT NULL
@@ -33,15 +33,14 @@ candidate AS (
     )
     AND (
       customer.source_staging_id IS NULL
-      OR billing.scheduled_disconnection_date IS NULL
-      OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
+      OR billing.grace_end_date >= DATE '2025-01-01'
     )
-    AND billing.scheduled_disconnection_date <= DATE '2026-07-20'
+    AND billing.grace_end_date <= DATE '2026-07-20'
 )
 SELECT
   COUNT(*) FILTER (WHERE mapping_ready)             AS ready_through_jul20,
   COUNT(*) FILTER (WHERE NOT mapping_ready)         AS not_ready_through_jul20,
   LEAST(COUNT(*) FILTER (WHERE mapping_ready), 300) AS batch_size,
-  MIN(due) FILTER (WHERE mapping_ready)             AS oldest_due,
-  MAX(due) FILTER (WHERE mapping_ready)             AS newest_due
+  MIN(grace_end_date) FILTER (WHERE mapping_ready)  AS oldest_grace_end,
+  MAX(grace_end_date) FILTER (WHERE mapping_ready)  AS newest_grace_end
 FROM candidate;

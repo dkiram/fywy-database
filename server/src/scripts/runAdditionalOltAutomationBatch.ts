@@ -8,18 +8,18 @@ function argument(name: string) {
 }
 
 const count = Number.parseInt(argument("--count") ?? "", 10);
-const maxScheduledDate = argument("--max-scheduled-date") ?? "";
+const maxGraceEndDate = argument("--max-grace-end-date") ?? "";
 const confirmation = argument("--confirmation") ?? "";
-const expectedConfirmation = `RUN ADDITIONAL ${count} THROUGH ${maxScheduledDate}`;
+const expectedConfirmation = `RUN ADDITIONAL ${count} THROUGH ${maxGraceEndDate}`;
 
 if (!Number.isInteger(count) || count < 1 || count > 500) {
   console.error(
-    "Usage: runAdditionalOltAutomationBatch --count <1-500> --max-scheduled-date <YYYY-MM-DD> --confirmation <text>"
+    "Usage: runAdditionalOltAutomationBatch --count <1-500> --max-grace-end-date <YYYY-MM-DD> --confirmation <text>"
   );
   process.exit(2);
 }
-if (!/^\d{4}-\d{2}-\d{2}$/.test(maxScheduledDate) || Number.isNaN(Date.parse(maxScheduledDate))) {
-  console.error("--max-scheduled-date must be a real calendar date in YYYY-MM-DD form. Nothing was run.");
+if (!/^\d{4}-\d{2}-\d{2}$/.test(maxGraceEndDate) || Number.isNaN(Date.parse(maxGraceEndDate))) {
+  console.error("--max-grace-end-date must be a real calendar date in YYYY-MM-DD form. Nothing was run.");
   process.exit(2);
 }
 if (confirmation !== expectedConfirmation) {
@@ -32,7 +32,7 @@ if (confirmation !== expectedConfirmation) {
 runAutomaticDelinquentDisconnect({
   allowAdditionalRunToday: true,
   maxPerRunOverride: count,
-  maxScheduledDate,
+  maxGraceEndDate,
 })
   .then((result) => {
     console.log("One-time additional OLT batch result:", JSON.stringify(result));

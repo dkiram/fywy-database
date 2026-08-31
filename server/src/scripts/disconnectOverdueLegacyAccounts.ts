@@ -24,7 +24,7 @@ import type { PoolClient } from "pg";
 import { pool } from "../db.js";
 
 const ELIGIBLE_PERFORMER_ROLES = ["admin", "head_office"];
-const DEFAULT_SCHEDULED_BEFORE = "2026-01-01";
+const DEFAULT_GRACE_ENDED_BEFORE = "2026-01-01";
 const STATUS_REASON =
   "Bulk cleanup: overdue 2025 disconnection never actioned; no ONT assignment";
 
@@ -42,7 +42,7 @@ type Candidate = {
   pole_box_number: string | null;
   port_number: string | null;
   outstanding_balance: string;
-  scheduled_disconnection_date: string;
+  grace_end_date: string;
   oldest_unpaid_due_date: string | null;
   has_olt_mapping: boolean;
   offline_charge_amount: string;
@@ -70,10 +70,10 @@ function usage() {
     "  npm run disconnect:overdue-legacy -- --performed-by <username>",
     "",
     "Options:",
-    `  --scheduled-before <YYYY-MM-DD>   only accounts whose scheduled disconnection`,
-    `                                   is before this date (default ${DEFAULT_SCHEDULED_BEFORE})`,
-    "  --effective-date <scheduled|today>  date recorded for the disconnection",
-    "                                   (default: scheduled = the missed disconnection date)",
+    `  --grace-ended-before <YYYY-MM-DD> only accounts whose grace period ended`,
+    `                                   before this date (default ${DEFAULT_GRACE_ENDED_BEFORE})`,
+    "  --effective-date <eligible|today> date recorded for the disconnection",
+    "                                   (default: today)",
     "",
     "Apply after reviewing the preview:",
     "  npm run disconnect:overdue-legacy -- --performed-by <username> --apply \\",
@@ -82,7 +82,7 @@ function usage() {
   ].join("\n");
 }
 
-// $1 scheduled-before date, $2 optional customer_id[] filter for the locked recheck.
+// $1 grace-ended-before date, $2 optional customer_id[] filter for the locked recheck.
 const CANDIDATES_SQL = `
   SELECT
     c.customer_id,
@@ -90,7 +90,7 @@ const CANDIDATES_SQL = `
     NULLIF(TRIM(c.pole_box_number), '') AS pole_box_number,
     NULLIF(TRIM(c.port_number), '') AS port_number,
     billing.outstanding_balance,
-    billing.scheduled_disconnection_date,
+    billing.grace_end_date,
     billing.oldest_unpaid_due_date,
     (ont.customer_ont_assignment_id IS NOT NULL) AS has_olt_mapping,
     COALESCE(offline.charge_amount, 0)::TEXT AS offline_charge_amount,
@@ -108,7 +108,7 @@ const CANDIDATES_SQL = `
     WHERE le.customer_id = c.customer_id
       AND le.entry_type = 'monthly_charge'
       AND COALESCE(le.due_date, le.effective_date)
-          >= billing.scheduled_disconnection_date
+          > billing.grace_end_date
   ) offline ON TRUE
   WHERE c.status = 'active'
     AND c.hidden_from_app = FALSE
@@ -117,8 +117,8 @@ const CANDIDATES_SQL = `
     AND billing.is_delinquent
     AND billing.is_on_hold = FALSE
     AND billing.outstanding_balance > 0
-    AND billing.scheduled_disconnection_date IS NOT NULL
-    AND billing.scheduled_disconnection_date < $1::DATE
+    AND billing.grace_end_date IS NOT NULL
+    AND billing.grace_end_date < $1::DATE
     AND NOT EXISTS (
       SELECT 1 FROM public.waiver_requests w
       WHERE w.customer_id = c.customer_id
@@ -160,10 +160,10 @@ async function findPerformer(client: PoolClient, username: string): Promise<Perf
 
 async function candidates(
   client: PoolClient,
-  scheduledBefore: string,
+  graceEndedBefore: string,
   customerIds: number[] | null = null
 ) {
-  const result = await client.query<Candidate>(CANDIDATES_SQL, [scheduledBefore, customerIds]);
+  const result = await client.query<Candidate>(CANDIDATES_SQL, [graceEndedBefore, customerIds]);
   return result.rows;
 }
 
@@ -187,7 +187,7 @@ function printGroup(title: string, rows: Candidate[]) {
       customer: row.customer_id,
       name: row.customer_name,
       balance: row.outstanding_balance,
-      should_have_gone: row.scheduled_disconnection_date,
+      grace_ended: row.grace_end_date,
       oldest_unpaid: row.oldest_unpaid_due_date,
       charges_since_then: `${row.offline_charge_count} / J$${row.offline_charge_amount}`,
       pole_box: row.pole_box_number,
@@ -202,15 +202,15 @@ async function run() {
   const expectedCount = positiveInteger(argument("--expected-count"));
   const confirmation = argument("--confirmation") ?? "";
 
-  const scheduledBeforeArg = argument("--scheduled-before");
-  if (scheduledBeforeArg && !isIsoDate(scheduledBeforeArg)) {
-    throw new Error("--scheduled-before must be YYYY-MM-DD.");
+  const graceEndedBeforeArg = argument("--grace-ended-before");
+  if (graceEndedBeforeArg && !isIsoDate(graceEndedBeforeArg)) {
+    throw new Error("--grace-ended-before must be YYYY-MM-DD.");
   }
-  const scheduledBefore = scheduledBeforeArg ?? DEFAULT_SCHEDULED_BEFORE;
+  const graceEndedBefore = graceEndedBeforeArg ?? DEFAULT_GRACE_ENDED_BEFORE;
 
   const effectiveMode = argument("--effective-date") ?? "today";
-  if (effectiveMode !== "scheduled" && effectiveMode !== "today") {
-    throw new Error('--effective-date must be "scheduled" or "today".');
+  if (effectiveMode !== "eligible" && effectiveMode !== "today") {
+    throw new Error('--effective-date must be "eligible" or "today".');
   }
 
   // By default accounts with a current ONT assignment are left for the OLT
@@ -243,7 +243,7 @@ async function run() {
       );`
     );
 
-    const initial = await candidates(client, scheduledBefore);
+    const initial = await candidates(client, graceEndedBefore);
     await lockCustomers(
       client,
       initial.map((row) => row.customer_id)
@@ -251,7 +251,7 @@ async function run() {
     // Re-read committed state now that the customer rows are locked.
     const rows = await candidates(
       client,
-      scheduledBefore,
+      graceEndedBefore,
       initial.map((row) => row.customer_id)
     );
 
@@ -272,11 +272,11 @@ async function run() {
       0
     );
     console.log(
-      `\nCutoff: scheduled disconnection before ${scheduledBefore}. ` +
+      `\nCutoff: grace period ended before ${graceEndedBefore}. ` +
         `Disconnection date recorded: ${effectiveMode}.`
     );
     console.log(
-      `Monthly charges already raised on/after the missed disconnection date for ` +
+      `Monthly charges already raised after the grace period ended for ` +
         `the ${toDisconnect.length} to disconnect: J$${totalOfflineCharges.toFixed(2)} ` +
         `(not reversed by this script; review in customer_offline_monthly_charge_review).`
     );
@@ -290,8 +290,8 @@ async function run() {
         console.log(
           `To apply: --apply --expected-count ${toDisconnect.length} ` +
             `--confirmation "${expectedConfirmation}"` +
-            (scheduledBeforeArg ? ` --scheduled-before ${scheduledBefore}` : "") +
-            (effectiveMode === "today" ? " --effective-date today" : "") +
+            (graceEndedBeforeArg ? ` --grace-ended-before ${graceEndedBefore}` : "") +
+            (effectiveMode === "eligible" ? " --effective-date eligible" : "") +
             (includeOntMapped ? " --include-ont-mapped" : "")
         );
       }
@@ -314,12 +314,12 @@ async function run() {
     const actorName = `${performer.first_name} ${performer.last_name}`;
     let changed = 0;
 
-    // "today" records the disconnection now. "scheduled" backdates it to the
-    // missed disconnection date, but never before this account's most recent
+    // "today" records the disconnection now. "eligible" backdates it to the
+    // first day after grace ended, but never before the account's most recent
     // status-history event and never into the future, so the service timeline
     // stays monotonic and migration 054's trigger still stops new charges.
     //
-    // $1 customer_id, $2 scheduled date, $3 reason, $4 employee id,
+    // $1 customer_id, $2 grace-end date, $3 reason, $4 employee id,
     // $5 source_key, $6 mode, $7 actor name.
     const APPLY_ONE_SQL = `
       WITH eff AS (
@@ -329,7 +329,7 @@ async function run() {
           ELSE LEAST(
             (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
             GREATEST(
-              $2::DATE,
+              $2::DATE + 1,
               (SELECT MAX(h.effective_date)
                  FROM public.account_status_history h
                 WHERE h.customer_id = $1)
@@ -374,7 +374,7 @@ async function run() {
     for (const row of toDisconnect) {
       const result = await client.query(APPLY_ONE_SQL, [
         row.customer_id,
-        row.scheduled_disconnection_date,
+        row.grace_end_date,
         STATUS_REASON,
         performer.employee_id,
         `bulk-2025-overdue-disconnect:${row.customer_id}`,

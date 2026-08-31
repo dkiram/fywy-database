@@ -19,7 +19,7 @@ type Candidate = {
   customer_id: number;
   customer_name: string;
   outstanding_balance: string;
-  scheduled_disconnection_date: string;
+  grace_end_date: string;
   customer_ont_assignment_id: number | null;
   management_ip: string | null;
   frame_number: number | null;
@@ -50,13 +50,13 @@ type AutomaticRunOptions = {
   allowAdditionalRunToday?: boolean;
   maxPerRunOverride?: number;
   /**
-   * Optional hard ceiling on scheduled_disconnection_date (YYYY-MM-DD). When
-   * set, only accounts due on or before this date are eligible, and accounts
-   * with no scheduled date are excluded. The one-time continuation batch uses
+   * Optional hard ceiling on grace_end_date (YYYY-MM-DD). When set, only
+   * accounts whose grace period ended on or before this date are eligible. The
+   * one-time continuation batch uses
    * this to stay strictly inside an explicitly confirmed window regardless of
    * how the oldest-first ordering happens to fall.
    */
-  maxScheduledDate?: string;
+  maxGraceEndDate?: string;
 };
 
 function isEnabled() {
@@ -267,7 +267,7 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
   const itemResult = await pool.query(
     `INSERT INTO public.olt_automation_run_items (
        olt_automation_run_id, customer_id, customer_ont_assignment_id,
-       outstanding_balance, scheduled_disconnection_date
+       outstanding_balance, grace_end_date
      ) VALUES ($1, $2, $3, $4, $5)
      RETURNING olt_automation_run_item_id;`,
     [
@@ -275,7 +275,7 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
       candidate.customer_id,
       candidate.customer_ont_assignment_id,
       candidate.outstanding_balance,
-      candidate.scheduled_disconnection_date,
+      candidate.grace_end_date,
     ]
   );
   const itemId = Number(itemResult.rows[0].olt_automation_run_item_id);
@@ -313,7 +313,7 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
     return "skipped";
   }
 
-  const reason = `Automatic delinquency disconnection scheduled for ${candidate.scheduled_disconnection_date}`;
+  const reason = `Automatic delinquency disconnection after grace ended ${candidate.grace_end_date}`;
   let attemptId: number;
   try {
     const attemptResult = await pool.query(
@@ -596,7 +596,7 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
          customer.customer_id,
          customer.name AS customer_name,
          billing.outstanding_balance,
-         billing.scheduled_disconnection_date,
+         billing.grace_end_date,
          assignment.customer_ont_assignment_id,
          host(olt.management_ip) AS management_ip,
          assignment.frame_number,
@@ -631,23 +631,20 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
          )
          AND (
            customer.source_staging_id IS NULL
-           OR billing.scheduled_disconnection_date IS NULL
-           OR billing.scheduled_disconnection_date >= DATE '2025-01-01'
+           OR billing.grace_end_date >= DATE '2025-01-01'
          )
          -- Optional hard ceiling for an explicitly confirmed continuation run.
-         -- A NULL scheduled date fails "<= $3" and is therefore excluded, which
-         -- is the intended behaviour: an undated account cannot be proven to
-         -- fall inside the confirmed window.
+         -- eligible_for_disconnection already guarantees a grace-end date.
          AND (
            $3::DATE IS NULL
-           OR billing.scheduled_disconnection_date <= $3::DATE
+           OR billing.grace_end_date <= $3::DATE
          )
        ORDER BY
          CASE WHEN assignment.mapping_status = 'verified' AND assignment.ont_serial IS NOT NULL THEN 0 ELSE 1 END,
-         billing.scheduled_disconnection_date,
+         billing.grace_end_date,
          customer.customer_id
        LIMIT $1;`,
-      [maxPerRun, clock.date, options.maxScheduledDate ?? null]
+      [maxPerRun, clock.date, options.maxGraceEndDate ?? null]
     );
     const candidateCount = Number(candidates.rows[0]?.candidate_count ?? 0);
     const selectedCount = candidates.rows.length;

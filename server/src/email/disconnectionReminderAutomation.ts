@@ -244,7 +244,7 @@ async function sendQueueItem(client: PoolClient, item: QueueRow) {
       client,
       item.customer_email_notification_id,
       "skipped_no_longer_eligible",
-      "The account was paid, held, changed, hidden, or no longer scheduled for this disconnection date.",
+      "The account was paid, held, changed, hidden, or no longer tied to this grace-period end date.",
     );
     return;
   }

@@ -173,8 +173,8 @@ list. Invalid dates fail closed and block disconnections until corrected.
 When enabled, the API runs once per Jamaica calendar day at or after the
 configured time. It generates charges through that day and processes customers
 whose `customer_billing_status.eligible_for_disconnection` is true. That view
-already requires an active account, money outstanding beyond grace, the
-scheduled disconnection date to have arrived, and no active hold.
+already requires an active account, money outstanding after grace has ended,
+and no active hold.
 
 For every candidate, the scheduler also requires a current verified OLT
 mapping and serial, locks the customer against a concurrent payment, re-checks
@@ -222,6 +222,5 @@ day. The server records a separate run and excludes every customer already
 journaled in any earlier run for that billing date. The advisory lock, payment
 row lock, live identity verification, durable action journal, and post-command
 confirmation remain mandatory for every customer. The continuation also
-requires an explicit maximum scheduled-disconnection date and includes that
-date in its confirmation phrase, preventing it from spilling into a later
-disconnect window.
+requires an explicit maximum grace-end date and includes that date in its
+confirmation phrase, preventing it from spilling beyond the confirmed group.
