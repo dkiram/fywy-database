@@ -15,11 +15,14 @@ COMMENT ON COLUMN public.olt_automation_run_items.grace_end_date IS
 ALTER TABLE public.olt_automation_run_items
     DROP COLUMN scheduled_disconnection_date;
 
--- A PostgreSQL view cannot lose a result column through CREATE OR REPLACE, so
--- recreate this non-materialized view without the obsolete calculated field.
-DROP VIEW public.customer_billing_status;
+-- Keep the billing view's identity intact because customer_suspension_status
+-- depends on it. Replace the obsolete output in the same column position with
+-- the first date on which grace has actually ended. CREATE OR REPLACE can then
+-- update the eligibility rule without dropping either view.
+ALTER VIEW public.customer_billing_status
+    RENAME COLUMN scheduled_disconnection_date TO disconnection_eligible_on;
 
-CREATE VIEW public.customer_billing_status AS
+CREATE OR REPLACE VIEW public.customer_billing_status AS
 WITH totals AS (
     SELECT
         customer_id,
@@ -66,6 +69,9 @@ SELECT
     GREATEST(COALESCE(t.balance, 0), 0)::NUMERIC(14,2) AS outstanding_balance,
     o.due_date AS oldest_unpaid_due_date,
     o.grace_end_date,
+    CASE WHEN o.grace_end_date IS NULL THEN NULL
+         ELSE o.grace_end_date + 1
+    END AS disconnection_eligible_on,
     (
         COALESCE(t.balance, 0) > 0
         AND o.grace_end_date < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
@@ -88,7 +94,5 @@ FROM public.customers c
 LEFT JOIN totals t USING (customer_id)
 LEFT JOIN oldest_unpaid o USING (customer_id)
 LEFT JOIN active_holds h USING (customer_id);
-
-GRANT SELECT ON public.customer_billing_status TO spcl_readonly;
 
 DROP FUNCTION public.spcl_scheduled_disconnection(DATE);
