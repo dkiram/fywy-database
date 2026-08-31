@@ -1,7 +1,10 @@
 /** Implements application intake, matching, service activation, and closure decisions. */
+import { isIP } from "node:net";
 import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { pool } from "../db.js";
+import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
+import { OltVerificationError, readOntFromOlt } from "../huawei/verifyOnt.js";
 import { insertStatusHistory } from "./accounts.js";
 import { loadReceipt } from "./payments.js";
 
@@ -46,6 +49,24 @@ function requireApplicationDecisionRole(
 
 function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+// One Huawei location field (frame / slot / PON port / ONT ID). Mirrors the
+// range checks in the network-access route so a mapping entered at activation
+// is validated identically to one entered on the customer profile card.
+function parseOltWholeNumber(
+  value: unknown,
+  max: number
+): { value: number } | { error: string } {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) {
+    return { error: "Enter a whole number for every OLT location field." };
+  }
+  const number = Number(text);
+  if (!Number.isSafeInteger(number) || number < 0 || number > max) {
+    return { error: `OLT location values must be between 0 and ${max}.` };
+  }
+  return { value: number };
 }
 
 // Whether an imported row may still be decided. Every caller separately
@@ -571,6 +592,99 @@ applicationsRouter.patch(
       });
     }
 
+    // OLT information is mandatory to activate a brand-new (non-legacy)
+    // application - the same scope as the pole box and port requirement below.
+    // The entered ONT location is checked against the live OLT here, before the
+    // activation transaction opens, so a new account never goes active on a
+    // port that has no ONT answering. The slow CLI read is deliberately kept
+    // outside the transaction so it never holds the application row lock.
+    const oltName = cleanText(req.body.oltName);
+    const oltManagementIp = cleanText(req.body.oltManagementIp);
+    let oltTarget: {
+      managementIp: string;
+      frameNumber: number;
+      slotNumber: number;
+      ponPortNumber: number;
+      ontId: number;
+    } | null = null;
+    let oltLocation = "";
+    let liveOnt: Awaited<ReturnType<typeof readOntFromOlt>> = null;
+
+    if (createNew) {
+      const prelim = await pool.query(
+        `SELECT legacy_source, status FROM public.applications
+         WHERE application_id = $1;`,
+        [applicationId]
+      );
+      if (prelim.rows.length === 0) {
+        return res.status(404).json({ error: "Application not found." });
+      }
+      const prelimApp = prelim.rows[0];
+
+      if (!prelimApp.legacy_source) {
+        if (!activeStatuses.includes(prelimApp.status)) {
+          return res.status(409).json({
+            error: "This application has already been decided.",
+          });
+        }
+        if (oltName.length < 2 || oltName.length > 120) {
+          return res.status(400).json({
+            error: "Enter the OLT name to activate a new application.",
+          });
+        }
+        if (isIP(oltManagementIp) === 0) {
+          return res
+            .status(400)
+            .json({ error: "Enter a valid OLT management IP address." });
+        }
+        const frame = parseOltWholeNumber(req.body.frameNumber, 255);
+        const slot = parseOltWholeNumber(req.body.slotNumber, 255);
+        const ponPort = parseOltWholeNumber(req.body.ponPortNumber, 255);
+        const ontId = parseOltWholeNumber(req.body.ontId, 4095);
+        if ("error" in frame) return res.status(400).json({ error: frame.error });
+        if ("error" in slot) return res.status(400).json({ error: slot.error });
+        if ("error" in ponPort)
+          return res.status(400).json({ error: ponPort.error });
+        if ("error" in ontId) return res.status(400).json({ error: ontId.error });
+
+        oltTarget = {
+          managementIp: oltManagementIp,
+          frameNumber: frame.value,
+          slotNumber: slot.value,
+          ponPortNumber: ponPort.value,
+          ontId: ontId.value,
+        };
+        oltLocation =
+          `${frame.value}/${slot.value}/${ponPort.value}/${ontId.value}`;
+
+        try {
+          liveOnt = await readOntFromOlt(oltTarget);
+        } catch (error) {
+          if (error instanceof OltVerificationError) {
+            return res.status(error.kind === "configuration" ? 503 : 502).json({
+              error: error.message,
+              code: `olt_${error.kind}_error`,
+            });
+          }
+          console.error(
+            "Could not verify the ONT location during activation:",
+            error
+          );
+          return res.status(502).json({
+            error: "Could not reach the OLT to verify the ONT location.",
+          });
+        }
+
+        if (!liveOnt) {
+          return res.status(409).json({
+            error:
+              `No ONT answers at ${oltName} ${oltLocation}. ` +
+              "Enter the correct OLT location, then activate.",
+          });
+        }
+      }
+    }
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -630,6 +744,16 @@ applicationsRouter.patch(
           error: "Pole box and port are required to activate a new application.",
         });
       }
+      // The pre-transaction block above already read the live OLT for a new
+      // non-legacy application; a missing target here means the request never
+      // carried usable OLT fields.
+      if (!application.legacy_source && createNew && (!oltTarget || !liveOnt)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error:
+            "OLT information is required to activate a new application, and its ONT location must verify against the live OLT.",
+        });
+      }
 
       const packageResult = await client.query(
         `SELECT package_id FROM public.packages WHERE package_id = $1;`,
@@ -656,6 +780,16 @@ applicationsRouter.patch(
 
       let customerId: number;
       let createdCustomer = false;
+      let oltMappingResult:
+        | {
+            oltName: string;
+            location: string;
+            ontSerial: string;
+            descriptionMatches: boolean;
+            liveControlFlag: "active" | "deactivated";
+            liveRunState: "online" | "offline";
+          }
+        | null = null;
 
       if (requestedCustomerId != null) {
         // Match Review can link to the suggested existing customer instead of
@@ -770,6 +904,155 @@ applicationsRouter.patch(
             note || `Activated from application #${applicationId}`,
           ]
         );
+
+        // Record the customer's ONT mapping. The live read before this
+        // transaction already confirmed an ONT answers at this location, so the
+        // mapping is stored as verified. A name-description mismatch is noted
+        // but never blocks activation - the installer may set the Huawei
+        // description after the account is live.
+        if (oltTarget && liveOnt) {
+          let oltRow = await client.query(
+            `SELECT olt_id, host(management_ip) AS management_ip
+             FROM public.olts
+             WHERE normalized_name = UPPER(TRIM($1))
+             FOR UPDATE;`,
+            [oltName]
+          );
+          if (
+            oltRow.rows.length > 0 &&
+            oltRow.rows[0].management_ip !== oltManagementIp
+          ) {
+            await client.query("ROLLBACK");
+            return res.status(409).json({
+              error: `${oltName} already uses management IP ${oltRow.rows[0].management_ip}.`,
+            });
+          }
+          if (oltRow.rows.length === 0) {
+            oltRow = await client.query(
+              `INSERT INTO public.olts (name, management_ip, created_by_employee_id)
+               VALUES ($1, $2::INET, $3)
+               RETURNING olt_id, host(management_ip) AS management_ip;`,
+              [oltName, oltManagementIp, employee.employeeId]
+            );
+          }
+          const oltId = oltRow.rows[0].olt_id;
+
+          const locationHolder = await client.query(
+            `SELECT holder.customer_id, holder.name, holder.status
+             FROM public.customer_ont_assignments occupying
+             JOIN public.customers holder
+               ON holder.customer_id = occupying.customer_id
+             WHERE occupying.ended_at IS NULL
+               AND occupying.olt_id = $1
+               AND occupying.frame_number = $2
+               AND occupying.slot_number = $3
+               AND occupying.pon_port_number = $4
+               AND occupying.ont_id = $5
+             LIMIT 1;`,
+            [
+              oltId,
+              oltTarget.frameNumber,
+              oltTarget.slotNumber,
+              oltTarget.ponPortNumber,
+              oltTarget.ontId,
+            ]
+          );
+          if (locationHolder.rows.length > 0) {
+            await client.query("ROLLBACK");
+            const holder = locationHolder.rows[0];
+            return res.status(409).json({
+              error:
+                `${oltName} ${oltLocation} is already assigned to customer ` +
+                `#${holder.customer_id} ${holder.name} ` +
+                `(${String(holder.status).replace(/_/g, " ")}). ` +
+                "Release it from that customer, then activate.",
+            });
+          }
+
+          const serial = liveOnt.ontSerial;
+          const serialHolder = await client.query(
+            `SELECT holder.customer_id, holder.name
+             FROM public.customer_ont_assignments occupying
+             JOIN public.customers holder
+               ON holder.customer_id = occupying.customer_id
+             WHERE occupying.ended_at IS NULL
+               AND occupying.ont_serial IS NOT NULL
+               AND UPPER(TRIM(occupying.ont_serial)) = UPPER(TRIM($1))
+             LIMIT 1;`,
+            [serial]
+          );
+          if (serialHolder.rows.length > 0) {
+            await client.query("ROLLBACK");
+            const holder = serialHolder.rows[0];
+            return res.status(409).json({
+              error:
+                `ONT serial ${serial} is already assigned to customer ` +
+                `#${holder.customer_id} ${holder.name}. ` +
+                "Release it from that customer, then activate.",
+            });
+          }
+
+          const descriptionMatches =
+            !!liveOnt.description &&
+            normalizeExactCustomerName(liveOnt.description) ===
+              normalizeExactCustomerName(application.name);
+
+          await client.query(
+            `INSERT INTO public.customer_ont_assignments (
+               customer_id, olt_id, frame_number, slot_number,
+               pon_port_number, ont_id, ont_serial, source, mapping_status,
+               verified_at, verified_by_employee_id,
+               created_by_employee_id, updated_by_employee_id
+             ) VALUES (
+               $1, $2, $3, $4, $5, $6, $7, 'manual', 'verified',
+               CURRENT_TIMESTAMP, $8, $8, $8
+             );`,
+            [
+              customerId,
+              oltId,
+              oltTarget.frameNumber,
+              oltTarget.slotNumber,
+              oltTarget.ponPortNumber,
+              oltTarget.ontId,
+              serial,
+              employee.employeeId,
+            ]
+          );
+
+          await client.query(
+            `
+            INSERT INTO public.audit_logs (
+              employee_id, actor_name, action, entity_type, entity_id,
+              field_name, old_value, new_value, reason, occurred_at
+            )
+            VALUES ($1, $2, 'Added customer OLT information', 'customer', $3,
+              'network_access', NULL, $4, $5, CURRENT_TIMESTAMP);
+            `,
+            [
+              employee.employeeId,
+              `${employee.firstName} ${employee.lastName}`,
+              String(customerId),
+              JSON.stringify({
+                oltName,
+                oltLocation,
+                ontSerial: serial,
+                liveControlFlag: liveOnt.controlFlag,
+                liveRunState: liveOnt.runState,
+                descriptionMatches,
+              }),
+              `Verified live during activation of application #${applicationId}`,
+            ]
+          );
+
+          oltMappingResult = {
+            oltName,
+            location: oltLocation,
+            ontSerial: serial,
+            descriptionMatches,
+            liveControlFlag: liveOnt.controlFlag,
+            liveRunState: liveOnt.runState,
+          };
+        }
       }
 
       // Preserve the application as Serviced and link it to the resulting
@@ -877,9 +1160,23 @@ applicationsRouter.patch(
         createdCustomer,
         status: "serviced",
         installationPayment,
+        oltMapping: oltMappingResult,
       });
     } catch (error) {
       await client.query("ROLLBACK");
+      if (
+        typeof error === "object" &&
+        error &&
+        "code" in error &&
+        error.code === "23505"
+      ) {
+        // A concurrent activation claimed this OLT location or ONT serial
+        // between the live read and the transaction commit.
+        return res.status(409).json({
+          error:
+            "That OLT location or ONT serial was assigned to another customer moments ago. Reload and try again.",
+        });
+      }
       console.error("Could not activate application:", error);
       res.status(500).json({ error: "Could not activate application." });
     } finally {

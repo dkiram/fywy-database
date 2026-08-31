@@ -98,6 +98,21 @@ type ApplicationView =
   | "confirmed"
   | "all";
 
+type OltOption = {
+  olt_id: number;
+  name: string;
+  management_ip: string;
+};
+
+type ActivationOltForm = {
+  oltName: string;
+  managementIp: string;
+  frame: string;
+  slot: string;
+  ponPort: string;
+  ontId: string;
+};
+
 type NewApplicationForm = {
   name: string;
   alias: string;
@@ -146,6 +161,15 @@ function packageOptionLabel(item: Package) {
     : "Price unavailable";
   return `${item.name} — ${price}`;
 }
+
+const emptyActivationOlt: ActivationOltForm = {
+  oltName: "",
+  managementIp: "",
+  frame: "",
+  slot: "",
+  ponPort: "",
+  ontId: "",
+};
 
 function initialNewApplication(): NewApplicationForm {
   return {
@@ -219,6 +243,12 @@ function ApplicationsPage() {
   const [activationPoleBox, setActivationPoleBox] = useState("");
   const [activationPort, setActivationPort] = useState("");
   const [activationDate, setActivationDate] = useState(jamaicaToday());
+  // OLT mapping entered at activation. Mandatory for a brand-new (non-legacy)
+  // application: the server checks this ONT location against the live OLT and
+  // refuses the activation if nothing answers there.
+  const [olts, setOlts] = useState<OltOption[]>([]);
+  const [activationOlt, setActivationOlt] =
+    useState<ActivationOltForm>(emptyActivationOlt);
 
   const loadApplications = useCallback(async () => {
     try {
@@ -263,6 +293,15 @@ function ApplicationsPage() {
   }, []);
 
   useEffect(() => {
+    const loadOlts = async () => {
+      const response = await apiFetch("/api/olts");
+      const data = await response.json();
+      if (response.ok) setOlts(data.olts);
+    };
+    loadOlts().catch(() => setOlts([]));
+  }, []);
+
+  useEffect(() => {
     if (decision !== "confirm-match" || matchCustomer || matchSearch.trim().length < 2) {
       setMatchResults([]);
       return;
@@ -289,6 +328,19 @@ function ApplicationsPage() {
     [applications, selected]
   );
 
+  const activationOltIncomplete = useMemo(
+    () =>
+      [
+        activationOlt.oltName,
+        activationOlt.managementIp,
+        activationOlt.frame,
+        activationOlt.slot,
+        activationOlt.ponPort,
+        activationOlt.ontId,
+      ].some((value) => value.trim() === ""),
+    [activationOlt]
+  );
+
   const openServiceDecision = (application: ApplicationRecord) => {
     setSelected(application);
     setServiceMode(application.suggested_customer_id ? "link" : "create");
@@ -301,6 +353,7 @@ function ApplicationsPage() {
     setActivationPoleBox(application.pole_box_number ?? "");
     setActivationPort(application.port_number ?? "");
     setActivationDate(application.activation_date?.slice(0, 10) ?? jamaicaToday());
+    setActivationOlt(emptyActivationOlt);
     setDecision("service");
   };
 
@@ -422,6 +475,12 @@ function ApplicationsPage() {
             poleBoxNumber: activationPoleBox,
             portNumber: activationPort,
             activationDate,
+            oltName: activationOlt.oltName,
+            oltManagementIp: activationOlt.managementIp,
+            frameNumber: activationOlt.frame,
+            slotNumber: activationOlt.slot,
+            ponPortNumber: activationOlt.ponPort,
+            ontId: activationOlt.ontId,
           }),
         }
       );
@@ -434,10 +493,18 @@ function ApplicationsPage() {
       const feeNote = data.installationPayment
         ? ` The ${formatCurrency(data.installationPayment.amount_paid)} installation fee is now their first payment.`
         : "";
+      const oltNote = data.oltMapping
+        ? ` ONT location ${data.oltMapping.location} verified live on ${data.oltMapping.oltName}.` +
+          (data.oltMapping.descriptionMatches
+            ? ""
+            : " The live ONT description does not match the customer name — check it on the OLT.")
+        : "";
       setNotice(
         (data.createdCustomer
           ? `Application activated. Customer #${data.customerId} was created.`
-          : `Application linked to existing customer #${data.customerId}.`) + feeNote
+          : `Application linked to existing customer #${data.customerId}.`) +
+          feeNote +
+          oltNote
       );
       setNoticeCustomerId(data.customerId);
       await loadApplications();
@@ -983,9 +1050,60 @@ function ApplicationsPage() {
                 <Field label="Activation date" required><input required type="date" value={activationDate} onChange={(event) => setActivationDate(event.target.value)} className={inputClass} /></Field>
               </div>
             )}
+            {serviceMode === "create" && (
+              // OLT information is mandatory for a new (non-legacy) application.
+              // Activating checks this ONT location against the live OLT and is
+              // refused if no ONT answers there.
+              <div className="rounded-xl border border-outline-variant p-4">
+                <p className="text-sm font-semibold text-on-surface">OLT information{!activeApplication.legacy_source && <span className="ml-1 text-error">*</span>}</p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  Activating checks this ONT location against the live OLT. If no ONT answers there, the activation is refused.
+                </p>
+                <datalist id="activation-olt-names">
+                  {olts.map((olt) => <option key={olt.olt_id} value={olt.name} />)}
+                </datalist>
+                <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="OLT name" required={!activeApplication.legacy_source}>
+                    <input
+                      list="activation-olt-names"
+                      required={!activeApplication.legacy_source}
+                      value={activationOlt.oltName}
+                      onChange={(event) => {
+                        const oltName = event.target.value;
+                        const match = olts.find(
+                          (olt) => olt.name.trim().toLowerCase() === oltName.trim().toLowerCase()
+                        );
+                        setActivationOlt((current) => ({
+                          ...current,
+                          oltName,
+                          managementIp: match ? match.management_ip : current.managementIp,
+                        }));
+                      }}
+                      className={inputClass}
+                      placeholder="e.g. MANDEVILLE"
+                    />
+                  </Field>
+                  <Field label="OLT management IP" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} value={activationOlt.managementIp} onChange={(event) => setActivationOlt((current) => ({ ...current, managementIp: event.target.value }))} className={inputClass} placeholder="e.g. 192.168.1.4" /></Field>
+                  <Field label="Frame" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} min="0" step="1" type="number" value={activationOlt.frame} onChange={(event) => setActivationOlt((current) => ({ ...current, frame: event.target.value }))} className={inputClass} /></Field>
+                  <Field label="Card / slot" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} min="0" step="1" type="number" value={activationOlt.slot} onChange={(event) => setActivationOlt((current) => ({ ...current, slot: event.target.value }))} className={inputClass} /></Field>
+                  <Field label="PON port" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} min="0" step="1" type="number" value={activationOlt.ponPort} onChange={(event) => setActivationOlt((current) => ({ ...current, ponPort: event.target.value }))} className={inputClass} /></Field>
+                  <Field label="Virtual port / ONT ID" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} min="0" step="1" type="number" value={activationOlt.ontId} onChange={(event) => setActivationOlt((current) => ({ ...current, ontId: event.target.value }))} className={inputClass} /></Field>
+                </div>
+              </div>
+            )}
             <Field label="Optional activation note"><textarea rows={3} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="Installation or activation note..." /></Field>
             {decisionError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{decisionError}</p>}
-            <ModalActions saving={saving} primaryLabel="Activate Customer" onPrimary={submitServiceDecision} onCancel={() => setDecision(null)} />
+            <ModalActions
+              saving={
+                saving ||
+                (serviceMode === "create" &&
+                  !activeApplication.legacy_source &&
+                  activationOltIncomplete)
+              }
+              primaryLabel="Activate Customer"
+              onPrimary={submitServiceDecision}
+              onCancel={() => setDecision(null)}
+            />
           </div>
         </Modal>
       )}
