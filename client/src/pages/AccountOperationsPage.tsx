@@ -148,6 +148,8 @@ function AccountOperationsPage() {
   const [error, setError] = useState("");
   const [approvingCustomerId, setApprovingCustomerId] = useState<number | null>(null);
   const [cancellingCustomerId, setCancellingCustomerId] = useState<number | null>(null);
+  const [resolvingCustomerId, setResolvingCustomerId] = useState<number | null>(null);
+  const [notice, setNotice] = useState("");
   const [waiverRequests, setWaiverRequests] = useState<WaiverApprovalRequest[]>([]);
   const [reviewingWaiverId, setReviewingWaiverId] = useState<number | null>(null);
   const [reconnectionRequests, setReconnectionRequests] = useState<ReconnectionApprovalRequest[]>([]);
@@ -346,6 +348,48 @@ function AccountOperationsPage() {
       setError(approvalError instanceof Error ? approvalError.message : "Could not approve reconnection.");
     } finally {
       setApprovingCustomerId(null);
+    }
+  };
+
+  // Read-only recovery for a stranded durable OLT journal. The server verifies
+  // the exact serial, description, and live control flag before it resolves
+  // anything; the existing automatic queue then resumes on its own.
+  const resolveAutomaticReconnect = async (customerId: number) => {
+    try {
+      setResolvingCustomerId(customerId);
+      setError("");
+      setNotice("");
+      const response = await apiFetch(`/api/customers/${customerId}/network-access/verify`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not check the live OLT.");
+      }
+      const resolvedIds: number[] = data.verification?.reconciledAttemptIds ?? [];
+      if (resolvedIds.length === 0) {
+        throw new Error(
+          "The action is still inside its 10-minute safety window, or the live state cannot resolve it safely yet. Wait a few minutes and try again."
+        );
+      }
+      const resumedJobs: number[] =
+        data.verification?.resumedReconnectionJobIds ?? [];
+      setNotice(
+        `Resolved ONT action ${resolvedIds.map((id) => `#${id}`).join(", ")} from a read-only live check.${
+          resumedJobs.length > 0
+            ? " Automatic reconnection resumed."
+            : " The queue will re-evaluate it automatically."
+        }`
+      );
+      await loadAccounts();
+    } catch (resolveError) {
+      setError(
+        resolveError instanceof Error
+          ? resolveError.message
+          : "Could not resolve the blocked ONT action."
+      );
+    } finally {
+      setResolvingCustomerId(null);
     }
   };
 
@@ -558,6 +602,11 @@ function AccountOperationsPage() {
             {error}
           </div>
         )}
+        {notice && (
+          <div className="m-6 rounded-lg bg-tertiary-container p-4 text-sm text-on-tertiary-container">
+            {notice}
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -617,6 +666,20 @@ function AccountOperationsPage() {
                                 {account.automatic_reconnection_message ||
                                   "The system will verify the live ONT, activate it if needed, and synchronize this account."}
                               </p>
+                              {["blocked_action", "uncertain"].includes(
+                                account.automatic_reconnection_status ?? ""
+                              ) && (
+                                <button
+                                  type="button"
+                                  disabled={resolvingCustomerId !== null}
+                                  onClick={() => resolveAutomaticReconnect(account.customer_id)}
+                                  className="mt-2 rounded-lg bg-tertiary px-3 py-2 font-semibold text-on-tertiary disabled:cursor-wait disabled:opacity-50"
+                                >
+                                  {resolvingCustomerId === account.customer_id
+                                    ? "Checking live OLT..."
+                                    : "Check OLT & resume"}
+                                </button>
+                              )}
                             </div>
                           ) : account.ready_for_reconnection ? (
                             <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-primary" title="Approve reconnection">

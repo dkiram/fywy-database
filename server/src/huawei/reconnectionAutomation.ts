@@ -524,10 +524,18 @@ async function processJob(jobId: number) {
            message = $2,
            completed_at = CURRENT_TIMESTAMP,
            management_ip = $3::INET,
-           save_status = CASE WHEN $4 THEN 'pending' ELSE 'not_needed' END,
+           save_status = CASE
+             WHEN $4 OR save_status = 'pending' THEN 'pending'
+             ELSE 'not_needed'
+           END,
            save_next_attempt_at = CASE
              WHEN $4 THEN CURRENT_TIMESTAMP + make_interval(mins => $5)
+             WHEN save_status = 'pending' THEN save_next_attempt_at
              ELSE NULL
+           END,
+           save_completed_at = CASE
+             WHEN $4 OR save_status = 'pending' THEN NULL
+             ELSE save_completed_at
            END,
            updated_at = CURRENT_TIMESTAMP
        WHERE olt_reconnection_automation_job_id = $1;`,
