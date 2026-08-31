@@ -872,12 +872,22 @@ networkAccessRouter.post(
     const customerId = parseCustomerId(req, res);
     if (customerId === null) return;
 
-    const reason = cleanText(req.body.reason);
-    if (reason.length < 3 || reason.length > 500) {
+    const employee = req.session.employee!;
+    const submittedReason = cleanText(req.body.reason);
+    const adminMayOmitReason = employee.role === "admin";
+    if (
+      submittedReason.length > 500 ||
+      (!adminMayOmitReason && submittedReason.length < 3) ||
+      (submittedReason.length > 0 && submittedReason.length < 3)
+    ) {
       return res.status(400).json({
-        error: "A reason between 3 and 500 characters is required.",
+        error: adminMayOmitReason
+          ? "Leave the reason blank or enter between 3 and 500 characters."
+          : "A reason between 3 and 500 characters is required.",
       });
     }
+    const reason =
+      submittedReason || "Admin confirmed without an additional reason.";
     const requiredConfirmation = `OVERRIDE DESCRIPTION ${customerId}`;
     if (cleanText(req.body.confirmation) !== requiredConfirmation) {
       return res.status(400).json({
@@ -901,7 +911,6 @@ networkAccessRouter.post(
       });
     }
 
-    const employee = req.session.employee!;
     verificationsInProgress.add(assignmentId);
     try {
       // The browser never supplies the description being accepted. Re-read it

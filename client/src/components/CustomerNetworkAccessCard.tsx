@@ -6,6 +6,7 @@
  * one explicitly allowlisted spare/company customer.
  */
 import { useEffect, useId, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
 import type { AccountStatus, AccountStatusUpdate } from "./AccountOperationsPanel";
 
@@ -154,6 +155,8 @@ export default function CustomerNetworkAccessCard({
   accountStatus: AccountStatus;
   onStatusSynced?: (update: AccountStatusUpdate) => void;
 }) {
+  const { employee } = useAuth();
+  const adminMayOmitOverrideReason = employee?.role === "admin";
   const oltListId = useId();
   const [networkAccess, setNetworkAccess] = useState<NetworkAccess | null>(null);
   const [olts, setOlts] = useState<OltOption[]>([]);
@@ -948,14 +951,22 @@ export default function CustomerNetworkAccessCard({
             </div>
 
             <label className="mt-5 block text-sm font-semibold">
-              Reason <span className="text-error">*</span>
+              Reason {adminMayOmitOverrideReason ? (
+                <span className="font-normal text-on-surface-variant">(optional for Admin)</span>
+              ) : (
+                <span className="text-error">*</span>
+              )}
               <textarea
                 rows={3}
                 maxLength={500}
                 value={overrideReason}
                 onChange={(event) => setOverrideReason(event.target.value)}
                 className="mt-1.5 w-full resize-none rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
-                placeholder="Staff confirmed this legacy Huawei description belongs to this customer..."
+                placeholder={
+                  adminMayOmitOverrideReason
+                    ? "Optional note about how this mapping was confirmed..."
+                    : "Staff confirmed this legacy Huawei description belongs to this customer..."
+                }
               />
             </label>
 
@@ -993,7 +1004,8 @@ export default function CustomerNetworkAccessCard({
                 type="button"
                 disabled={
                   overridingDescription ||
-                  overrideReason.trim().length < 3 ||
+                  (!adminMayOmitOverrideReason && overrideReason.trim().length < 3) ||
+                  (overrideReason.trim().length > 0 && overrideReason.trim().length < 3) ||
                   overrideConfirmation !== `OVERRIDE DESCRIPTION ${customerId}`
                 }
                 onClick={submitDescriptionOverride}
