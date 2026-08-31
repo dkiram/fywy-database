@@ -1,26 +1,15 @@
 -- Disconnection eligibility follows the ledger grace period directly. The old
--- calculated date delayed every eligible account until a monthly 20th and is
--- no longer part of the billing model.
-
--- Keep the automation journal useful without retaining a planned cutoff date.
--- Existing outcomes, timestamps, balances, OLT attempts, and the factual
--- customer deactivation history are preserved; older run rows simply have no
--- grace-end snapshot because it cannot be reconstructed reliably from a 20th.
-ALTER TABLE public.olt_automation_run_items
-    ADD COLUMN grace_end_date DATE;
-
-COMMENT ON COLUMN public.olt_automation_run_items.grace_end_date IS
-  'Grace-period end used when this customer was selected for automatic disconnection.';
-
-ALTER TABLE public.olt_automation_run_items
-    DROP COLUMN scheduled_disconnection_date;
-
--- Keep the billing view's identity intact because customer_suspension_status
--- depends on it. Replace the obsolete output in the same column position with
--- the first date on which grace has actually ended. CREATE OR REPLACE can then
--- update the eligibility rule without dropping either view.
-ALTER VIEW public.customer_billing_status
-    RENAME COLUMN scheduled_disconnection_date TO disconnection_eligible_on;
+-- calculated date delayed every eligible account until a monthly 20th.
+--
+-- This is the expand half of an expand/contract rollout. The previous API is
+-- still serving while migrations run, so its expected view/table columns stay
+-- available until the grace-aware API has been rebuilt and restarted. A later
+-- migration can remove those compatibility columns without an old process
+-- querying or writing them.
+--
+-- Update the billing view first. A live automation transaction reads this view
+-- before writing olt_automation_run_items; acquiring locks in that same order
+-- prevents the lock inversion that caused the earlier migration deadlock.
 
 CREATE OR REPLACE VIEW public.customer_billing_status AS
 WITH totals AS (
@@ -71,7 +60,7 @@ SELECT
     o.grace_end_date,
     CASE WHEN o.grace_end_date IS NULL THEN NULL
          ELSE o.grace_end_date + 1
-    END AS disconnection_eligible_on,
+    END AS scheduled_disconnection_date,
     (
         COALESCE(t.balance, 0) > 0
         AND o.grace_end_date < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
@@ -96,3 +85,14 @@ LEFT JOIN oldest_unpaid o USING (customer_id)
 LEFT JOIN active_holds h USING (customer_id);
 
 DROP FUNCTION public.spcl_scheduled_disconnection(DATE);
+
+-- New API versions journal the authoritative grace end. The old planned-date
+-- column remains temporarily so the previous API can finish any in-flight run.
+ALTER TABLE public.olt_automation_run_items
+    ADD COLUMN grace_end_date DATE;
+
+COMMENT ON COLUMN public.olt_automation_run_items.grace_end_date IS
+  'Grace-period end used when this customer was selected for automatic disconnection.';
+
+COMMENT ON COLUMN public.olt_automation_run_items.scheduled_disconnection_date IS
+  'Temporary compatibility field for the pre-grace-period automation worker.';
