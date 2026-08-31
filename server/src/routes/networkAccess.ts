@@ -582,6 +582,7 @@ networkAccessRouter.post(
           action: OntControlAction;
           resolution: "failed" | "confirmed";
         }> = [];
+        let resumedReconnectionJobIds: number[] = [];
         if (liveOnt && serialMatches) {
           // Name the customer holding the serial. Almost always the previous
           // occupant of this port whose mapping was never released, which is
@@ -701,8 +702,16 @@ networkAccessRouter.post(
                  after_control_flag = $2,
                  after_run_state = $3,
                  result_message =
-                   'Resolved by a subsequent read-only live OLT verification: Huawei and the current account workflow already reflect the requested state.',
-                 account_status_applied_at = COALESCE(account_status_applied_at, CURRENT_TIMESTAMP),
+                   CASE
+                     WHEN action = 'activate' AND $4 = 'pending_reconnection'
+                       THEN 'Resolved by a subsequent read-only live OLT verification: Huawei is already Active; the automatic reconnection queue will synchronize the account workflow.'
+                     ELSE 'Resolved by a subsequent read-only live OLT verification: Huawei and the current account workflow already reflect the requested state.'
+                   END,
+                 account_status_applied_at = CASE
+                   WHEN action = 'activate' AND $4 = 'pending_reconnection'
+                     THEN account_status_applied_at
+                   ELSE COALESCE(account_status_applied_at, CURRENT_TIMESTAMP)
+                 END,
                  completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
              WHERE customer_ont_assignment_id = $1
                AND workflow = 'account_transition'
@@ -717,7 +726,7 @@ networkAccessRouter.post(
                  (
                    action = 'activate'
                    AND $2 = 'active'
-                   AND $4 = 'active'
+                   AND ($4 = 'active' OR $4 = 'pending_reconnection')
                  )
                  OR (
                    action = 'deactivate'
@@ -743,6 +752,89 @@ networkAccessRouter.post(
           reconciledAttemptIds.push(
             ...clearedAccountAttempts.map((attempt) => attempt.attemptId)
           );
+
+          // A queue job can be left blocked after its worker or API process
+          // disappears mid-action. Once this exact read-only verification has
+          // resolved every journal blocker, resume the existing job instead of
+          // requiring a database edit. If Huawei already shows Active, retain
+          // a delayed save request because the interrupted activation may have
+          // changed running configuration before the process disappeared.
+          const confirmedActivation = clearedAccountAttempts.some(
+            (attempt) =>
+              attempt.action === "activate" &&
+              attempt.resolution === "confirmed" &&
+              liveOnt.controlFlag === "active" &&
+              initial.customer_status === "pending_reconnection"
+          );
+          if (clearedAccountAttempts.length > 0) {
+            const saveDelay = Number.parseInt(
+              process.env.HUAWEI_OLT_AUTOMATION_SAVE_DELAY_MINUTES ?? "",
+              10
+            );
+            const saveDelayMinutes =
+              Number.isInteger(saveDelay) && saveDelay >= 1 && saveDelay <= 1440
+                ? saveDelay
+                : 120;
+            const resumedJobs = await client.query(
+              `UPDATE public.olt_reconnection_automation_jobs job
+               SET status = 'pending',
+                   next_attempt_at = CURRENT_TIMESTAMP,
+                   -- One explicit live-check click grants one bounded retry,
+                   -- even when the stranded action consumed attempt three.
+                   attempt_count = LEAST(job.attempt_count, 2),
+                   completed_at = NULL,
+                   message = 'Live OLT verification resolved the prior action; automatic reconnection resumed.',
+                   management_ip = CASE
+                     WHEN $3::BOOLEAN THEN $4::INET
+                     ELSE job.management_ip
+                   END,
+                   save_status = CASE
+                     WHEN $3::BOOLEAN THEN 'pending'
+                     ELSE job.save_status
+                   END,
+                   save_attempt_count = CASE
+                     WHEN $3::BOOLEAN THEN 0
+                     ELSE job.save_attempt_count
+                   END,
+                   save_next_attempt_at = CASE
+                     WHEN $3::BOOLEAN
+                       THEN CURRENT_TIMESTAMP + make_interval(mins => $5)
+                     ELSE job.save_next_attempt_at
+                   END,
+                   save_last_attempt_at = CASE
+                     WHEN $3::BOOLEAN THEN NULL
+                     ELSE job.save_last_attempt_at
+                   END,
+                   save_completed_at = CASE
+                     WHEN $3::BOOLEAN THEN NULL
+                     ELSE job.save_completed_at
+                   END,
+                   save_error_message = CASE
+                     WHEN $3::BOOLEAN THEN NULL
+                     ELSE job.save_error_message
+                   END,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE job.customer_id = $1
+                 AND job.status IN ('blocked_action', 'uncertain')
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM public.olt_action_attempts unresolved
+                   WHERE unresolved.customer_ont_assignment_id = $2
+                     AND unresolved.outcome IN ('requested', 'uncertain')
+                 )
+               RETURNING job.olt_reconnection_automation_job_id;`,
+              [
+                customerId,
+                assignmentId,
+                confirmedActivation,
+                initial.management_ip,
+                saveDelayMinutes,
+              ]
+            );
+            resumedReconnectionJobIds = resumedJobs.rows.map((row) =>
+              Number(row.olt_reconnection_automation_job_id)
+            );
+          }
         }
 
         await client.query(
@@ -812,9 +904,12 @@ networkAccessRouter.post(
               failedAttempt.action === "activate" ? "activation" : "deactivation"
             } did not occur. You can safely retry the account action.`
           : confirmedAttempt
-            ? ` ONT action #${confirmedAttempt.attemptId} was reconciled because Huawei and the account workflow already reflect its requested ${
-                confirmedAttempt.action === "activate" ? "activation" : "deactivation"
-              }. You can safely continue the account workflow.`
+            ? confirmedAttempt.action === "activate" &&
+              initial.customer_status === "pending_reconnection"
+              ? ` ONT action #${confirmedAttempt.attemptId} was reconciled because Huawei is already Active. The automatic queue resumed and will synchronize the account.`
+              : ` ONT action #${confirmedAttempt.attemptId} was reconciled because Huawei and the account workflow already reflect its requested ${
+                  confirmedAttempt.action === "activate" ? "activation" : "deactivation"
+                }. You can safely continue the account workflow.`
             : "";
 
         return res.json({
@@ -839,6 +934,7 @@ networkAccessRouter.post(
             ),
             reconciledAttemptIds,
             clearedAccountAttempts,
+            resumedReconnectionJobIds,
           },
           networkAccess: saved,
         });

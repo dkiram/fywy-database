@@ -843,7 +843,7 @@ async function transitionAccountWithOnt(
   );
   if (unresolved.rows.length > 0) {
     return res.status(409).json({
-      error: `ONT action #${unresolved.rows[0].olt_action_attempt_id} must be resolved before another account action.`,
+      error: `ONT action #${unresolved.rows[0].olt_action_attempt_id} must be resolved before another account action. Use Check OLT & resume in Account Operations, or Verify with OLT on the customer profile.`,
     });
   }
 
@@ -2982,7 +2982,7 @@ accountsRouter.post(
     );
     if (unresolved.rows.length > 0) {
       return res.status(409).json({
-        error: `ONT action #${unresolved.rows[0].olt_action_attempt_id} must be resolved before another account action.`,
+        error: `ONT action #${unresolved.rows[0].olt_action_attempt_id} must be resolved before another account action. Use Check OLT & resume in Account Operations, or Verify with OLT on the customer profile.`,
       });
     }
 
