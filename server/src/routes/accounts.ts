@@ -1711,6 +1711,7 @@ accountsRouter.get(
         `SELECT request.waiver_request_id, request.customer_id, request.amount,
             request.reason, request.status, request.requested_at, request.reviewed_at,
             request.review_note, request.reversed_at, request.reversal_note,
+            request.is_credit,
             CONCAT_WS(' ', requester.first_name, requester.last_name) AS requested_by_name,
             CONCAT_WS(' ', reviewer.first_name, reviewer.last_name) AS reviewed_by_name,
             CONCAT_WS(' ', reverser.first_name, reverser.last_name) AS reversed_by_name
@@ -1795,10 +1796,10 @@ accountsRouter.post(
           customer_id, amount, reason, status,
           requested_by_employee_id, requested_at,
           reviewed_by_employee_id, reviewed_at, review_note,
-          waiver_ledger_entry_id
+          waiver_ledger_entry_id, is_credit
         ) VALUES ($1, ABS($2::NUMERIC), $3, 'approved',
           $4, CURRENT_TIMESTAMP, $4, CURRENT_TIMESTAMP,
-          'Credit applied directly by an administrator.', $5)
+          'Credit applied directly by an administrator.', $5, TRUE)
         RETURNING waiver_request_id;`,
         [customerId, amount, reason, employee.employeeId, entry.account_ledger_entry_id]
       );

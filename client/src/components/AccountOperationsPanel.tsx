@@ -87,6 +87,9 @@ type WaiverRequest = {
   reversed_at: string | null;
   reversal_note: string | null;
   reversed_by_name: string | null;
+  // Credits and discounts share the same storage. This is the only thing that
+  // tells them apart in the record, so it drives every label below.
+  is_credit: boolean;
 };
 
 type ReconnectionRequest = {
@@ -413,7 +416,7 @@ function AccountOperationsPanel({
       if (!response.ok) throw new Error(data.error || "Could not save management pass.");
       if (exceptionAction === "credit") {
         setNotice(
-          `J$${Number(exceptionValue).toLocaleString()} credit applied. It is reversible from the approved-discount strip below.`
+          `J$${Number(exceptionValue).toLocaleString()} credit applied. It is reversible from the account-credit strip below.`
         );
       }
       setExceptionAction(null);
@@ -438,7 +441,7 @@ function AccountOperationsPanel({
   const pendingReconnectionRequest = reconnectionRequests.find((request) => request.status === "pending");
 
   const reverseWaiver = async (waiverRequestId: number) => {
-    const reason = window.prompt("Why are you reversing this approved discount?");
+    const reason = window.prompt("Why are you reversing this credit or discount?");
     if (reason === null) return;
     if (reason.trim().length < 3) {
       setError("Enter a reversal reason of at least 3 characters.");
@@ -691,9 +694,11 @@ function AccountOperationsPanel({
         {featuredWaivers.map((request) => (
           <div key={request.waiver_request_id} className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-semibold text-on-surface">Approved discount · J${Number(request.amount).toLocaleString()}</p>
+              <p className="font-semibold text-on-surface">
+                {request.is_credit ? "Account credit" : "Approved discount"} · J${Number(request.amount).toLocaleString()}
+              </p>
               <p className="mt-1 text-xs text-on-surface-variant">
-                Approved by {request.reviewed_by_name || "Admin"}: {request.reason}
+                {request.is_credit ? "Applied by" : "Approved by"} {request.reviewed_by_name || "Admin"}: {request.reason}
               </p>
             </div>
             {employeeRole === "admin" && (
@@ -703,7 +708,9 @@ function AccountOperationsPanel({
                 onClick={() => reverseWaiver(request.waiver_request_id)}
                 className="whitespace-nowrap rounded-lg bg-error/10 px-3 py-2 text-xs font-semibold text-error disabled:opacity-50"
               >
-                {reversingWaiverId === request.waiver_request_id ? "Reversing..." : "Reverse Discount"}
+                {reversingWaiverId === request.waiver_request_id
+                  ? "Reversing..."
+                  : request.is_credit ? "Remove Credit" : "Reverse Discount"}
               </button>
             )}
           </div>
@@ -810,7 +817,7 @@ function AccountOperationsPanel({
             <summary className="cursor-pointer text-sm font-medium text-primary">
               Recent balance entries
               {olderWaivers.length > 0
-                ? ` · ${olderWaivers.length} earlier discount${olderWaivers.length === 1 ? "" : "s"}`
+                ? ` · ${olderWaivers.length} earlier credit${olderWaivers.length === 1 ? "" : "s"}/discount${olderWaivers.length === 1 ? "" : "s"}`
                 : ""}
             </summary>
             {olderWaivers.length > 0 && (
@@ -819,7 +826,7 @@ function AccountOperationsPanel({
                   <div key={request.waiver_request_id} className="flex items-start justify-between gap-4 text-xs">
                     <div>
                       <p className="font-semibold text-on-surface">
-                        Approved discount · J${Number(request.amount).toLocaleString()}
+                        {request.is_credit ? "Account credit" : "Approved discount"} · J${Number(request.amount).toLocaleString()}
                       </p>
                       <p className="text-on-surface-variant">
                         {formatDate(request.reviewed_at ?? request.requested_at)} · {request.reviewed_by_name || "Admin"}: {request.reason}
@@ -1010,7 +1017,7 @@ function AccountOperationsPanel({
               <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
                 <p className="text-sm font-semibold text-primary">Applied immediately</p>
                 <p className="mt-1 text-xs text-on-surface-variant">
-                  No second approval is needed. The credit appears under Recent balance entries and can be undone with Reverse Discount.
+                  No second approval is needed. It is recorded as a credit, not a discount, and can be undone with Remove Credit.
                 </p>
               </div>
             )}
