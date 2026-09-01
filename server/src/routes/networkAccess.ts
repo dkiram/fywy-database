@@ -705,12 +705,15 @@ networkAccessRouter.post(
                    CASE
                      WHEN action = 'activate' AND $4 = 'pending_reconnection'
                        THEN 'Resolved by a subsequent read-only live OLT verification: Huawei is already Active; the automatic reconnection queue will synchronize the account workflow.'
+                     WHEN $4 = account_status_before
+                       THEN 'Resolved by a subsequent read-only live OLT verification: Huawei reached the requested state, but the account workflow still needs to be retried to apply its database transition.'
                      ELSE 'Resolved by a subsequent read-only live OLT verification: Huawei and the current account workflow already reflect the requested state.'
                    END,
                  account_status_applied_at = CASE
-                   WHEN action = 'activate' AND $4 = 'pending_reconnection'
-                     THEN account_status_applied_at
-                   ELSE COALESCE(account_status_applied_at, CURRENT_TIMESTAMP)
+                   WHEN $4 = account_status_after
+                     OR (action = 'deactivate' AND $4 = 'pending_reconnection')
+                     THEN COALESCE(account_status_applied_at, CURRENT_TIMESTAMP)
+                   ELSE account_status_applied_at
                  END,
                  completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
              WHERE customer_ont_assignment_id = $1
@@ -726,12 +729,16 @@ networkAccessRouter.post(
                  (
                    action = 'activate'
                    AND $2 = 'active'
-                   AND ($4 = 'active' OR $4 = 'pending_reconnection')
+                   AND ($4 = account_status_before OR $4 = account_status_after)
                  )
                  OR (
                    action = 'deactivate'
                    AND $2 = 'deactivated'
-                   AND ($4 = 'disconnected' OR $4 = 'pending_reconnection')
+                   AND (
+                     $4 = account_status_before
+                     OR $4 = account_status_after
+                     OR $4 = 'pending_reconnection'
+                   )
                  )
                )
              RETURNING olt_action_attempt_id, action;`,
@@ -907,6 +914,12 @@ networkAccessRouter.post(
             ? confirmedAttempt.action === "activate" &&
               initial.customer_status === "pending_reconnection"
               ? ` ONT action #${confirmedAttempt.attemptId} was reconciled because Huawei is already Active. The automatic queue resumed and will synchronize the account.`
+              : (confirmedAttempt.action === "activate" && initial.customer_status !== "active") ||
+                  (confirmedAttempt.action === "deactivate" &&
+                    !["disconnected", "pending_reconnection"].includes(
+                      initial.customer_status
+                    ))
+                ? ` ONT action #${confirmedAttempt.attemptId} was reconciled because Huawei reached the requested state. Retry the normal account action to finish its database transition; the confirmed ONT state prevents a duplicate command.`
               : ` ONT action #${confirmedAttempt.attemptId} was reconciled because Huawei and the account workflow already reflect its requested ${
                   confirmedAttempt.action === "activate" ? "activation" : "deactivation"
                 }. You can safely continue the account workflow.`

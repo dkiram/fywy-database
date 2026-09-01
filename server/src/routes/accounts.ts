@@ -824,9 +824,35 @@ async function transitionAccountWithOnt(
       [customerId]
     );
     const outstandingBalance = Number(balanceResult.rows[0]?.outstanding_balance ?? 0);
-    if (outstandingBalance > 0) {
+    let amountRequiredBeforeOnt = outstandingBalance;
+
+    // Ending a suspension posts a duration-priced fee inside the eventual
+    // account transaction. Include that still-unposted fee in this preflight,
+    // otherwise Huawei can be activated first and the later balance check can
+    // roll the database change back, leaving a stranded action journal.
+    if (context.customer_status === "suspended" && options.toStatus === "active") {
+      await pool.query(
+        `SELECT public.spcl_generate_suspension_charges(
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+        );`
+      );
+      const suspensionQuote = await pool.query(
+        `SELECT total_due_to_reconnect
+         FROM public.customer_suspension_status
+         WHERE customer_id = $1;`,
+        [customerId]
+      );
+      amountRequiredBeforeOnt = Number(
+        suspensionQuote.rows[0]?.total_due_to_reconnect ?? outstandingBalance
+      );
+    }
+
+    if (amountRequiredBeforeOnt > 0) {
       return res.status(409).json({
-        error: `Reconnection requires the full outstanding balance. J$${outstandingBalance.toFixed(2)} remains unpaid.`,
+        error:
+          context.customer_status === "suspended"
+            ? `Ending the suspension requires the full “To reconnect today” amount, including its reconnection fee. J$${amountRequiredBeforeOnt.toFixed(2)} remains to be covered before the OLT can be activated.`
+            : `Reconnection requires the full outstanding balance. J$${amountRequiredBeforeOnt.toFixed(2)} remains unpaid.`,
       });
     }
   }
