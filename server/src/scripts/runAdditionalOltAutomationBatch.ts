@@ -10,11 +10,17 @@ function argument(name: string) {
 const count = Number.parseInt(argument("--count") ?? "", 10);
 const maxGraceEndDate = argument("--max-grace-end-date") ?? "";
 const confirmation = argument("--confirmation") ?? "";
-const expectedConfirmation = `RUN ADDITIONAL ${count} THROUGH ${maxGraceEndDate}`;
+const includeUnverifiedLedgerEntries = process.argv.includes("--include-unverified-ledger");
+const requireVerifiedMapping = process.argv.includes("--verified-mappings-only");
+const expectedConfirmation = [
+  `RUN ADDITIONAL ${count} THROUGH ${maxGraceEndDate}`,
+  requireVerifiedMapping ? "VERIFIED MAPPINGS" : "",
+  includeUnverifiedLedgerEntries ? "INCLUDING UNVERIFIED LEDGER" : "",
+].filter(Boolean).join(" ");
 
 if (!Number.isInteger(count) || count < 1 || count > 500) {
   console.error(
-    "Usage: runAdditionalOltAutomationBatch --count <1-500> --max-grace-end-date <YYYY-MM-DD> --confirmation <text>"
+    "Usage: runAdditionalOltAutomationBatch --count <1-500> --max-grace-end-date <YYYY-MM-DD> [--verified-mappings-only] [--include-unverified-ledger] --confirmation <text>"
   );
   process.exit(2);
 }
@@ -33,6 +39,8 @@ runAutomaticDelinquentDisconnect({
   allowAdditionalRunToday: true,
   maxPerRunOverride: count,
   maxGraceEndDate,
+  includeUnverifiedLedgerEntries,
+  requireVerifiedMapping,
 })
   .then((result) => {
     console.log("One-time additional OLT batch result:", JSON.stringify(result));

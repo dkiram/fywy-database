@@ -57,6 +57,17 @@ type AutomaticRunOptions = {
    * how the oldest-first ordering happens to fall.
    */
   maxGraceEndDate?: string;
+  /**
+   * Explicit one-time override for legacy balances that still contain an
+   * unverified imported ledger entry. Scheduled runs never set this, so their
+   * existing billing-safety gate remains closed.
+   */
+  includeUnverifiedLedgerEntries?: boolean;
+  /**
+   * Restrict selection itself to customers with a current verified mapping,
+   * serial, and OLT. The live identity check still runs before every write.
+   */
+  requireVerifiedMapping?: boolean;
 };
 
 function isEnabled() {
@@ -617,7 +628,18 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
          AND customer.hidden_from_app = FALSE
          -- Estimated legacy ledger balances remain visible to staff, but are
          -- not authoritative enough for an unattended disconnection.
-         AND billing.unverified_entries = 0
+         AND ($4::BOOLEAN OR billing.unverified_entries = 0)
+         -- An explicitly confirmed one-time run can require an actionable
+         -- mapping up front instead of spending its cap on known safe skips.
+         AND (
+           NOT $5::BOOLEAN
+           OR (
+             assignment.customer_ont_assignment_id IS NOT NULL
+             AND assignment.mapping_status = 'verified'
+             AND NULLIF(TRIM(assignment.ont_serial), '') IS NOT NULL
+             AND olt.management_ip IS NOT NULL
+           )
+         )
          -- A deliberately requested continuation may create another run for
          -- the same billing date, but never selects an account already
          -- journaled in any earlier run that day.
@@ -644,7 +666,13 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
          billing.grace_end_date,
          customer.customer_id
        LIMIT $1;`,
-      [maxPerRun, clock.date, options.maxGraceEndDate ?? null]
+      [
+        maxPerRun,
+        clock.date,
+        options.maxGraceEndDate ?? null,
+        options.includeUnverifiedLedgerEntries === true,
+        options.requireVerifiedMapping === true,
+      ]
     );
     const candidateCount = Number(candidates.rows[0]?.candidate_count ?? 0);
     const selectedCount = candidates.rows.length;
