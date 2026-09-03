@@ -44,8 +44,9 @@ type ConfigurationSaveJob = {
 type AutomaticRunOptions = {
   /**
    * Allows an explicitly confirmed one-time continuation after today's normal
-   * scheduled run. The candidate query still excludes every customer already
-   * journaled today, so this can never retry the same account in another batch.
+   * scheduled run. By default the candidate query still excludes every
+   * customer already journaled today. retrySafeSkippedRunId is the narrow
+   * exception for a prior preflight-only batch that contacted no OLTs.
    */
   allowAdditionalRunToday?: boolean;
   maxPerRunOverride?: number;
@@ -68,6 +69,12 @@ type AutomaticRunOptions = {
    * serial, and OLT. The live identity check still runs before every write.
    */
   requireVerifiedMapping?: boolean;
+  /**
+   * Retry only the customers from one earlier run whose final locked preflight
+   * blocked before Huawei was contacted. This is narrower than bypassing the
+   * same-day journal guard and preserves both run records for audit.
+   */
+  retrySafeSkippedRunId?: number;
 };
 
 function isEnabled() {
@@ -274,7 +281,11 @@ async function finalizeAttempt(
   );
 }
 
-async function processCandidate(runId: number, candidate: Candidate): Promise<ItemResult> {
+async function processCandidate(
+  runId: number,
+  candidate: Candidate,
+  options: AutomaticRunOptions
+): Promise<ItemResult> {
   const itemResult = await pool.query(
     `INSERT INTO public.olt_automation_run_items (
        olt_automation_run_id, customer_id, customer_ont_assignment_id,
@@ -415,7 +426,10 @@ async function processCandidate(runId: number, candidate: Candidate): Promise<It
       !current ||
       current.status !== "active" ||
       current.eligible_for_disconnection !== true ||
-      Number(current.unverified_entries) > 0 ||
+      (
+        Number(current.unverified_entries) > 0 &&
+        options.includeUnverifiedLedgerEntries !== true
+      ) ||
       current.mapping_status !== "verified" ||
       String(current.ont_serial ?? "").toUpperCase() !== String(candidate.ont_serial).toUpperCase() ||
       (current.ont_description_override ?? null) !==
@@ -640,16 +654,42 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
              AND olt.management_ip IS NOT NULL
            )
          )
-         -- A deliberately requested continuation may create another run for
-         -- the same billing date, but never selects an account already
-         -- journaled in any earlier run that day.
-         AND NOT EXISTS (
-           SELECT 1
-           FROM public.olt_automation_run_items earlier_item
-           JOIN public.olt_automation_runs earlier_run
-             ON earlier_run.olt_automation_run_id = earlier_item.olt_automation_run_id
-           WHERE earlier_run.billing_date = $2
-             AND earlier_item.customer_id = customer.customer_id
+         -- A deliberately requested continuation normally excludes every
+         -- account journaled earlier that day. The only exception is an
+         -- explicitly named run whose locked preflight blocked before Huawei
+         -- was contacted; both journals remain intact for audit.
+         AND (
+           (
+             $6::BIGINT IS NULL
+             AND NOT EXISTS (
+               SELECT 1
+               FROM public.olt_automation_run_items earlier_item
+               JOIN public.olt_automation_runs earlier_run
+                 ON earlier_run.olt_automation_run_id = earlier_item.olt_automation_run_id
+               WHERE earlier_run.billing_date = $2
+                 AND earlier_item.customer_id = customer.customer_id
+             )
+           )
+           OR (
+             $6::BIGINT IS NOT NULL
+             AND EXISTS (
+               SELECT 1
+               FROM public.olt_automation_run_items retry_item
+               JOIN public.olt_automation_runs retry_run
+                 ON retry_run.olt_automation_run_id = retry_item.olt_automation_run_id
+               JOIN public.olt_action_attempts retry_attempt
+                 ON retry_attempt.olt_action_attempt_id = retry_item.olt_action_attempt_id
+               WHERE retry_item.olt_automation_run_id = $6
+                 AND retry_run.billing_date = $2
+                 AND retry_item.customer_id = customer.customer_id
+                 AND retry_item.outcome = 'skipped_not_eligible'
+                 AND retry_attempt.outcome = 'blocked'
+                 AND retry_attempt.before_control_flag IS NULL
+                 AND retry_attempt.after_control_flag IS NULL
+                 AND retry_attempt.result_message =
+                   'Customer was no longer safely eligible immediately before the OLT action; no command was sent.'
+             )
+           )
          )
          AND (
            customer.source_staging_id IS NULL
@@ -672,6 +712,7 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
         options.maxGraceEndDate ?? null,
         options.includeUnverifiedLedgerEntries === true,
         options.requireVerifiedMapping === true,
+        options.retrySafeSkippedRunId ?? null,
       ]
     );
     const candidateCount = Number(candidates.rows[0]?.candidate_count ?? 0);
@@ -689,7 +730,7 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
     let skipped = 0;
     let failed = 0;
     for (const candidate of candidates.rows) {
-      const result = await processCandidate(runId, candidate);
+      const result = await processCandidate(runId, candidate, options);
       if (result === "disconnected") disconnected += 1;
       else if (result === "skipped") skipped += 1;
       else failed += 1;

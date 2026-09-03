@@ -12,20 +12,34 @@ const maxGraceEndDate = argument("--max-grace-end-date") ?? "";
 const confirmation = argument("--confirmation") ?? "";
 const includeUnverifiedLedgerEntries = process.argv.includes("--include-unverified-ledger");
 const requireVerifiedMapping = process.argv.includes("--verified-mappings-only");
+const retrySafeSkippedRunIdText = argument("--retry-safe-skips-from-run") ?? "";
+const retrySafeSkippedRunId = retrySafeSkippedRunIdText
+  ? Number.parseInt(retrySafeSkippedRunIdText, 10)
+  : undefined;
 const expectedConfirmation = [
   `RUN ADDITIONAL ${count} THROUGH ${maxGraceEndDate}`,
   requireVerifiedMapping ? "VERIFIED MAPPINGS" : "",
   includeUnverifiedLedgerEntries ? "INCLUDING UNVERIFIED LEDGER" : "",
+  retrySafeSkippedRunId === undefined
+    ? ""
+    : `RETRY SAFE SKIPS FROM RUN ${retrySafeSkippedRunId}`,
 ].filter(Boolean).join(" ");
 
 if (!Number.isInteger(count) || count < 1 || count > 500) {
   console.error(
-    "Usage: runAdditionalOltAutomationBatch --count <1-500> --max-grace-end-date <YYYY-MM-DD> [--verified-mappings-only] [--include-unverified-ledger] --confirmation <text>"
+    "Usage: runAdditionalOltAutomationBatch --count <1-500> --max-grace-end-date <YYYY-MM-DD> [--verified-mappings-only] [--include-unverified-ledger] [--retry-safe-skips-from-run <id>] --confirmation <text>"
   );
   process.exit(2);
 }
 if (!/^\d{4}-\d{2}-\d{2}$/.test(maxGraceEndDate) || Number.isNaN(Date.parse(maxGraceEndDate))) {
   console.error("--max-grace-end-date must be a real calendar date in YYYY-MM-DD form. Nothing was run.");
+  process.exit(2);
+}
+if (
+  retrySafeSkippedRunId !== undefined &&
+  (!/^\d+$/.test(retrySafeSkippedRunIdText) || retrySafeSkippedRunId < 1)
+) {
+  console.error("--retry-safe-skips-from-run must be a positive run ID. Nothing was run.");
   process.exit(2);
 }
 if (confirmation !== expectedConfirmation) {
@@ -41,6 +55,7 @@ runAutomaticDelinquentDisconnect({
   maxGraceEndDate,
   includeUnverifiedLedgerEntries,
   requireVerifiedMapping,
+  retrySafeSkippedRunId,
 })
   .then((result) => {
     console.log("One-time additional OLT batch result:", JSON.stringify(result));
