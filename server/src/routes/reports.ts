@@ -20,10 +20,14 @@ function validDate(value: string) {
   return value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-// Company-wide takings. A branch or head-office employee has no version of
-// these that is "their" number - the figures span every office - so they are
-// not offered rather than being scoped down to something meaningless.
-const ADMIN_ONLY_REPORTS = new Set(["payments-by-date", "payments-by-location"]);
+// Company-wide financial totals and infrastructure automation logs are only
+// available to administrators. The client also hides their cards, but this
+// check protects the data when a report URL is requested directly.
+const ADMIN_ONLY_REPORTS = new Set([
+  "payments-by-date",
+  "payments-by-location",
+  "nightly-disconnection-runs",
+]);
 
 // Sortable columns, per report. The client sends a column key; this maps it to
 // a literal ORDER BY fragment, so a column name never arrives from the request
@@ -64,7 +68,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
     req.session.employee!.role !== "admin"
   ) {
     return res.status(403).json({
-      error: "Only Admin can view company-wide payment totals.",
+      error: "Only Admin can view this report.",
     });
   }
   const search = cleanText(req.query.search);
@@ -76,12 +80,6 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
   const sort = cleanText(req.query.sort);
   const direction = cleanText(req.query.dir) === "asc" ? "asc" : "desc";
   const orderBy = sortClause(reportKey, sort, direction);
-
-  // Daily cross-company collection totals are administrator-only. Hiding the
-  // report card in the client is not sufficient because URLs can be typed.
-  if (reportKey === "payments-by-date" && req.session.employee?.role !== "admin") {
-    return res.status(403).json({ error: "Only Admin can view Payments by Date." });
-  }
 
   if (!validDate(from) || !validDate(to)) {
     return res.status(400).json({ error: "Choose valid report dates." });
@@ -329,6 +327,32 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           FROM public.pole_box_usage
           WHERE ($1 = '' OR box_number ILIKE $2 OR COALESCE(location_description, '') ILIKE $2)
           ORDER BY CASE WHEN duplicate_assignments > 0 OR over_capacity THEN 0 ELSE 1 END, box_number
+          LIMIT $3 OFFSET $4;`;
+        break;
+
+      case "nightly-disconnection-runs":
+        // One compact summary row per scheduled OLT automation run. Date range
+        // controls are intentionally omitted in the client because this table
+        // grows by only one row per night and should open on recent history.
+        values = [search, searchPattern];
+        countSql = `
+          SELECT COUNT(*)::INTEGER AS total
+          FROM public.olt_automation_runs run
+          WHERE ($1 = '' OR run.olt_automation_run_id::TEXT ILIKE $2
+            OR run.billing_date::TEXT ILIKE $2
+            OR run.status ILIKE $2
+            OR COALESCE(run.error_message, '') ILIKE $2);`;
+        rowsSql = `
+          SELECT run.olt_automation_run_id, run.billing_date, run.status,
+            run.candidate_count, run.selected_count, run.disconnected_count,
+            run.skipped_count, run.failed_count, run.remaining_count,
+            run.started_at, run.completed_at, run.error_message
+          FROM public.olt_automation_runs run
+          WHERE ($1 = '' OR run.olt_automation_run_id::TEXT ILIKE $2
+            OR run.billing_date::TEXT ILIKE $2
+            OR run.status ILIKE $2
+            OR COALESCE(run.error_message, '') ILIKE $2)
+          ORDER BY run.started_at DESC, run.olt_automation_run_id DESC
           LIMIT $3 OFFSET $4;`;
         break;
 

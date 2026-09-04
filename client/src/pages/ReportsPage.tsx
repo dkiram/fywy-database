@@ -6,10 +6,11 @@ import { apiFetch } from "../lib/api";
 
 // Reports are read-only detailed views of existing operational records. They do
 // not create or update tickets, payments, customers, applications, or pole boxes.
-type ReportKey = "payments-by-date" | "payments-by-location" | "pending-service" | "delinquent-customers" | "disconnected-customers" | "applications" | "pole-box-usage";
+type ReportKey = "payments-by-date" | "payments-by-location" | "pending-service" | "delinquent-customers" | "disconnected-customers" | "applications" | "pole-box-usage" | "nightly-disconnection-runs";
 type ReportRow = Record<string, unknown>;
-type Column = { key: string; label: string; format?: "date" | "currency" | "status" };
+type Column = { key: string; label: string; format?: "date" | "datetime" | "currency" | "status" };
 type SortDirection = "asc" | "desc";
+type ReportDefinition = { key: ReportKey; title: string; description: string; icon: string; dateFilters: boolean; adminOnly?: boolean; columns: Column[] };
 
 // Which column headers are clickable, per report. Sorting happens in SQL, not
 // here - a report can run to hundreds of pages and reordering the twenty-five
@@ -27,15 +28,16 @@ const SORTABLE_COLUMNS: Partial<Record<ReportKey, string[]>> = {
   ],
 };
 
-const reports: Array<{ key: ReportKey; title: string; description: string; icon: string; dateFilters: boolean; columns: Column[] }> = [
-  { key: "payments-by-date", title: "Payments by Date", description: "Payment count and amount for each day.", icon: "calendar_month", dateFilters: true, columns: [{ key: "payment_date", label: "Payment Date", format: "date" }, { key: "payment_count", label: "Payments" }, { key: "total_amount", label: "Total", format: "currency" }] },
-  { key: "payments-by-location", title: "Payments by Location", description: "Collected amounts grouped by payment location.", icon: "location_on", dateFilters: true, columns: [{ key: "location", label: "Location" }, { key: "payment_count", label: "Payments" }, { key: "total_amount", label: "Total", format: "currency" }] },
+const reports: ReportDefinition[] = [
+  { key: "payments-by-date", title: "Payments by Date", description: "Payment count and amount for each day.", icon: "calendar_month", dateFilters: true, adminOnly: true, columns: [{ key: "payment_date", label: "Payment Date", format: "date" }, { key: "payment_count", label: "Payments" }, { key: "total_amount", label: "Total", format: "currency" }] },
+  { key: "payments-by-location", title: "Payments by Location", description: "Collected amounts grouped by payment location.", icon: "location_on", dateFilters: true, adminOnly: true, columns: [{ key: "location", label: "Location" }, { key: "payment_count", label: "Payments" }, { key: "total_amount", label: "Total", format: "currency" }] },
   { key: "pending-service", title: "Pending Service", description: "Open, assigned, and in-progress service work.", icon: "construction", dateFilters: true, columns: [{ key: "service_ticket_id", label: "Ticket" }, { key: "customer_name", label: "Customer" }, { key: "customer_address", label: "Address" }, { key: "issue_summary", label: "Problem" }, { key: "priority", label: "Priority", format: "status" }, { key: "status", label: "Status", format: "status" }, { key: "technician", label: "Technician" }, { key: "reported_date", label: "Reported", format: "date" }] },
   // This detailed report is the drill-down behind the dashboard delinquency count.
   { key: "delinquent-customers", title: "Delinquent Customers", description: "Active accounts past grace, with eligibility and active passes.", icon: "event_busy", dateFilters: false, columns: [{ key: "customer_id", label: "Customer ID" }, { key: "customer_name", label: "Customer" }, { key: "status", label: "Status", format: "status" }, { key: "outstanding_balance", label: "Outstanding", format: "currency" }, { key: "oldest_unpaid_due_date", label: "Oldest Due", format: "date" }, { key: "grace_end_date", label: "Grace End", format: "date" }, { key: "eligible_for_disconnection", label: "Eligible Now" }, { key: "is_on_hold", label: "On Hold" }, { key: "hold_expires_on", label: "Hold Until", format: "date" }, { key: "last_payment_date", label: "Last Payment", format: "date" }] },
   { key: "disconnected-customers", title: "Disconnected Customers", description: "Disconnected and pending-reconnection accounts.", icon: "link_off", dateFilters: false, columns: [{ key: "customer_id", label: "Customer ID" }, { key: "customer_name", label: "Customer" }, { key: "status", label: "Status", format: "status" }, { key: "monthly_fee", label: "Monthly Fee", format: "currency" }, { key: "deactivation_date", label: "Disconnected", format: "date" }, { key: "last_payment_date", label: "Last Payment", format: "date" }, { key: "lifetime_payments", label: "Lifetime Payments", format: "currency" }] },
   { key: "applications", title: "Applications", description: "Application outcomes, packages, and activation links.", icon: "description", dateFilters: true, columns: [{ key: "application_id", label: "Application" }, { key: "applicant_name", label: "Applicant" }, { key: "application_date", label: "Applied", format: "date" }, { key: "status", label: "Status", format: "status" }, { key: "package_name", label: "Package" }, { key: "monthly_fee", label: "Monthly Fee", format: "currency" }, { key: "customer_id", label: "Customer ID" }] },
   { key: "pole-box-usage", title: "Pole-Box Usage", description: "Capacity, occupied ports, and assignment conflicts.", icon: "dns", dateFilters: false, columns: [{ key: "box_number", label: "Pole Box" }, { key: "location_description", label: "Location" }, { key: "status", label: "Status", format: "status" }, { key: "occupied_ports", label: "Occupied" }, { key: "capacity", label: "Capacity" }, { key: "available_ports", label: "Available" }, { key: "duplicate_assignments", label: "Duplicates" }, { key: "over_capacity", label: "Over Capacity" }] },
+  { key: "nightly-disconnection-runs", title: "Nightly Disconnection Runs", description: "Results of each automatic overdue-customer disconnection run.", icon: "schedule", dateFilters: false, adminOnly: true, columns: [{ key: "olt_automation_run_id", label: "Run" }, { key: "billing_date", label: "Billing Date", format: "date" }, { key: "status", label: "Status", format: "status" }, { key: "candidate_count", label: "Candidates" }, { key: "selected_count", label: "Selected" }, { key: "disconnected_count", label: "Disconnected" }, { key: "skipped_count", label: "Skipped" }, { key: "failed_count", label: "Failed" }, { key: "remaining_count", label: "Remaining" }, { key: "started_at", label: "Started", format: "datetime" }, { key: "completed_at", label: "Completed", format: "datetime" }, { key: "error_message", label: "Error" }] },
 ];
 
 function ReportsPage() {
@@ -43,17 +45,10 @@ function ReportsPage() {
   const { employee } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedReport = searchParams.get("report") as ReportKey | null;
-  // Head Office keeps operational reports but cannot see the company-wide
-  // Payments by Date report or select it through a copied URL.
+  // Head Office keeps operational reports but cannot see administrator-only
+  // reports or select them through a copied URL.
   const availableReports = useMemo(
-    () =>
-      employee?.role === "admin"
-        ? reports
-        : reports.filter(
-            (item) =>
-              item.key !== "payments-by-date" &&
-              item.key !== "payments-by-location"
-          ),
+    () => employee?.role === "admin" ? reports : reports.filter((item) => !item.adminOnly),
     [employee?.role]
   );
   const [reportKey, setReportKey] = useState<ReportKey>(availableReports.some((item) => item.key === requestedReport) ? requestedReport! : availableReports[0].key);
@@ -151,6 +146,7 @@ function formatCell(value: unknown, format?: Column["format"]) {
   if (value === null || value === undefined || value === "") return "—";
   if (format === "currency") return formatCurrency(value);
   if (format === "date") return new Date(`${String(value).slice(0,10)}T00:00:00`).toLocaleDateString("en-JM", { day: "numeric", month: "short", year: "numeric" });
+  if (format === "datetime") return new Date(String(value)).toLocaleString("en-JM", { timeZone: "America/Jamaica", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
   if (format === "status") return <span className="inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">{humanize(String(value))}</span>;
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return String(value);
