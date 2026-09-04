@@ -4,6 +4,10 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { pool } from "../db.js";
 import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
+import {
+  isHanoverNoDescriptionPlaceholder,
+  isHanoverPuttyConfirmationAllowed,
+} from "../huawei/temporaryOltWorkflows.js";
 import { OltVerificationError, readOntFromOlt } from "../huawei/verifyOnt.js";
 import { insertStatusHistory } from "./accounts.js";
 import { loadReceipt } from "./payments.js";
@@ -609,6 +613,9 @@ applicationsRouter.patch(
     } | null = null;
     let oltLocation = "";
     let liveOnt: Awaited<ReturnType<typeof readOntFromOlt>> = null;
+    let isTemporaryHanoverWorkflow = false;
+    let usedHanoverPuttyConfirmation = false;
+    let liveVerificationIssue: string | null = null;
 
     if (createNew) {
       const prelim = await pool.query(
@@ -657,10 +664,50 @@ applicationsRouter.patch(
         oltLocation =
           `${frame.value}/${slot.value}/${ponPort.value}/${ontId.value}`;
 
+        // A manual fallback is allowed only for the existing, active Hanover
+        // inventory row at its saved management IP. Merely typing "Hanover"
+        // beside another address must never enable the exception.
+        const configuredOltResult = await pool.query(
+          `SELECT normalized_name, host(management_ip) AS management_ip
+           FROM public.olts
+           WHERE normalized_name = UPPER(TRIM($1))
+             AND is_active = TRUE;`,
+          [oltName]
+        );
+        const configuredOlt = configuredOltResult.rows[0] ?? null;
+        if (
+          configuredOlt &&
+          configuredOlt.management_ip !== oltManagementIp
+        ) {
+          return res.status(409).json({
+            error: `${oltName} already uses management IP ${configuredOlt.management_ip}.`,
+          });
+        }
+        isTemporaryHanoverWorkflow = isHanoverPuttyConfirmationAllowed({
+          configuredNormalizedName: configuredOlt?.normalized_name,
+          configuredManagementIp: configuredOlt?.management_ip,
+          submittedManagementIp: oltManagementIp,
+        });
+        const technicianConfirmedInPutty =
+          req.body.hanoverPuttyConfirmed === true;
+
         try {
           liveOnt = await readOntFromOlt(oltTarget);
         } catch (error) {
-          if (error instanceof OltVerificationError) {
+          if (isTemporaryHanoverWorkflow && technicianConfirmedInPutty) {
+            usedHanoverPuttyConfirmation = true;
+            liveVerificationIssue =
+              error instanceof Error
+                ? error.message
+                : "The automated Hanover verification did not complete.";
+          } else if (isTemporaryHanoverWorkflow) {
+            return res.status(409).json({
+              error:
+                `Hanover could not automatically verify ${oltLocation}. ` +
+                "If the Hanover technician checked this exact location in PuTTY, select the PuTTY confirmation and activate again.",
+              code: "hanover_putty_confirmation_available",
+            });
+          } else if (error instanceof OltVerificationError) {
             return res.status(error.kind === "configuration" ? 503 : 502).json({
               error: error.message,
               code: `olt_${error.kind}_error`,
@@ -676,11 +723,24 @@ applicationsRouter.patch(
         }
 
         if (!liveOnt) {
-          return res.status(409).json({
-            error:
-              `No ONT answers at ${oltName} ${oltLocation}. ` +
-              "Enter the correct OLT location, then activate.",
-          });
+          if (isTemporaryHanoverWorkflow && technicianConfirmedInPutty) {
+            usedHanoverPuttyConfirmation = true;
+            liveVerificationIssue ??=
+              `No ONT answered at ${oltLocation} during the automated read.`;
+          } else if (isTemporaryHanoverWorkflow) {
+            return res.status(409).json({
+              error:
+                `Hanover did not automatically find an ONT at ${oltLocation}. ` +
+                "Correct the location, or have the Hanover technician check this exact location in PuTTY and select the PuTTY confirmation.",
+              code: "hanover_putty_confirmation_available",
+            });
+          } else {
+            return res.status(409).json({
+              error:
+                `No ONT answers at ${oltName} ${oltLocation}. ` +
+                "Enter the correct OLT location, then activate.",
+            });
+          }
         }
       }
     }
@@ -744,10 +804,14 @@ applicationsRouter.patch(
           error: "Pole box and port are required to activate a new application.",
         });
       }
-      // The pre-transaction block above already read the live OLT for a new
-      // non-legacy application; a missing target here means the request never
-      // carried usable OLT fields.
-      if (!application.legacy_source && createNew && (!oltTarget || !liveOnt)) {
+      // The pre-transaction block above either read the live OLT or accepted
+      // Hanover's explicit technician confirmation. A missing target, or a
+      // missing live result without that narrowly scoped fallback, is invalid.
+      if (
+        !application.legacy_source &&
+        createNew &&
+        (!oltTarget || (!liveOnt && !usedHanoverPuttyConfirmation))
+      ) {
         await client.query("ROLLBACK");
         return res.status(400).json({
           error:
@@ -784,10 +848,12 @@ applicationsRouter.patch(
         | {
             oltName: string;
             location: string;
-            ontSerial: string;
-            descriptionMatches: boolean;
-            liveControlFlag: "active" | "deactivated";
-            liveRunState: "online" | "offline";
+            ontSerial: string | null;
+            descriptionMatches: boolean | null;
+            liveControlFlag: "active" | "deactivated" | null;
+            liveRunState: "online" | "offline" | null;
+            verificationMethod: "live" | "hanover_putty_confirmation";
+            descriptionOverrideApplied: boolean;
           }
         | null = null;
 
@@ -905,12 +971,11 @@ applicationsRouter.patch(
           ]
         );
 
-        // Record the customer's ONT mapping. The live read before this
-        // transaction already confirmed an ONT answers at this location, so the
-        // mapping is stored as verified. A name-description mismatch is noted
-        // but never blocks activation - the installer may set the Huawei
-        // description after the account is live.
-        if (oltTarget && liveOnt) {
+        // A live read stores a verified mapping and serial. Hanover's temporary
+        // PuTTY fallback stores the technician-confirmed location as unverified
+        // with no serial, so automated ONT actions cannot use it until a later
+        // live verification succeeds.
+        if (oltTarget && (liveOnt || usedHanoverPuttyConfirmation)) {
           let oltRow = await client.query(
             `SELECT olt_id, host(management_ip) AS management_ip
              FROM public.olts
@@ -969,43 +1034,70 @@ applicationsRouter.patch(
             });
           }
 
-          const serial = liveOnt.ontSerial;
-          const serialHolder = await client.query(
-            `SELECT holder.customer_id, holder.name
-             FROM public.customer_ont_assignments occupying
-             JOIN public.customers holder
-               ON holder.customer_id = occupying.customer_id
-             WHERE occupying.ended_at IS NULL
-               AND occupying.ont_serial IS NOT NULL
-               AND UPPER(TRIM(occupying.ont_serial)) = UPPER(TRIM($1))
-             LIMIT 1;`,
-            [serial]
-          );
-          if (serialHolder.rows.length > 0) {
-            await client.query("ROLLBACK");
-            const holder = serialHolder.rows[0];
-            return res.status(409).json({
-              error:
-                `ONT serial ${serial} is already assigned to customer ` +
-                `#${holder.customer_id} ${holder.name}. ` +
-                "Release it from that customer, then activate.",
-            });
+          const serial = liveOnt?.ontSerial ?? null;
+          if (serial) {
+            const serialHolder = await client.query(
+              `SELECT holder.customer_id, holder.name
+               FROM public.customer_ont_assignments occupying
+               JOIN public.customers holder
+                 ON holder.customer_id = occupying.customer_id
+               WHERE occupying.ended_at IS NULL
+                 AND occupying.ont_serial IS NOT NULL
+                 AND UPPER(TRIM(occupying.ont_serial)) = UPPER(TRIM($1))
+               LIMIT 1;`,
+              [serial]
+            );
+            if (serialHolder.rows.length > 0) {
+              await client.query("ROLLBACK");
+              const holder = serialHolder.rows[0];
+              return res.status(409).json({
+                error:
+                  `ONT serial ${serial} is already assigned to customer ` +
+                  `#${holder.customer_id} ${holder.name}. ` +
+                  "Release it from that customer, then activate.",
+              });
+            }
           }
 
           const descriptionMatches =
-            !!liveOnt.description &&
-            normalizeExactCustomerName(liveOnt.description) ===
-              normalizeExactCustomerName(application.name);
+            liveOnt
+              ? !!liveOnt.description &&
+                  normalizeExactCustomerName(liveOnt.description) ===
+                  normalizeExactCustomerName(application.name)
+              : null;
+          const mappingStatus = liveOnt ? "verified" : "unverified";
+          // Hanover's newer PuTTY-provisioned ONTs use this known placeholder
+          // until the U2000 link is available. Saving the exact live placeholder
+          // as the approved description lets later controls continue checking
+          // location + serial + live description instead of failing every time.
+          const approvedDescriptionOverride =
+            liveOnt &&
+            isHanoverNoDescriptionPlaceholder(
+              isTemporaryHanoverWorkflow,
+              liveOnt.description
+            )
+              ? liveOnt.description!.trim()
+              : null;
+          const descriptionOverrideReason = approvedDescriptionOverride
+            ? "Temporary Hanover ONT_NO_DESCRIPTION placeholder accepted during live application activation."
+            : null;
 
           await client.query(
             `INSERT INTO public.customer_ont_assignments (
                customer_id, olt_id, frame_number, slot_number,
                pon_port_number, ont_id, ont_serial, source, mapping_status,
+               ont_description_override, description_override_reason,
+               description_overridden_at, description_overridden_by_employee_id,
                verified_at, verified_by_employee_id,
                created_by_employee_id, updated_by_employee_id
              ) VALUES (
-               $1, $2, $3, $4, $5, $6, $7, 'manual', 'verified',
-               CURRENT_TIMESTAMP, $8, $8, $8
+               $1, $2, $3, $4, $5, $6, $7, 'manual', $8,
+               $9, $10,
+               CASE WHEN $9::TEXT IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END,
+               CASE WHEN $9::TEXT IS NOT NULL THEN $11::BIGINT ELSE NULL END,
+               CASE WHEN $8 = 'verified' THEN CURRENT_TIMESTAMP ELSE NULL END,
+               CASE WHEN $8 = 'verified' THEN $11::BIGINT ELSE NULL END,
+               $11, $11
              );`,
             [
               customerId,
@@ -1015,6 +1107,9 @@ applicationsRouter.patch(
               oltTarget.ponPortNumber,
               oltTarget.ontId,
               serial,
+              mappingStatus,
+              approvedDescriptionOverride,
+              descriptionOverrideReason,
               employee.employeeId,
             ]
           );
@@ -1036,11 +1131,19 @@ applicationsRouter.patch(
                 oltName,
                 oltLocation,
                 ontSerial: serial,
-                liveControlFlag: liveOnt.controlFlag,
-                liveRunState: liveOnt.runState,
+                mappingStatus,
+                liveControlFlag: liveOnt?.controlFlag ?? null,
+                liveRunState: liveOnt?.runState ?? null,
                 descriptionMatches,
+                approvedDescriptionOverride,
+                verificationMethod: liveOnt
+                  ? "live"
+                  : "hanover_putty_confirmation",
+                liveVerificationIssue,
               }),
-              `Verified live during activation of application #${applicationId}`,
+              liveOnt
+                ? `Verified live during activation of application #${applicationId}`
+                : `Hanover technician confirmed ${oltLocation} in PuTTY during activation of application #${applicationId}; pending automated live verification`,
             ]
           );
 
@@ -1049,8 +1152,12 @@ applicationsRouter.patch(
             location: oltLocation,
             ontSerial: serial,
             descriptionMatches,
-            liveControlFlag: liveOnt.controlFlag,
-            liveRunState: liveOnt.runState,
+            liveControlFlag: liveOnt?.controlFlag ?? null,
+            liveRunState: liveOnt?.runState ?? null,
+            verificationMethod: liveOnt
+              ? "live"
+              : "hanover_putty_confirmation",
+            descriptionOverrideApplied: !!approvedDescriptionOverride,
           };
         }
       }

@@ -249,6 +249,20 @@ function ApplicationsPage() {
   const [olts, setOlts] = useState<OltOption[]>([]);
   const [activationOlt, setActivationOlt] =
     useState<ActivationOltForm>(emptyActivationOlt);
+  const [hanoverPuttyConfirmed, setHanoverPuttyConfirmed] = useState(false);
+
+  // A PuTTY confirmation belongs to one exact physical target. Clear it if
+  // any part of that target changes so staff must confirm the revised location.
+  useEffect(() => {
+    setHanoverPuttyConfirmed(false);
+  }, [
+    activationOlt.oltName,
+    activationOlt.managementIp,
+    activationOlt.frame,
+    activationOlt.slot,
+    activationOlt.ponPort,
+    activationOlt.ontId,
+  ]);
 
   const loadApplications = useCallback(async () => {
     try {
@@ -354,6 +368,7 @@ function ApplicationsPage() {
     setActivationPort(application.port_number ?? "");
     setActivationDate(application.activation_date?.slice(0, 10) ?? jamaicaToday());
     setActivationOlt(emptyActivationOlt);
+    setHanoverPuttyConfirmed(false);
     setDecision("service");
   };
 
@@ -481,6 +496,7 @@ function ApplicationsPage() {
             slotNumber: activationOlt.slot,
             ponPortNumber: activationOlt.ponPort,
             ontId: activationOlt.ontId,
+            hanoverPuttyConfirmed,
           }),
         }
       );
@@ -494,10 +510,14 @@ function ApplicationsPage() {
         ? ` The ${formatCurrency(data.installationPayment.amount_paid)} installation fee is now their first payment.`
         : "";
       const oltNote = data.oltMapping
-        ? ` ONT location ${data.oltMapping.location} verified live on ${data.oltMapping.oltName}.` +
-          (data.oltMapping.descriptionMatches
-            ? ""
-            : " The live ONT description does not match the customer name — check it on the OLT.")
+        ? data.oltMapping.verificationMethod === "hanover_putty_confirmation"
+          ? ` Hanover ONT location ${data.oltMapping.location} was recorded from the technician's PuTTY confirmation and remains unverified until a later live check.`
+          : ` ONT location ${data.oltMapping.location} verified live on ${data.oltMapping.oltName}.` +
+            (data.oltMapping.descriptionOverrideApplied
+              ? " Hanover's no-description placeholder was accepted for this exact ONT serial and location."
+              : data.oltMapping.descriptionMatches
+              ? ""
+              : " The live ONT description does not match the customer name — check it on the OLT.")
         : "";
       setNotice(
         (data.createdCustomer
@@ -1089,6 +1109,22 @@ function ApplicationsPage() {
                   <Field label="PON port" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} min="0" step="1" type="number" value={activationOlt.ponPort} onChange={(event) => setActivationOlt((current) => ({ ...current, ponPort: event.target.value }))} className={inputClass} /></Field>
                   <Field label="Virtual port / ONT ID" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} min="0" step="1" type="number" value={activationOlt.ontId} onChange={(event) => setActivationOlt((current) => ({ ...current, ontId: event.target.value }))} className={inputClass} /></Field>
                 </div>
+                {activationOlt.oltName.trim().toUpperCase() === "HANOVER" && (
+                  <label className="mt-4 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                    <input
+                      type="checkbox"
+                      checked={hanoverPuttyConfirmed}
+                      onChange={(event) => setHanoverPuttyConfirmed(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0"
+                    />
+                    <span>
+                      <span className="font-semibold">Hanover PuTTY confirmation</span>
+                      <span className="mt-1 block text-xs">
+                        The Hanover technician checked this exact frame, slot, PON port, and ONT ID in PuTTY. If the automatic check is unavailable, the account may be activated with an unverified mapping. Automated ONT actions will remain blocked until it is verified live.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
             )}
             <Field label="Optional activation note"><textarea rows={3} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="Installation or activation note..." /></Field>
