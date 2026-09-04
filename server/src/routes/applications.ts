@@ -6,7 +6,7 @@ import { pool } from "../db.js";
 import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
 import {
   isHanoverNoDescriptionPlaceholder,
-  isHanoverPuttyConfirmationAllowed,
+  isTemporaryHanoverWorkflow as matchesTemporaryHanoverWorkflow,
 } from "../huawei/temporaryOltWorkflows.js";
 import { OltVerificationError, readOntFromOlt } from "../huawei/verifyOnt.js";
 import { insertStatusHistory } from "./accounts.js";
@@ -614,7 +614,7 @@ applicationsRouter.patch(
     let oltLocation = "";
     let liveOnt: Awaited<ReturnType<typeof readOntFromOlt>> = null;
     let isTemporaryHanoverWorkflow = false;
-    let usedHanoverPuttyConfirmation = false;
+    let usedHanoverUnverifiedFallback = false;
     let liveVerificationIssue: string | null = null;
 
     if (createNew) {
@@ -683,30 +683,20 @@ applicationsRouter.patch(
             error: `${oltName} already uses management IP ${configuredOlt.management_ip}.`,
           });
         }
-        isTemporaryHanoverWorkflow = isHanoverPuttyConfirmationAllowed({
+        isTemporaryHanoverWorkflow = matchesTemporaryHanoverWorkflow({
           configuredNormalizedName: configuredOlt?.normalized_name,
           configuredManagementIp: configuredOlt?.management_ip,
           submittedManagementIp: oltManagementIp,
         });
-        const technicianConfirmedInPutty =
-          req.body.hanoverPuttyConfirmed === true;
-
         try {
           liveOnt = await readOntFromOlt(oltTarget);
         } catch (error) {
-          if (isTemporaryHanoverWorkflow && technicianConfirmedInPutty) {
-            usedHanoverPuttyConfirmation = true;
+          if (isTemporaryHanoverWorkflow) {
+            usedHanoverUnverifiedFallback = true;
             liveVerificationIssue =
               error instanceof Error
                 ? error.message
                 : "The automated Hanover verification did not complete.";
-          } else if (isTemporaryHanoverWorkflow) {
-            return res.status(409).json({
-              error:
-                `Hanover could not automatically verify ${oltLocation}. ` +
-                "If the Hanover technician checked this exact location in PuTTY, select the PuTTY confirmation and activate again.",
-              code: "hanover_putty_confirmation_available",
-            });
           } else if (error instanceof OltVerificationError) {
             return res.status(error.kind === "configuration" ? 503 : 502).json({
               error: error.message,
@@ -723,17 +713,10 @@ applicationsRouter.patch(
         }
 
         if (!liveOnt) {
-          if (isTemporaryHanoverWorkflow && technicianConfirmedInPutty) {
-            usedHanoverPuttyConfirmation = true;
+          if (isTemporaryHanoverWorkflow) {
+            usedHanoverUnverifiedFallback = true;
             liveVerificationIssue ??=
               `No ONT answered at ${oltLocation} during the automated read.`;
-          } else if (isTemporaryHanoverWorkflow) {
-            return res.status(409).json({
-              error:
-                `Hanover did not automatically find an ONT at ${oltLocation}. ` +
-                "Correct the location, or have the Hanover technician check this exact location in PuTTY and select the PuTTY confirmation.",
-              code: "hanover_putty_confirmation_available",
-            });
           } else {
             return res.status(409).json({
               error:
@@ -810,7 +793,7 @@ applicationsRouter.patch(
       if (
         !application.legacy_source &&
         createNew &&
-        (!oltTarget || (!liveOnt && !usedHanoverPuttyConfirmation))
+        (!oltTarget || (!liveOnt && !usedHanoverUnverifiedFallback))
       ) {
         await client.query("ROLLBACK");
         return res.status(400).json({
@@ -852,7 +835,7 @@ applicationsRouter.patch(
             descriptionMatches: boolean | null;
             liveControlFlag: "active" | "deactivated" | null;
             liveRunState: "online" | "offline" | null;
-            verificationMethod: "live" | "hanover_putty_confirmation";
+            verificationMethod: "live" | "hanover_unverified_fallback";
             descriptionOverrideApplied: boolean;
           }
         | null = null;
@@ -972,10 +955,10 @@ applicationsRouter.patch(
         );
 
         // A live read stores a verified mapping and serial. Hanover's temporary
-        // PuTTY fallback stores the technician-confirmed location as unverified
-        // with no serial, so automated ONT actions cannot use it until a later
-        // live verification succeeds.
-        if (oltTarget && (liveOnt || usedHanoverPuttyConfirmation)) {
+        // Hanover's temporary fallback stores the entered location as
+        // unverified with no serial, so automated ONT actions cannot use it
+        // until a later live verification succeeds.
+        if (oltTarget && (liveOnt || usedHanoverUnverifiedFallback)) {
           let oltRow = await client.query(
             `SELECT olt_id, host(management_ip) AS management_ip
              FROM public.olts
@@ -1138,12 +1121,12 @@ applicationsRouter.patch(
                 approvedDescriptionOverride,
                 verificationMethod: liveOnt
                   ? "live"
-                  : "hanover_putty_confirmation",
+                  : "hanover_unverified_fallback",
                 liveVerificationIssue,
               }),
               liveOnt
                 ? `Verified live during activation of application #${applicationId}`
-                : `Hanover technician confirmed ${oltLocation} in PuTTY during activation of application #${applicationId}; pending automated live verification`,
+                : `Temporary Hanover workflow accepted ${oltLocation} during activation of application #${applicationId}; pending automated live verification`,
             ]
           );
 
@@ -1156,7 +1139,7 @@ applicationsRouter.patch(
             liveRunState: liveOnt?.runState ?? null,
             verificationMethod: liveOnt
               ? "live"
-              : "hanover_putty_confirmation",
+              : "hanover_unverified_fallback",
             descriptionOverrideApplied: !!approvedDescriptionOverride,
           };
         }

@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   isHanoverNoDescriptionPlaceholder,
-  isHanoverPuttyConfirmationAllowed,
+  isTemporaryHanoverWorkflow,
 } from "../src/huawei/temporaryOltWorkflows.js";
 
-test("PuTTY fallback requires the configured Hanover inventory row and exact IP", () => {
+test("automatic unverified fallback requires the configured Hanover row and exact IP", () => {
   assert.equal(
-    isHanoverPuttyConfirmationAllowed({
+    isTemporaryHanoverWorkflow({
       configuredNormalizedName: "HANOVER",
       configuredManagementIp: "192.168.1.5",
       submittedManagementIp: "192.168.1.5",
@@ -15,7 +15,7 @@ test("PuTTY fallback requires the configured Hanover inventory row and exact IP"
     true
   );
   assert.equal(
-    isHanoverPuttyConfirmationAllowed({
+    isTemporaryHanoverWorkflow({
       configuredNormalizedName: "HANOVER",
       configuredManagementIp: "192.168.1.5",
       submittedManagementIp: "192.168.1.99",
@@ -23,7 +23,7 @@ test("PuTTY fallback requires the configured Hanover inventory row and exact IP"
     false
   );
   assert.equal(
-    isHanoverPuttyConfirmationAllowed({
+    isTemporaryHanoverWorkflow({
       configuredNormalizedName: "MANDEVILLE",
       configuredManagementIp: "192.168.1.5",
       submittedManagementIp: "192.168.1.5",

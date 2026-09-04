@@ -2,7 +2,7 @@
 
 export const TEMPORARY_PUTTY_CONFIRMATION_OLT = "HANOVER";
 
-export function isHanoverPuttyConfirmationAllowed(values: {
+export function isTemporaryHanoverWorkflow(values: {
   configuredNormalizedName: string | null | undefined;
   configuredManagementIp: string | null | undefined;
   submittedManagementIp: string;
