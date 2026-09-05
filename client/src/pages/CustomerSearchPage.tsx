@@ -12,6 +12,10 @@ type Customer = {
   monthly_fee: string | null;
   package_id: number | null;
   package_name: string | null;
+  account_count: number;
+  account_ids: number[];
+  package_names: string[];
+  account_statuses: string[];
 };
 
 function CustomerSearchPage() {
@@ -30,7 +34,7 @@ function CustomerSearchPage() {
         setError("");
 
         const response = await apiFetch(
-  `/api/customers?search=${encodeURIComponent(
+  `/api/customers?grouped=true&search=${encodeURIComponent(
     search
   )}`
 );
@@ -94,7 +98,7 @@ function CustomerSearchPage() {
           <table className="w-full text-left">
             <thead className="bg-surface-container-low/50">
               <tr>
-                <TableHeading>Customer ID</TableHeading>
+                <TableHeading>Account(s)</TableHeading>
                 <TableHeading>Customer Name</TableHeading>
                 <TableHeading>Address</TableHeading>
                 <TableHeading>Package</TableHeading>
@@ -130,7 +134,14 @@ function CustomerSearchPage() {
                     className="cursor-pointer border-t border-surface-container transition hover:bg-surface-container-low/40 focus-visible:bg-surface-container-low/40"
                   >
                     <td className="px-6 py-4 text-sm text-on-surface-variant">
-                      {customer.customer_id}
+                      <span className="font-mono">
+                        {customer.account_ids.map((id) => `#${id}`).join(", ")}
+                      </span>
+                      {customer.account_count > 1 && (
+                        <p className="mt-1 text-xs font-medium text-primary">
+                          {customer.account_count} service accounts
+                        </p>
+                      )}
                     </td>
 
                     <td className="px-6 py-4 text-sm font-medium text-on-surface">
@@ -142,11 +153,15 @@ function CustomerSearchPage() {
                     </td>
 
                     <td className="px-6 py-4 text-sm text-on-surface-variant">
-                      {customer.package_name || "No package"}
+                      {customer.package_names.join(" · ")}
                     </td>
 
                     <td className="px-6 py-4">
-                      <StatusBadge status={customer.status} />
+                      <div className="flex flex-wrap gap-1">
+                        {customer.account_statuses.map((status, index) => (
+                          <StatusBadge key={`${status}-${index}`} status={status} />
+                        ))}
+                      </div>
                     </td>
 
                     <td className="px-6 py-4 text-sm text-on-surface-variant">

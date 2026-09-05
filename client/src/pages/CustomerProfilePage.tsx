@@ -1,5 +1,5 @@
 /** Combines customer identity, billing, service history, and account actions in one screen. */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
@@ -55,6 +55,34 @@ type PackageOption = {
   speed_mbps: number | null;
 };
 
+type RelatedAccount = {
+  customer_id: number;
+  name: string | null;
+  address: string | null;
+  status: AccountStatus;
+  monthly_fee: string | null;
+  activation_date: string | null;
+  account_group_id: number | null;
+  package_name: string | null;
+  outstanding_balance: string | null;
+  next_billing_date: string | null;
+};
+
+type AccountGroup = {
+  accountGroupId: number | null;
+  displayName: string | null;
+  accounts: RelatedAccount[];
+};
+
+type CustomerSearchOption = {
+  customer_id: number;
+  name: string | null;
+  address: string | null;
+  telephone: string | null;
+  status: string;
+  package_name: string | null;
+};
+
 import PaymentHistory from "../components/PaymentHistory";
 
 
@@ -68,6 +96,12 @@ const canManageSubscription =
   employee?.role === "admin" ||
   employee?.role === "head_office";
   const [customer, setCustomer] = useState<Customer | null>(null);
+const [accountGroup, setAccountGroup] = useState<AccountGroup | null>(null);
+const [showAccountLinker, setShowAccountLinker] = useState(false);
+const [accountLinkSearch, setAccountLinkSearch] = useState("");
+const [accountLinkResults, setAccountLinkResults] = useState<CustomerSearchOption[]>([]);
+const [linkingAccountId, setLinkingAccountId] = useState<number | null>(null);
+const [accountLinkError, setAccountLinkError] = useState("");
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState("");
     const [activeTab, setActiveTab] = useState<"overview" | "payments" | "support" | "history">(
@@ -90,6 +124,77 @@ const [activationReason, setActivationReason] = useState("");
 const [savingActivation, setSavingActivation] = useState(false);
 const [activationError, setActivationError] = useState("");
 const [showPaymentForm, setShowPaymentForm] = useState(false);
+
+const loadAccountGroup = useCallback(async () => {
+  if (!customerId) return;
+  try {
+    const response = await apiFetch(`/api/customers/${customerId}/accounts`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not load service accounts.");
+    setAccountGroup(data);
+  } catch {
+    // The selected account remains usable even if the convenience selector
+    // cannot load, so do not replace the whole profile with an error.
+    setAccountGroup(null);
+  }
+}, [customerId]);
+
+useEffect(() => {
+  loadAccountGroup();
+}, [loadAccountGroup]);
+
+useEffect(() => {
+  if (!showAccountLinker || accountLinkSearch.trim().length < 2) {
+    setAccountLinkResults([]);
+    return;
+  }
+  const timeout = window.setTimeout(async () => {
+    try {
+      const response = await apiFetch(
+        `/api/customers?search=${encodeURIComponent(accountLinkSearch.trim())}`
+      );
+      const data = await response.json();
+      const currentIds = new Set(
+        (accountGroup?.accounts ?? []).map((account) => account.customer_id)
+      );
+      setAccountLinkResults(
+        response.ok
+          ? (data as CustomerSearchOption[])
+              .filter((account) => !currentIds.has(account.customer_id))
+              .slice(0, 8)
+          : []
+      );
+    } catch {
+      setAccountLinkResults([]);
+    }
+  }, 200);
+  return () => window.clearTimeout(timeout);
+}, [accountGroup, accountLinkSearch, showAccountLinker]);
+
+const linkExistingAccount = async (otherCustomerId: number) => {
+  if (!customer) return;
+  try {
+    setLinkingAccountId(otherCustomerId);
+    setAccountLinkError("");
+    const response = await apiFetch(`/api/customers/${customer.customer_id}/accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ otherCustomerId }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not link that account.");
+    setShowAccountLinker(false);
+    setAccountLinkSearch("");
+    setAccountLinkResults([]);
+    await loadAccountGroup();
+  } catch (linkError) {
+    setAccountLinkError(
+      linkError instanceof Error ? linkError.message : "Could not link that account."
+    );
+  } finally {
+    setLinkingAccountId(null);
+  }
+};
 
   // Correcting an activation date rebuilds the customer's billing schedule, so
   // the server refuses once anything has been settled against the old one. The
@@ -269,7 +374,7 @@ if (error || !customer) {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-4">
             <h1 className="text-4xl font-semibold tracking-tight text-on-surface lg:text-5xl">
-              {customer.name || "Unnamed customer"}
+              {accountGroup?.displayName || customer.name || "Unnamed customer"}
             </h1>
 
             <div className={`flex items-center gap-2 rounded-full px-3 py-1 ${statusPillClass(customer.status)}`}>
@@ -286,7 +391,7 @@ if (error || !customer) {
               fingerprint
             </span>
 
-            {customer.customer_id}
+            Account #{customer.customer_id}
           </div>
         </div>
 
@@ -342,6 +447,141 @@ if (error || !customer) {
   </button>
 </div>
       </div>
+
+      {/* One customer-facing shell, with every operational action still
+          scoped to the visibly selected service account. */}
+      <section className="rounded-2xl border border-outline-variant bg-surface-container-lowest p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">account_tree</span>
+              <h2 className="font-semibold text-on-surface">Service accounts</h2>
+            </div>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Choose an account before taking a payment or changing service. Balances, billing dates, and connection status stay separate.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {canManageSubscription && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAccountLinker((current) => !current);
+                  setAccountLinkError("");
+                }}
+                className="rounded-lg border border-primary px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10"
+              >
+                Link existing account
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate(`/applications?additionalServiceFor=${customer.customer_id}`)}
+              className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-on-primary transition hover:bg-primary-container"
+            >
+              Add another service
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {(accountGroup?.accounts ?? []).map((account, index) => {
+            const selected = account.customer_id === customer.customer_id;
+            return (
+              <button
+                key={account.customer_id}
+                type="button"
+                onClick={() => {
+                  if (!selected) navigate(`/customers/${account.customer_id}`);
+                }}
+                aria-current={selected ? "page" : undefined}
+                className={`rounded-xl border p-4 text-left transition ${
+                  selected
+                    ? "border-primary bg-primary/5 shadow-sm"
+                    : "border-outline-variant hover:border-primary/50 hover:bg-surface-container-low"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                      Account {index + 1}
+                    </p>
+                    <p className="mt-1 font-mono text-sm font-semibold text-primary">
+                      #{account.customer_id}
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${statusPillClass(account.status)}`}>
+                    {account.status.replaceAll("_", " ")}
+                  </span>
+                </div>
+                <p className="mt-3 font-semibold text-on-surface">
+                  {account.package_name || "No package"}
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-on-surface-variant">
+                  <div>
+                    <p>Next bill</p>
+                    <p className="mt-0.5 font-medium text-on-surface">
+                      {account.next_billing_date ? formatDate(account.next_billing_date) : "Paused / none"}
+                    </p>
+                  </div>
+                  <div>
+                    <p>Outstanding</p>
+                    <p className="mt-0.5 font-medium text-on-surface">
+                      {formatCurrency(account.outstanding_balance)}
+                    </p>
+                  </div>
+                </div>
+                {selected && (
+                  <p className="mt-3 text-xs font-semibold text-primary">Currently selected</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {showAccountLinker && (
+          <div className="mt-4 rounded-xl border border-outline-variant bg-surface-container-low p-4">
+            <p className="text-sm font-semibold text-on-surface">Link a legacy second account</p>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              This only groups the displays. It does not combine payments, balances, billing, equipment, or service status.
+            </p>
+            <div className="relative mt-3">
+              <input
+                autoFocus
+                value={accountLinkSearch}
+                onChange={(event) => setAccountLinkSearch(event.target.value)}
+                placeholder="Search by name, account number, or phone..."
+                className="w-full rounded-lg border border-outline-variant bg-white px-4 py-2.5 text-sm"
+              />
+              {accountLinkResults.length > 0 && (
+                <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-outline-variant bg-white shadow-xl">
+                  {accountLinkResults.map((account) => (
+                    <button
+                      key={account.customer_id}
+                      type="button"
+                      disabled={linkingAccountId !== null}
+                      onClick={() => {
+                        const confirmed = window.confirm(
+                          `Show account #${account.customer_id} under the same customer as account #${customer.customer_id}? Payments, balances, billing dates, and service status will remain separate.`
+                        );
+                        if (confirmed) linkExistingAccount(account.customer_id);
+                      }}
+                      className="block w-full border-b border-surface-container px-4 py-3 text-left transition last:border-0 hover:bg-surface-container-low disabled:opacity-50"
+                    >
+                      <span className="font-semibold">{account.name || "Unnamed customer"}</span>
+                      <span className="ml-2 font-mono text-xs text-primary">#{account.customer_id}</span>
+                      <p className="mt-1 text-xs text-on-surface-variant">
+                        {account.package_name || "No package"} · {account.address || "No address"}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {accountLinkError && <p className="mt-3 text-sm text-error">{accountLinkError}</p>}
+          </div>
+        )}
+      </section>
 
       {/* Tabs */}
      <div className="flex border-b border-surface-container-highest">
@@ -1093,6 +1333,14 @@ function formatDate(date: string | null) {
     month: "long",
     day: "numeric",
   });
+}
+
+function formatCurrency(value: string | null) {
+  const amount = Number(value ?? 0);
+  return `J$${Number.isFinite(amount) ? amount.toLocaleString("en-JM", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }) : "0.00"}`;
 }
 
 function calculateTenure(activationDate: string | null) {

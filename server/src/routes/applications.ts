@@ -215,11 +215,13 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         a.status,
         a.customer_id,
         a.suggested_customer_id,
+        a.additional_service_for_customer_id,
         a.match_method,
         a.closure_reason,
         a.match_confirmed_at,
         p.name AS package_name,
         suggested.name AS suggested_customer_name,
+        additional_service_customer.name AS additional_service_customer_name,
         linked.name AS linked_customer_name,
         CONCAT_WS(' ', confirmer.first_name, confirmer.last_name)
           AS match_confirmed_by_name,
@@ -237,6 +239,8 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         ON a.package_id = p.package_id
       LEFT JOIN public.customers suggested
         ON a.suggested_customer_id = suggested.customer_id
+      LEFT JOIN public.customers additional_service_customer
+        ON a.additional_service_for_customer_id = additional_service_customer.customer_id
       LEFT JOIN public.customers linked
         ON a.customer_id = linked.customer_id
       LEFT JOIN public.employees confirmer
@@ -331,6 +335,9 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
   const monthlyFeeText = String(req.body.monthlyFee ?? "").trim();
   const applicationDate = cleanText(req.body.applicationDate);
   const additionalBoxText = String(req.body.additionalBox ?? "0").trim();
+  const additionalServiceForCustomerIdText = String(
+    req.body.additionalServiceForCustomerId ?? ""
+  ).trim();
   // Cash taken across the counter when the form is filled in. The client
   // prefills it from the chosen package; an empty value or a zero means no
   // money changed hands and no payment is recorded.
@@ -372,6 +379,12 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
   ) {
     return res.status(400).json({ error: "Enter a valid installation fee." });
   }
+  if (
+    additionalServiceForCustomerIdText &&
+    !/^\d+$/.test(additionalServiceForCustomerIdText)
+  ) {
+    return res.status(400).json({ error: "Choose a valid existing customer." });
+  }
 
   const client = await pool.connect();
   try {
@@ -385,6 +398,20 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
     if (packageResult.rows.length === 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Selected package does not exist." });
+    }
+
+    if (additionalServiceForCustomerIdText) {
+      const existingCustomerResult = await client.query(
+        `SELECT customer_id
+         FROM public.customers
+         WHERE customer_id = $1 AND hidden_from_app = FALSE
+         FOR UPDATE;`,
+        [Number(additionalServiceForCustomerIdText)]
+      );
+      if (existingCustomerResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Selected existing customer was not found." });
+      }
     }
 
     // The package fee is the default; an explicit value from the counter wins,
@@ -420,6 +447,7 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
         application_date,
         adult_channel,
         additional_box,
+        additional_service_for_customer_id,
         status,
         submitted_by_employee_id
       )
@@ -429,7 +457,7 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
         $9, $10,
         COALESCE(NULLIF($11, '')::DATE,
           (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE),
-        $12, $13, 'pending', $14
+        $12, $13, NULLIF($14, '')::INTEGER, 'pending', $15
       )
       RETURNING application_id, status, application_date;
       `,
@@ -447,6 +475,7 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
         applicationDate,
         req.body.adultChannel === true,
         Number(additionalBoxText),
+        additionalServiceForCustomerIdText,
         employee.employeeId,
       ]
     );
@@ -572,6 +601,8 @@ applicationsRouter.patch(
     const employee = req.session.employee!;
     const requestedCustomerId = req.body.customerId;
     const createNew = req.body.createNew === true;
+    const requestedAdditionalServiceForCustomerId =
+      req.body.additionalServiceForCustomerId;
     const note = cleanText(req.body.note);
     const requestedActivationDate = cleanText(req.body.activationDate);
 
@@ -590,9 +621,20 @@ applicationsRouter.patch(
     if (requestedCustomerId != null && !/^\d+$/.test(String(requestedCustomerId))) {
       return res.status(400).json({ error: "Invalid customer selection." });
     }
-    if (requestedCustomerId != null && createNew) {
+    if (
+      requestedAdditionalServiceForCustomerId != null &&
+      !/^\d+$/.test(String(requestedAdditionalServiceForCustomerId))
+    ) {
+      return res.status(400).json({ error: "Invalid existing customer selection." });
+    }
+    if (
+      Number(requestedCustomerId != null) +
+        Number(createNew) +
+        Number(requestedAdditionalServiceForCustomerId != null) >
+      1
+    ) {
       return res.status(400).json({
-        error: "Choose either an existing customer or a new customer.",
+        error: "Choose one activation outcome.",
       });
     }
 
@@ -617,17 +659,42 @@ applicationsRouter.patch(
     let usedHanoverUnverifiedFallback = false;
     let liveVerificationIssue: string | null = null;
 
-    if (createNew) {
-      const prelim = await pool.query(
-        `SELECT legacy_source, status FROM public.applications
-         WHERE application_id = $1;`,
-        [applicationId]
-      );
-      if (prelim.rows.length === 0) {
-        return res.status(404).json({ error: "Application not found." });
-      }
-      const prelimApp = prelim.rows[0];
+    const prelim = await pool.query(
+      `SELECT legacy_source, status, additional_service_for_customer_id
+       FROM public.applications
+       WHERE application_id = $1;`,
+      [applicationId]
+    );
+    if (prelim.rows.length === 0) {
+      return res.status(404).json({ error: "Application not found." });
+    }
+    const prelimApp = prelim.rows[0];
+    if (
+      prelimApp.additional_service_for_customer_id != null &&
+      requestedAdditionalServiceForCustomerId != null &&
+      Number(prelimApp.additional_service_for_customer_id) !==
+        Number(requestedAdditionalServiceForCustomerId)
+    ) {
+      return res.status(409).json({
+        error: "This application is assigned to a different existing customer. Reload and try again.",
+      });
+    }
+    const additionalServiceForCustomerId =
+      requestedAdditionalServiceForCustomerId != null
+        ? Number(requestedAdditionalServiceForCustomerId)
+        : prelimApp.additional_service_for_customer_id != null
+          ? Number(prelimApp.additional_service_for_customer_id)
+          : null;
+    const createsServiceAccount = createNew || additionalServiceForCustomerId !== null;
 
+    if (
+      (requestedCustomerId != null || createNew) &&
+      additionalServiceForCustomerId !== null
+    ) {
+      return res.status(400).json({ error: "Choose one activation outcome." });
+    }
+
+    if (createsServiceAccount) {
       if (!prelimApp.legacy_source) {
         if (!activeStatuses.includes(prelimApp.status)) {
           return res.status(409).json({
@@ -779,7 +846,7 @@ applicationsRouter.patch(
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "Enter a valid monthly fee." });
       }
-      if (!application.legacy_source && createNew && (!poleBoxNumber || !portNumber)) {
+      if (!application.legacy_source && createsServiceAccount && (!poleBoxNumber || !portNumber)) {
         // Imported rows may lack installation data. New applications must have
         // both values before an account can go live.
         await client.query("ROLLBACK");
@@ -792,7 +859,7 @@ applicationsRouter.patch(
       // missing live result without that narrowly scoped fallback, is invalid.
       if (
         !application.legacy_source &&
-        createNew &&
+        createsServiceAccount &&
         (!oltTarget || (!liveOnt && !usedHanoverUnverifiedFallback))
       ) {
         await client.query("ROLLBACK");
@@ -853,12 +920,48 @@ applicationsRouter.patch(
           return res.status(404).json({ error: "Selected customer not found." });
         }
       } else {
-        if (application.suggested_customer_id && !createNew) {
+        if (application.suggested_customer_id && !createsServiceAccount) {
           await client.query("ROLLBACK");
           return res.status(409).json({
             error: "Review the suggested customer before creating a duplicate.",
             suggestedCustomerId: application.suggested_customer_id,
           });
+        }
+
+        let accountGroupId: number | null = null;
+        if (additionalServiceForCustomerId !== null) {
+          const existingCustomerResult = await client.query(
+            `SELECT customer_id, name, account_group_id
+             FROM public.customers
+             WHERE customer_id = $1 AND hidden_from_app = FALSE
+             FOR UPDATE;`,
+            [additionalServiceForCustomerId]
+          );
+          const existingCustomer = existingCustomerResult.rows[0];
+          if (!existingCustomer) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({
+              error: "The customer selected for this additional service was not found.",
+            });
+          }
+
+          accountGroupId = existingCustomer.account_group_id;
+          if (!accountGroupId) {
+            const groupResult = await client.query(
+              `INSERT INTO public.customer_account_groups (
+                 display_name, created_by_employee_id
+               ) VALUES ($1, $2)
+               RETURNING account_group_id;`,
+              [existingCustomer.name || application.name, employee.employeeId]
+            );
+            accountGroupId = Number(groupResult.rows[0].account_group_id);
+            await client.query(
+              `UPDATE public.customers
+               SET account_group_id = $1
+               WHERE customer_id = $2;`,
+              [accountGroupId, additionalServiceForCustomerId]
+            );
+          }
         }
 
         // Legacy imports supplied customer IDs manually, so synchronize the
@@ -886,7 +989,7 @@ applicationsRouter.patch(
             id_type, id_number, package_id, legacy_package_id, monthly_fee,
             application_date, activation_date, status, adult_channel,
             pole_box_number, port_number, legacy_alias_notes,
-            legacy_card_number, legacy_additional_box_notes
+            legacy_card_number, legacy_additional_box_notes, account_group_id
           )
           VALUES (
             $1, $2, $3, $4, $5, $6,
@@ -897,7 +1000,8 @@ applicationsRouter.patch(
               (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
             ),
             'active', $14, $15, $16, $17, $18,
-            CASE WHEN $19::SMALLINT > 0 THEN $19::TEXT ELSE NULL END
+            CASE WHEN $19::SMALLINT > 0 THEN $19::TEXT ELSE NULL END,
+            $20
           );
           `,
           [
@@ -920,6 +1024,7 @@ applicationsRouter.patch(
             application.alias,
             application.legacy_card_number,
             application.additional_box,
+            accountGroupId,
           ]
         );
         createdCustomer = true;
@@ -1164,6 +1269,10 @@ applicationsRouter.patch(
           ),
           serviced_by_employee_id = $7,
           serviced_at = CURRENT_TIMESTAMP,
+          additional_service_for_customer_id = COALESCE(
+            additional_service_for_customer_id,
+            $9::INTEGER
+          ),
           updated_at = CURRENT_TIMESTAMP
         WHERE application_id = $8;
         `,
@@ -1176,6 +1285,7 @@ applicationsRouter.patch(
           requestedActivationDate,
           employee.employeeId,
           applicationId,
+          additionalServiceForCustomerId,
         ]
       );
 
@@ -1233,7 +1343,9 @@ applicationsRouter.patch(
           employee.employeeId,
           `${employee.firstName} ${employee.lastName}`,
           createdCustomer
-            ? "Activated application and created customer"
+            ? additionalServiceForCustomerId !== null
+              ? "Activated application and added service account"
+              : "Activated application and created customer"
             : "Activated application and linked customer",
           String(applicationId),
           application.status,
@@ -1248,6 +1360,8 @@ applicationsRouter.patch(
         applicationId,
         customerId,
         createdCustomer,
+        additionalService: additionalServiceForCustomerId !== null,
+        accountGroupCustomerId: additionalServiceForCustomerId,
         status: "serviced",
         installationPayment,
         oltMapping: oltMappingResult,

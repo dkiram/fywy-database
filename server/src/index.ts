@@ -412,6 +412,73 @@ app.get("/api/customers", requireAuth, async (req, res) => {
 
     const searchPattern = `%${search}%`;
 
+    // The customer directory is person-oriented. Operational pickers omit
+    // this flag and continue receiving one row per service account.
+    if (req.query.grouped === "true") {
+      const groupedResult = await pool.query(
+        `
+        WITH visible AS (
+          SELECT
+            c.*,
+            p.name AS package_name,
+            COALESCE(c.account_group_id, -c.customer_id::BIGINT) AS account_key
+          FROM public.customers c
+          LEFT JOIN public.packages p ON p.package_id = c.package_id
+          WHERE c.hidden_from_app = FALSE
+        ), matching_keys AS (
+          SELECT DISTINCT account_key
+          FROM visible
+          WHERE $1 = ''
+             OR customer_id::TEXT ILIKE $2
+             OR COALESCE(name, '') ILIKE $2
+             OR COALESCE(telephone, '') ILIKE $2
+        ), representatives AS (
+          SELECT DISTINCT ON (v.account_key)
+            v.*
+          FROM visible v
+          JOIN matching_keys match ON match.account_key = v.account_key
+          ORDER BY v.account_key, v.customer_id
+        )
+        SELECT
+          representative.customer_id,
+          COALESCE(account_group.display_name, representative.name) AS name,
+          representative.address,
+          representative.telephone,
+          representative.status,
+          representative.monthly_fee,
+          representative.package_id,
+          representative.package_name,
+          representative.account_group_id,
+          members.account_count,
+          members.account_ids,
+          members.package_names,
+          members.account_statuses
+        FROM representatives representative
+        LEFT JOIN public.customer_account_groups account_group
+          ON account_group.account_group_id = representative.account_group_id
+        CROSS JOIN LATERAL (
+          SELECT
+            COUNT(*)::INTEGER AS account_count,
+            ARRAY_AGG(member.customer_id ORDER BY member.customer_id) AS account_ids,
+            ARRAY_AGG(COALESCE(member.package_name, 'No package') ORDER BY member.customer_id)
+              AS package_names,
+            ARRAY_AGG(member.status ORDER BY member.customer_id) AS account_statuses,
+            MAX(member.application_date) AS latest_application_date
+          FROM visible member
+          WHERE member.account_key = representative.account_key
+        ) members
+        ORDER BY
+          CASE WHEN $1 = '' THEN members.latest_application_date END DESC NULLS LAST,
+          CASE WHEN $1 <> '' THEN LOWER(COALESCE(account_group.display_name, representative.name)) END ASC NULLS LAST,
+          representative.customer_id DESC
+        LIMIT 50;
+        `,
+        [search, searchPattern]
+      );
+
+      return res.json(groupedResult.rows);
+    }
+
     const orderBy =
       search === ""
         ? `
@@ -470,6 +537,200 @@ app.get("/api/customers", requireAuth, async (req, res) => {
     });
   }
 });
+
+// Load the account selector shown above a customer profile. Every returned row
+// is still an independent account; this endpoint only supplies the grouping.
+app.get("/api/customers/:customerId/accounts", requireAuth, async (req, res) => {
+  const customerId = req.params.customerId;
+  if (typeof customerId !== "string" || !/^\d+$/.test(customerId)) {
+    return res.status(400).json({ error: "Invalid customer ID" });
+  }
+
+  try {
+    const anchorResult = await pool.query(
+      `SELECT customer_id, name, account_group_id
+       FROM public.customers
+       WHERE customer_id = $1 AND hidden_from_app = FALSE;`,
+      [Number(customerId)]
+    );
+    const anchor = anchorResult.rows[0];
+    if (!anchor) return res.status(404).json({ error: "Customer not found" });
+
+    const accountsResult = await pool.query(
+      `
+      SELECT
+        c.customer_id,
+        c.name,
+        c.address,
+        c.status,
+        c.monthly_fee,
+        c.activation_date,
+        c.account_group_id,
+        p.name AS package_name,
+        billing.outstanding_balance,
+        CASE
+          WHEN c.status = 'active'
+            AND c.activation_date IS NOT NULL
+            AND COALESCE(c.monthly_fee, 0) > 0
+          THEN CASE
+            WHEN c.activation_date >
+              (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+            THEN c.activation_date
+            WHEN public.spcl_anniversary_date(
+              c.activation_date,
+              (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+            ) > (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+            THEN public.spcl_anniversary_date(
+              c.activation_date,
+              (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+            )
+            ELSE public.spcl_anniversary_date(
+              c.activation_date,
+              ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE + INTERVAL '1 month')::DATE
+            )
+          END
+          ELSE NULL
+        END AS next_billing_date
+      FROM public.customers c
+      LEFT JOIN public.packages p ON p.package_id = c.package_id
+      LEFT JOIN public.customer_billing_status billing
+        ON billing.customer_id = c.customer_id
+      WHERE c.hidden_from_app = FALSE
+        AND (
+          ($2::BIGINT IS NULL AND c.customer_id = $1)
+          OR ($2::BIGINT IS NOT NULL AND c.account_group_id = $2)
+        )
+      ORDER BY c.customer_id;
+      `,
+      [Number(customerId), anchor.account_group_id]
+    );
+
+    const groupResult = anchor.account_group_id
+      ? await pool.query(
+          `SELECT display_name FROM public.customer_account_groups WHERE account_group_id = $1;`,
+          [anchor.account_group_id]
+        )
+      : null;
+
+    res.json({
+      accountGroupId: anchor.account_group_id,
+      displayName: groupResult?.rows[0]?.display_name ?? anchor.name,
+      accounts: accountsResult.rows,
+    });
+  } catch (error) {
+    console.error("Could not load related customer accounts:", error);
+    res.status(500).json({ error: "Could not load customer accounts." });
+  }
+});
+
+// Manually joins legacy duplicate rows (for example "Name" and "Name 2")
+// without touching either account's money, service state, or equipment.
+app.post(
+  "/api/customers/:customerId/accounts",
+  requireRole("admin", "head_office"),
+  async (req, res) => {
+    const customerId = req.params.customerId;
+    const otherCustomerId = String(req.body.otherCustomerId ?? "").trim();
+    if (
+      typeof customerId !== "string" ||
+      !/^\d+$/.test(customerId) ||
+      !/^\d+$/.test(otherCustomerId)
+    ) {
+      return res.status(400).json({ error: "Choose a valid customer account." });
+    }
+    if (customerId === otherCustomerId) {
+      return res.status(400).json({ error: "That account is already selected." });
+    }
+
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const customersResult = await client.query(
+        `SELECT customer_id, name, account_group_id
+         FROM public.customers
+         WHERE customer_id = ANY($1::INTEGER[])
+           AND hidden_from_app = FALSE
+         ORDER BY customer_id
+         FOR UPDATE;`,
+        [[Number(customerId), Number(otherCustomerId)]]
+      );
+      if (customersResult.rows.length !== 2) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "One of those customer accounts was not found." });
+      }
+
+      const current = customersResult.rows.find(
+        (row) => Number(row.customer_id) === Number(customerId)
+      );
+      const other = customersResult.rows.find(
+        (row) => Number(row.customer_id) === Number(otherCustomerId)
+      );
+      let accountGroupId = current.account_group_id ?? other.account_group_id;
+
+      if (!accountGroupId) {
+        const displayName = [current.name, other.name]
+          .filter((name): name is string => typeof name === "string" && name.trim() !== "")
+          .sort((left, right) => left.trim().length - right.trim().length)[0]
+          ?.trim();
+        const groupResult = await client.query(
+          `INSERT INTO public.customer_account_groups (display_name, created_by_employee_id)
+           VALUES ($1, $2)
+           RETURNING account_group_id;`,
+          [displayName || `Customer #${customerId}`, employee.employeeId]
+        );
+        accountGroupId = groupResult.rows[0].account_group_id;
+      }
+
+      // If both accounts already head different groups, combine the groups by
+      // moving every member. No per-account records are merged or rewritten.
+      const groupIds = [current.account_group_id, other.account_group_id].filter(
+        (value, index, values) => value && values.indexOf(value) === index
+      );
+      if (groupIds.length > 1) {
+        await client.query(
+          `UPDATE public.customers
+           SET account_group_id = $1
+           WHERE account_group_id = ANY($2::BIGINT[]);`,
+          [accountGroupId, groupIds]
+        );
+      }
+
+      await client.query(
+        `UPDATE public.customers
+         SET account_group_id = $1
+         WHERE customer_id = ANY($2::INTEGER[]);`,
+        [accountGroupId, [Number(customerId), Number(otherCustomerId)]]
+      );
+
+      await client.query(
+        `INSERT INTO public.audit_logs (
+           employee_id, actor_name, action, entity_type, entity_id,
+           field_name, old_value, new_value, reason, occurred_at
+         )
+         SELECT $1, $2, 'Linked customer service accounts', 'customer', account_id::TEXT,
+           'account_group_id', NULL, $4, $5, CURRENT_TIMESTAMP
+         FROM UNNEST($3::INTEGER[]) account_id;`,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          [Number(customerId), Number(otherCustomerId)],
+          String(accountGroupId),
+          `Linked service accounts #${customerId} and #${otherCustomerId}`,
+        ]
+      );
+
+      await client.query("COMMIT");
+      res.json({ accountGroupId: Number(accountGroupId) });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not link customer accounts:", error);
+      res.status(500).json({ error: "Could not link customer accounts." });
+    } finally {
+      client.release();
+    }
+  }
+);
 
 app.get("/api/customers/:customerId", requireAuth, async (req, res) => {
   try {

@@ -1,6 +1,6 @@
 /** Manages the application queue from intake through service, cancellation, or decline. */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import PaymentReceiptModal, { type PaymentReceipt } from "../components/PaymentReceiptModal";
 import { apiFetch } from "../lib/api";
@@ -41,6 +41,8 @@ type ApplicationRecord = {
   customer_id: number | null;
   suggested_customer_id: number | null;
   suggested_customer_name: string | null;
+  additional_service_for_customer_id: number | null;
+  additional_service_customer_name: string | null;
   linked_customer_name: string | null;
   match_method: string | null;
   closure_reason: string | null;
@@ -130,6 +132,7 @@ type NewApplicationForm = {
   applicationDate: string;
   adultChannel: boolean;
   additionalBox: string;
+  additionalServiceForCustomerId: number | null;
 };
 
 const emptySummary: ApplicationSummary = {
@@ -187,11 +190,13 @@ function initialNewApplication(): NewApplicationForm {
     applicationDate: jamaicaToday(),
     adultChannel: false,
     additionalBox: "0",
+    additionalServiceForCustomerId: null,
   };
 }
 
 function ApplicationsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { employee } = useAuth();
   const canDecide =
     employee?.role === "admin" || employee?.role === "head_office";
@@ -219,6 +224,12 @@ function ApplicationsPage() {
   );
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [newApplicationKind, setNewApplicationKind] = useState<"new" | "additional">("new");
+  const [additionalServiceCustomer, setAdditionalServiceCustomer] =
+    useState<CustomerOption | null>(null);
+  const [additionalServiceSearch, setAdditionalServiceSearch] = useState("");
+  const [additionalServiceResults, setAdditionalServiceResults] =
+    useState<CustomerOption[]>([]);
 
   const [decision, setDecision] = useState<
     "service" | "close" | "confirm-match" | "reopen-match" | null
@@ -230,7 +241,7 @@ function ApplicationsPage() {
   const [matchCustomer, setMatchCustomer] = useState<CustomerOption | null>(null);
   const [matchSearch, setMatchSearch] = useState("");
   const [matchResults, setMatchResults] = useState<CustomerOption[]>([]);
-  const [serviceMode, setServiceMode] = useState<"link" | "create">("create");
+  const [serviceMode, setServiceMode] = useState<"link" | "create" | "additional">("create");
   const [decisionNote, setDecisionNote] = useState("");
   const [closeStatus, setCloseStatus] = useState<"cancelled" | "declined">(
     "cancelled"
@@ -301,6 +312,66 @@ function ApplicationsPage() {
     loadOlts().catch(() => setOlts([]));
   }, []);
 
+  // "Add another service" on a profile opens this form with that customer
+  // already selected. Staff can still edit the service address and contact
+  // details because the second service may be at a different location.
+  const additionalServiceParam = searchParams.get("additionalServiceFor");
+  useEffect(() => {
+    if (!additionalServiceParam || !/^\d+$/.test(additionalServiceParam)) return;
+    apiFetch(`/api/customers?search=${encodeURIComponent(additionalServiceParam)}`)
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error();
+        const customer = (data as CustomerOption[]).find(
+          (item) => item.customer_id === Number(additionalServiceParam)
+        );
+        if (!customer) return;
+        setAdditionalServiceCustomer(customer);
+        setAdditionalServiceSearch("");
+        setAdditionalServiceResults([]);
+        setNewApplicationKind("additional");
+        setNewForm({
+          ...initialNewApplication(),
+          name: customer.name ?? "",
+          address: customer.address ?? "",
+          telephone: customer.telephone ?? "",
+          additionalServiceForCustomerId: customer.customer_id,
+        });
+        setFormError("");
+        setShowNewForm(true);
+      })
+      .catch(() => undefined);
+  }, [additionalServiceParam]);
+
+  useEffect(() => {
+    if (
+      !showNewForm ||
+      newApplicationKind !== "additional" ||
+      additionalServiceCustomer ||
+      additionalServiceSearch.trim().length < 2
+    ) {
+      setAdditionalServiceResults([]);
+      return;
+    }
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await apiFetch(
+          `/api/customers?search=${encodeURIComponent(additionalServiceSearch.trim())}`
+        );
+        const data = await response.json();
+        setAdditionalServiceResults(response.ok ? (data as CustomerOption[]).slice(0, 8) : []);
+      } catch {
+        setAdditionalServiceResults([]);
+      }
+    }, 200);
+    return () => window.clearTimeout(timeout);
+  }, [
+    additionalServiceCustomer,
+    additionalServiceSearch,
+    newApplicationKind,
+    showNewForm,
+  ]);
+
   useEffect(() => {
     if (decision !== "confirm-match" || matchCustomer || matchSearch.trim().length < 2) {
       setMatchResults([]);
@@ -343,7 +414,13 @@ function ApplicationsPage() {
 
   const openServiceDecision = (application: ApplicationRecord) => {
     setSelected(application);
-    setServiceMode(application.suggested_customer_id ? "link" : "create");
+    setServiceMode(
+      application.additional_service_for_customer_id
+        ? "additional"
+        : application.suggested_customer_id
+          ? "link"
+          : "create"
+    );
     setDecisionNote("");
     setDecisionError("");
     // Pre-fill the activation form from the application, while allowing staff
@@ -427,6 +504,9 @@ function ApplicationsPage() {
       }
       setShowNewForm(false);
       setNewForm(initialNewApplication());
+      setNewApplicationKind("new");
+      setAdditionalServiceCustomer(null);
+      setAdditionalServiceSearch("");
       setView("active");
       setPage(1);
       setNotice(
@@ -469,6 +549,10 @@ function ApplicationsPage() {
                 ? activeApplication.suggested_customer_id
                 : undefined,
             createNew: serviceMode === "create",
+            additionalServiceForCustomerId:
+              serviceMode === "additional"
+                ? activeApplication.additional_service_for_customer_id
+                : undefined,
             note: decisionNote,
             packageId: activationPackageId,
             monthlyFee: activationMonthlyFee,
@@ -504,7 +588,9 @@ function ApplicationsPage() {
               : " The live ONT description does not match the customer name — check it on the OLT.")
         : "";
       setNotice(
-        (data.createdCustomer
+        (data.additionalService
+          ? `Additional service activated as account #${data.customerId}.`
+          : data.createdCustomer
           ? `Application activated. Customer #${data.customerId} was created.`
           : `Application linked to existing customer #${data.customerId}.`) +
           feeNote +
@@ -650,6 +736,10 @@ function ApplicationsPage() {
           type="button"
           onClick={() => {
             setNewForm(initialNewApplication());
+            setNewApplicationKind("new");
+            setAdditionalServiceCustomer(null);
+            setAdditionalServiceSearch("");
+            setAdditionalServiceResults([]);
             setFormError("");
             setShowNewForm(true);
           }}
@@ -834,6 +924,106 @@ function ApplicationsPage() {
       {showNewForm && (
         <Modal title="New Application" onClose={() => !saving && setShowNewForm(false)} wide>
           <form onSubmit={createApplication} className="space-y-6">
+            <FormSection title="Who is this service for?">
+              <label className={`cursor-pointer rounded-xl border p-4 ${newApplicationKind === "new" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
+                <input
+                  type="radio"
+                  name="newApplicationKind"
+                  checked={newApplicationKind === "new"}
+                  onChange={() => {
+                    setNewApplicationKind("new");
+                    setAdditionalServiceCustomer(null);
+                    setAdditionalServiceSearch("");
+                    setNewForm({ ...newForm, additionalServiceForCustomerId: null });
+                  }}
+                  className="mr-3 accent-primary"
+                />
+                <span className="font-medium">A new customer</span>
+                <p className="ml-7 mt-1 text-xs text-on-surface-variant">
+                  Creates their first service account when approved.
+                </p>
+              </label>
+              <label className={`cursor-pointer rounded-xl border p-4 ${newApplicationKind === "additional" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
+                <input
+                  type="radio"
+                  name="newApplicationKind"
+                  checked={newApplicationKind === "additional"}
+                  onChange={() => setNewApplicationKind("additional")}
+                  className="mr-3 accent-primary"
+                />
+                <span className="font-medium">An existing customer adding another service</span>
+                <p className="ml-7 mt-1 text-xs text-on-surface-variant">
+                  Creates a separate account under the same customer display. Billing and service controls remain independent.
+                </p>
+              </label>
+
+              {newApplicationKind === "additional" && (
+                <div className="relative sm:col-span-2">
+                  {additionalServiceCustomer ? (
+                    <div className="flex items-start justify-between gap-3 rounded-xl border border-secondary/20 bg-secondary-container/50 p-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Add service for</p>
+                        <p className="mt-1 font-semibold">
+                          {additionalServiceCustomer.name || "Existing customer"} · #{additionalServiceCustomer.customer_id}
+                        </p>
+                        <p className="mt-1 text-xs text-on-surface-variant">
+                          {additionalServiceCustomer.address || "No address on file"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdditionalServiceCustomer(null);
+                          setAdditionalServiceSearch("");
+                          setNewForm({ ...newForm, additionalServiceForCustomerId: null });
+                        }}
+                        className="text-sm font-medium text-primary underline"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <Field label="Find the existing customer" required>
+                      <input
+                        autoFocus
+                        value={additionalServiceSearch}
+                        onChange={(event) => setAdditionalServiceSearch(event.target.value)}
+                        className={inputClass}
+                        placeholder="Search name, account number, or phone..."
+                      />
+                    </Field>
+                  )}
+                  {!additionalServiceCustomer && additionalServiceResults.length > 0 && (
+                    <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-outline-variant bg-white shadow-xl">
+                      {additionalServiceResults.map((customer) => (
+                        <button
+                          key={customer.customer_id}
+                          type="button"
+                          onClick={() => {
+                            setAdditionalServiceCustomer(customer);
+                            setAdditionalServiceResults([]);
+                            setNewForm({
+                              ...newForm,
+                              name: newForm.name || customer.name || "",
+                              address: newForm.address || customer.address || "",
+                              telephone: newForm.telephone || customer.telephone || "",
+                              additionalServiceForCustomerId: customer.customer_id,
+                            });
+                          }}
+                          className="block w-full border-b border-surface-container px-4 py-3 text-left last:border-0 hover:bg-surface-container-low"
+                        >
+                          <span className="font-semibold">{customer.name || "Unnamed customer"}</span>
+                          <span className="ml-2 font-mono text-xs text-primary">#{customer.customer_id}</span>
+                          <p className="mt-1 text-xs text-on-surface-variant">
+                            {customer.telephone || "No phone"} · {customer.address || "No address"}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </FormSection>
             <FormSection title="Applicant information">
               <Field label="Full name" required><input required value={newForm.name} onChange={(event) => setNewForm({ ...newForm, name: event.target.value })} className={inputClass} /></Field>
               <Field label="Alias"><input value={newForm.alias} onChange={(event) => setNewForm({ ...newForm, alias: event.target.value })} className={inputClass} /></Field>
@@ -901,7 +1091,11 @@ function ApplicationsPage() {
             </FormSection>
 
             {formError && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{formError}</p>}
-            <ModalActions saving={saving} primaryLabel="Create Application" onCancel={() => setShowNewForm(false)} />
+            <ModalActions
+              saving={saving || (newApplicationKind === "additional" && !additionalServiceCustomer)}
+              primaryLabel="Create Application"
+              onCancel={() => setShowNewForm(false)}
+            />
           </form>
         </Modal>
       )}
@@ -977,12 +1171,25 @@ function ApplicationsPage() {
               </DrawerSection>
             )}
 
-            {activeApplication.suggested_customer_id && (
+            {activeApplication.suggested_customer_id && !activeApplication.additional_service_for_customer_id && (
               <div className="rounded-xl border border-secondary/20 bg-secondary-container/50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Possible existing customer</p>
                 <p className="mt-2 font-semibold">{activeApplication.suggested_customer_name || "Existing customer"} · #{activeApplication.suggested_customer_id}</p>
                 <p className="mt-1 text-xs text-on-surface-variant">Match basis: {humanize(activeApplication.match_method || "review required")}</p>
                 <button type="button" onClick={() => navigate(`/customers/${activeApplication.suggested_customer_id}`)} className="mt-3 text-sm font-medium text-primary underline">Open customer profile</button>
+              </div>
+            )}
+
+            {activeApplication.additional_service_for_customer_id && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary">Additional service requested</p>
+                <p className="mt-2 font-semibold">
+                  For {activeApplication.additional_service_customer_name || "existing customer"} · account #{activeApplication.additional_service_for_customer_id}
+                </p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  Activation will create a new, independently billed account and show both accounts on one customer profile.
+                </p>
+                <button type="button" onClick={() => navigate(`/customers/${activeApplication.additional_service_for_customer_id}`)} className="mt-3 text-sm font-medium text-primary underline">Open existing profile</button>
               </div>
             )}
 
@@ -1011,22 +1218,40 @@ function ApplicationsPage() {
       {activeApplication && decision === "service" && (
         // Activation collects the operational details required to turn an
         // application into a live service account.
-        <Modal title="Activate customer" onClose={() => !saving && setDecision(null)}>
+        <Modal
+          title={serviceMode === "additional" ? "Activate new service account" : "Activate customer"}
+          onClose={() => !saving && setDecision(null)}
+        >
           <div className="space-y-5">
-            <p className="text-sm text-on-surface-variant">Confirm how <strong>{activeApplication.name}</strong> should become an active customer.</p>
-            {activeApplication.suggested_customer_id && (
+            <p className="text-sm text-on-surface-variant">
+              {serviceMode === "additional" ? "Confirm the new account details for" : "Confirm how"} <strong>{activeApplication.name}</strong>{serviceMode === "additional" ? "." : " should become an active customer."}
+            </p>
+            {activeApplication.suggested_customer_id && !activeApplication.additional_service_for_customer_id && (
               <label className={`block cursor-pointer rounded-xl border p-4 ${serviceMode === "link" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
                 <input type="radio" name="serviceMode" checked={serviceMode === "link"} onChange={() => setServiceMode("link")} className="mr-3 accent-primary" />
                 <span className="font-medium">Link existing customer #{activeApplication.suggested_customer_id}</span>
                 <p className="ml-7 mt-1 text-sm text-on-surface-variant">Use {activeApplication.suggested_customer_name || "the suggested customer"}; do not create a duplicate.</p>
               </label>
             )}
-            <label className={`block cursor-pointer rounded-xl border p-4 ${serviceMode === "create" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
-              <input type="radio" name="serviceMode" checked={serviceMode === "create"} onChange={() => setServiceMode("create")} className="mr-3 accent-primary" />
-              <span className="font-medium">Create a new customer</span>
-              <p className="ml-7 mt-1 text-sm text-on-surface-variant">Copy this application&apos;s contact, package, and rate into a new active account.</p>
-            </label>
-            {serviceMode === "create" && (
+            {activeApplication.additional_service_for_customer_id && (
+              <label className={`block cursor-pointer rounded-xl border p-4 ${serviceMode === "additional" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
+                <input type="radio" name="serviceMode" checked={serviceMode === "additional"} onChange={() => setServiceMode("additional")} className="mr-3 accent-primary" />
+                <span className="font-medium">
+                  Add a service account for {activeApplication.additional_service_customer_name || `customer #${activeApplication.additional_service_for_customer_id}`}
+                </span>
+                <p className="ml-7 mt-1 text-sm text-on-surface-variant">
+                  Create a separate account with its own billing date, balance, payments, equipment, and connection status.
+                </p>
+              </label>
+            )}
+            {!activeApplication.additional_service_for_customer_id && (
+              <label className={`block cursor-pointer rounded-xl border p-4 ${serviceMode === "create" ? "border-primary bg-primary/5" : "border-outline-variant"}`}>
+                <input type="radio" name="serviceMode" checked={serviceMode === "create"} onChange={() => setServiceMode("create")} className="mr-3 accent-primary" />
+                <span className="font-medium">Create a new customer</span>
+                <p className="ml-7 mt-1 text-sm text-on-surface-variant">Copy this application&apos;s contact, package, and rate into a new active account.</p>
+              </label>
+            )}
+            {(serviceMode === "create" || serviceMode === "additional") && (
               // Imported applications may not contain pole/port information;
               // newly entered applications must supply both fields.
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1054,7 +1279,7 @@ function ApplicationsPage() {
                 <Field label="Activation date" required><input required type="date" value={activationDate} onChange={(event) => setActivationDate(event.target.value)} className={inputClass} /></Field>
               </div>
             )}
-            {serviceMode === "create" && (
+            {(serviceMode === "create" || serviceMode === "additional") && (
               // OLT information is mandatory for a new (non-legacy) application.
               // Activating checks this ONT location against the live OLT and is
               // refused if no ONT answers there.
@@ -1105,11 +1330,11 @@ function ApplicationsPage() {
             <ModalActions
               saving={
                 saving ||
-                (serviceMode === "create" &&
+                ((serviceMode === "create" || serviceMode === "additional") &&
                   !activeApplication.legacy_source &&
                   activationOltIncomplete)
               }
-              primaryLabel="Activate Customer"
+              primaryLabel={serviceMode === "additional" ? "Activate New Service Account" : "Activate Customer"}
               onPrimary={submitServiceDecision}
               onCancel={() => setDecision(null)}
             />

@@ -116,7 +116,7 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
       <aside className="application-drawer flex h-dvh w-full flex-col bg-white shadow-2xl sm:max-w-lg" role="dialog" aria-modal="true" aria-labelledby="record-payment-title">
         <header className="flex items-start justify-between gap-4 border-b border-surface-container px-6 py-6 sm:px-8">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Customer #{customer.customer_id}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Service account #{customer.customer_id}</p>
             <h2 id="record-payment-title" className="mt-2 text-2xl font-semibold">Record Payment</h2>
             <p className="mt-1 text-sm text-on-surface-variant">{customer.name || "Unnamed customer"}</p>
           </div>
