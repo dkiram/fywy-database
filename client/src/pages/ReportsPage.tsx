@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
+import { useOpenCustomerProfile } from "../hooks/useOpenCustomerProfile";
+import { useScrollRestoration } from "../hooks/useScrollRestoration";
 
 // Reports are read-only detailed views of existing operational records. They do
 // not create or update tickets, payments, customers, applications, or pole boxes.
@@ -42,6 +44,7 @@ const reports: ReportDefinition[] = [
 
 function ReportsPage() {
   const navigate = useNavigate();
+  const openCustomer = useOpenCustomerProfile();
   const { employee } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedReport = searchParams.get("report") as ReportKey | null;
@@ -51,21 +54,36 @@ function ReportsPage() {
     () => employee?.role === "admin" ? reports : reports.filter((item) => !item.adminOnly),
     [employee?.role]
   );
-  const [reportKey, setReportKey] = useState<ReportKey>(availableReports.some((item) => item.key === requestedReport) ? requestedReport! : availableReports[0].key);
-  const [search, setSearch] = useState("");
-  const [from, setFrom] = useState(searchParams.get("from") || jamaicaToday());
-  const [to, setTo] = useState(searchParams.get("to") || jamaicaToday());
-  const [page, setPage] = useState(1);
+  const reportKey: ReportKey = availableReports.some((item) => item.key === requestedReport) ? requestedReport! : availableReports[0].key;
+  const search = searchParams.get("search") ?? "";
+  const from = searchParams.get("from") || jamaicaToday();
+  const to = searchParams.get("to") || jamaicaToday();
+  const page = Math.max(Number.parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
   // Empty sort means "use the report's own default order", which for the
   // delinquent list is the chase order: who gets cut off soonest.
-  const [sort, setSort] = useState("");
-  const [direction, setDirection] = useState<SortDirection>("desc");
+  const sort = searchParams.get("sort") ?? "";
+  const direction: SortDirection = searchParams.get("dir") === "asc" ? "asc" : "desc";
+  const updateParams = useCallback((patch: Record<string, string | null>) => {
+    setLoading(true);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const [key, value] of Object.entries(patch)) {
+          if (!value) next.delete(key);
+          else next.set(key, value);
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [totals, setTotals] = useState<Record<string, unknown> | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 1 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const report = useMemo(() => availableReports.find((item) => item.key === reportKey) ?? availableReports[0], [availableReports, reportKey]);
+  useScrollRestoration(!loading);
 
   const loadReport = useCallback(async () => {
     try {
@@ -76,14 +94,17 @@ function ReportsPage() {
       const response = await apiFetch(`/api/reports/${reportKey}?${query}`);
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not load report.");
       setRows(data.rows); setTotals(data.totals || null); setPagination(data.pagination);
-      if (data.pagination.page !== page) setPage(data.pagination.page);
+      if (data.pagination.page !== page) updateParams({ page: String(data.pagination.page) });
     } catch (loadError) { setError(loadError instanceof Error ? loadError.message : "Could not load report."); }
     finally { setLoading(false); }
-  }, [direction, from, page, report.dateFilters, reportKey, search, sort, to]);
+  }, [direction, from, page, report.dateFilters, reportKey, search, sort, to, updateParams]);
 
   useEffect(() => { const timeout = window.setTimeout(loadReport, 180); return () => window.clearTimeout(timeout); }, [loadReport]);
 
-  const chooseReport = (key: ReportKey) => { setReportKey(key); setPage(1); setSearch(""); setSort(""); setDirection("desc"); setSearchParams({ report: key }); };
+  const chooseReport = (key: ReportKey) => {
+    setLoading(true);
+    setSearchParams({ report: key }, { replace: true });
+  };
 
   const sortableColumns = SORTABLE_COLUMNS[reportKey] ?? [];
 
@@ -93,10 +114,9 @@ function ReportsPage() {
   // default order rather than trapping you in a sort you no longer want.
   const toggleSort = (key: string) => {
     if (!sortableColumns.includes(key)) return;
-    setPage(1);
-    if (sort !== key) { setSort(key); setDirection("desc"); return; }
-    if (direction === "desc") { setDirection("asc"); return; }
-    setSort(""); setDirection("desc");
+    if (sort !== key) { updateParams({ sort: key, dir: "desc", page: null }); return; }
+    if (direction === "desc") { updateParams({ dir: "asc", page: null }); return; }
+    updateParams({ sort: null, dir: null, page: null });
   };
 
   // Export the visible filtered page without adding a second data definition.
@@ -108,8 +128,8 @@ function ReportsPage() {
 
   const openRow = (row: ReportRow) => {
     if (reportKey === "pending-service") navigate(`/service-requests?search=${row.service_ticket_id}`);
-    if (reportKey === "delinquent-customers" && row.customer_id) navigate(`/customers/${row.customer_id}`);
-    if (reportKey === "disconnected-customers" && row.customer_id) navigate(`/customers/${row.customer_id}`);
+    if (reportKey === "delinquent-customers" && row.customer_id) openCustomer(String(row.customer_id));
+    if (reportKey === "disconnected-customers" && row.customer_id) openCustomer(String(row.customer_id));
     if (reportKey === "applications") navigate("/applications");
     if (reportKey === "pole-box-usage" && row.pole_box_id) navigate(`/pole-boxes?search=${encodeURIComponent(String(row.box_number))}`);
   };
@@ -122,7 +142,7 @@ function ReportsPage() {
     <div className="rounded-xl border border-warning/30 bg-warning-container p-4 text-sm text-warning"><span className="font-medium">Legacy balance note:</span> the most recent year is reconstructed from Access payments and anniversary charges. Older brought-forward amounts are clearly marked unverified on the customer account.</div>
 
     <section className="report-print-area overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-surface-container p-5 xl:flex-row xl:items-end xl:justify-between"><div><h2 className="text-lg font-semibold text-on-surface">{report.title}</h2><p className="mt-1 text-sm text-on-surface-variant">{report.description}</p></div><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Search<input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} className="mt-1 block w-56 rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal normal-case tracking-normal" placeholder="Filter report..." /></label>{report.dateFilters && <><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">From<input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPage(1); }} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">To<input type="date" value={to} onChange={(event) => { setTo(event.target.value); setPage(1); }} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label></>}<button type="button" disabled={rows.length === 0} onClick={exportCsv} className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40"><span className="material-symbols-outlined text-base">download</span>Export Page</button><button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-on-primary"><span className="material-symbols-outlined text-base">print</span>Print</button></div></div>
+      <div className="flex flex-col gap-4 border-b border-surface-container p-5 xl:flex-row xl:items-end xl:justify-between"><div><h2 className="text-lg font-semibold text-on-surface">{report.title}</h2><p className="mt-1 text-sm text-on-surface-variant">{report.description}</p></div><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Search<input value={search} onChange={(event) => updateParams({ search: event.target.value || null, page: null })} className="mt-1 block w-56 rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal normal-case tracking-normal" placeholder="Filter report..." /></label>{report.dateFilters && <><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">From<input type="date" value={from} onChange={(event) => updateParams({ from: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">To<input type="date" value={to} onChange={(event) => updateParams({ to: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label></>}<button type="button" disabled={rows.length === 0} onClick={exportCsv} className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40"><span className="material-symbols-outlined text-base">download</span>Export Page</button><button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-on-primary"><span className="material-symbols-outlined text-base">print</span>Print</button></div></div>
       {totals && <div className="flex flex-wrap gap-6 border-b border-surface-container bg-primary/5 px-5 py-3 text-sm">{"payment_count" in totals && <><span><strong>{Number(totals.payment_count || 0).toLocaleString()}</strong> payments</span><span><strong>{formatCurrency(totals.total_amount)}</strong> collected</span></>}{"delinquent_count" in totals && <span><strong>{Number(totals.delinquent_count || 0).toLocaleString()}</strong> delinquent customers</span>}</div>}
       {error && <p className="m-5 rounded-lg bg-error/10 p-4 text-sm text-error">{error}</p>}
       <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-surface-container-low"><tr>{report.columns.map((column) => {
@@ -137,7 +157,7 @@ function ReportsPage() {
             : column.label}
         </th>;
       })}</tr></thead><tbody className="divide-y divide-surface-container">{!loading && rows.map((row, index) => <tr key={`${reportKey}-${index}`} onClick={() => openRow(row)} className="transition hover:bg-surface-container-low/60">{report.columns.map((column) => <td key={column.key} className="max-w-sm px-5 py-4 text-sm text-on-surface-variant">{formatCell(row[column.key], column.format)}</td>)}</tr>)}</tbody></table></div>
-      {loading && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">Generating report...</div>}{!loading && !error && rows.length === 0 && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">No rows match these report filters.</div>}{!loading && rows.length > 0 && <div className="flex items-center justify-between border-t border-surface-container px-5 py-4 text-sm text-on-surface-variant"><span>{pagination.total.toLocaleString()} result{pagination.total === 1 ? "" : "s"}</span><div className="flex items-center gap-3"><button disabled={pagination.page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Previous</button><span className="text-xs font-medium">Page {pagination.page} of {pagination.totalPages}</span><button disabled={pagination.page >= pagination.totalPages} onClick={() => setPage((value) => value + 1)} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Next</button></div></div>}
+      {loading && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">Generating report...</div>}{!loading && !error && rows.length === 0 && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">No rows match these report filters.</div>}{!loading && rows.length > 0 && <div className="flex items-center justify-between border-t border-surface-container px-5 py-4 text-sm text-on-surface-variant"><span>{pagination.total.toLocaleString()} result{pagination.total === 1 ? "" : "s"}</span><div className="flex items-center gap-3"><button disabled={pagination.page <= 1} onClick={() => updateParams({ page: String(Math.max(page - 1, 1)) })} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Previous</button><span className="text-xs font-medium">Page {pagination.page} of {pagination.totalPages}</span><button disabled={pagination.page >= pagination.totalPages} onClick={() => updateParams({ page: String(Math.min(page + 1, pagination.totalPages)) })} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Next</button></div></div>}
     </section>
   </div>;
 }

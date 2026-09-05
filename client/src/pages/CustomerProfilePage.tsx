@@ -1,6 +1,6 @@
 /** Combines customer identity, billing, service history, and account actions in one screen. */
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
 import PaymentReceiptModal, { type PaymentReceipt } from "../components/PaymentReceiptModal";
@@ -12,6 +12,7 @@ import AccountOperationsPanel, {
 import CustomerServiceHistory from "../components/CustomerServiceHistory";
 import CustomerActivityHistory from "../components/CustomerActivityHistory";
 import CustomerNetworkAccessCard from "../components/CustomerNetworkAccessCard";
+import { getCustomerReturnContext } from "../hooks/useOpenCustomerProfile";
 
 type Customer = {
   customer_id: number;
@@ -88,6 +89,7 @@ import PaymentHistory from "../components/PaymentHistory";
 
 function CustomerProfilePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { customerId } = useParams();
   const { employee } = useAuth();
 
@@ -124,6 +126,18 @@ const [activationReason, setActivationReason] = useState("");
 const [savingActivation, setSavingActivation] = useState(false);
 const [activationError, setActivationError] = useState("");
 const [showPaymentForm, setShowPaymentForm] = useState(false);
+const returnContext = getCustomerReturnContext(location.state);
+const returnLabel = returnContext?.label ?? "Customers";
+const returnToPreviousView = () => {
+  // POP returns to the existing history entry, which lets the list page replay
+  // its saved scroll position. A copied/deep profile URL has no trusted origin
+  // state, so it safely falls back to Customer Search.
+  if (returnContext && Number(window.history.state?.idx) > 0) {
+    navigate(-1);
+    return;
+  }
+  navigate(returnContext?.to ?? "/customers");
+};
 
 const loadAccountGroup = useCallback(async () => {
   if (!customerId) return;
@@ -345,10 +359,10 @@ if (error || !customer) {
 
       <button
         type="button"
-        onClick={() => navigate("/customers")}
+        onClick={returnToPreviousView}
         className="mt-4 text-primary"
       >
-        ← Back to Customers
+        ← Back to {returnLabel}
       </button>
     </div>
   );
@@ -359,14 +373,14 @@ if (error || !customer) {
       {/* Back */}
       <button
         type="button"
-        onClick={() => navigate("/customers")}
+        onClick={returnToPreviousView}
         className="flex w-fit items-center gap-2 text-sm font-medium uppercase tracking-wide text-primary transition hover:opacity-70"
       >
         <span className="material-symbols-outlined text-sm">
           arrow_back
         </span>
 
-        Back to Customers
+        Back to {returnLabel}
       </button>
 
       {/* Customer heading */}
@@ -401,7 +415,7 @@ if (error || !customer) {
     employee?.role === "admin" || employee?.role === "head_office" ? (
       <button
         type="button"
-        onClick={() => navigate(`/customers/${customer.customer_id}/edit`)}
+        onClick={() => navigate(`/customers/${customer.customer_id}/edit`, { state: location.state })}
         className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container"
       >
         <span className="material-symbols-outlined text-lg">
@@ -492,7 +506,12 @@ if (error || !customer) {
                 key={account.customer_id}
                 type="button"
                 onClick={() => {
-                  if (!selected) navigate(`/customers/${account.customer_id}`);
+                  if (!selected) {
+                    navigate(`/customers/${account.customer_id}`, {
+                      replace: true,
+                      state: location.state,
+                    });
+                  }
                 }}
                 aria-current={selected ? "page" : undefined}
                 className={`rounded-xl border p-4 text-left transition ${

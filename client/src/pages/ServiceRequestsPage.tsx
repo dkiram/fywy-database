@@ -1,7 +1,9 @@
 /** Runs the service-ticket queue from customer report through technician completion. */
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { apiFetch } from "../lib/api";
+import { useOpenCustomerProfile } from "../hooks/useOpenCustomerProfile";
+import { useScrollRestoration } from "../hooks/useScrollRestoration";
 
 // Service tickets are editable work records: customer service reports an issue,
 // an employee is assigned, and the technician records the completed work.
@@ -39,14 +41,36 @@ const emptyForm = () => ({
 });
 
 function ServiceRequestsPage() {
-  const navigate = useNavigate();
+  const openCustomer = useOpenCustomerProfile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState<ServiceTicket[]>([]);
   const [summary, setSummary] = useState({ attention: 0, open: 0, assigned: 0, in_progress: 0, completed: 0 });
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
-  const [view, setView] = useState<TicketView>((searchParams.get("view") as TicketView) || "attention");
-  const [search, setSearch] = useState(searchParams.get("search") || "");
-  const [page, setPage] = useState(1);
+  const view = (searchParams.get("view") as TicketView) || "attention";
+  const search = searchParams.get("search") ?? "";
+  const page = Math.max(Number.parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
+  const updateListParams = useCallback((
+    patch: Partial<Record<"view" | "search" | "page", string | null>>
+  ) => {
+    setLoading(true);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const [key, value] of Object.entries(patch)) {
+          if (!value) next.delete(key);
+          else next.set(key, value);
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+  const setView = (value: TicketView) => updateListParams({ view: value, page: null });
+  const setSearch = (value: string) => updateListParams({ search: value || null, page: null });
+  const setPage = useCallback((value: React.SetStateAction<number>) => {
+    const next = typeof value === "function" ? value(page) : value;
+    updateListParams({ page: next > 1 ? String(next) : null });
+  }, [page, updateListParams]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -61,6 +85,7 @@ function ServiceRequestsPage() {
   const [editForm, setEditForm] = useState({ status: "open" as TicketStatus, priority: "normal" as TicketPriority, assignedEmployeeId: "", serviceDate: "", resolutionNotes: "", poleBoxNumber: "", portNumber: "", updateNote: "" });
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState("");
+  useScrollRestoration(!loading);
 
   // Queue data is filtered and paginated on the server.
   const loadTickets = useCallback(async () => {
@@ -74,7 +99,7 @@ function ServiceRequestsPage() {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load service tickets.");
     } finally { setLoading(false); }
-  }, [page, search, view]);
+  }, [page, search, setPage, view]);
 
   useEffect(() => { const timeout = window.setTimeout(loadTickets, 180); return () => window.clearTimeout(timeout); }, [loadTickets]);
 
@@ -120,7 +145,7 @@ function ServiceRequestsPage() {
       setSaving(true); setModalError("");
       const response = await apiFetch("/api/service-tickets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not create service ticket.");
-      setShowNew(false); setNotice(`Service ticket #${data.ticket.service_ticket_id} was created.`); setView("attention"); setPage(1); await loadTickets();
+      setShowNew(false); setNotice(`Service ticket #${data.ticket.service_ticket_id} was created.`); setView("attention"); await loadTickets();
     } catch (saveError) { setModalError(saveError instanceof Error ? saveError.message : "Could not create service ticket."); }
     finally { setSaving(false); }
   };
@@ -174,11 +199,11 @@ function ServiceRequestsPage() {
       {error && <div className="rounded-lg bg-error/10 p-4 text-sm text-error">{error}</div>}
 
       <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex flex-wrap gap-2">{([['attention', 'Needs Attention'], ['open', 'Open'], ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => { setView(value); setPage(1); }} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search ticket, customer, phone, issue..." /></div>
+        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex flex-wrap gap-2">{([['attention', 'Needs Attention'], ['open', 'Open'], ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => setView(value)} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><SearchInput value={search} onChange={setSearch} placeholder="Search ticket, customer, phone, issue..." /></div>
         <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-surface-container-low"><tr><Heading>Ticket</Heading><Heading>Customer</Heading><Heading>Problem</Heading><Heading>Priority</Heading><Heading>Status</Heading><Heading>Technician</Heading><Heading>Reported</Heading><th className="px-5 py-4" /></tr></thead><tbody className="divide-y divide-surface-container">{!loading && tickets.map((ticket) => <tr key={ticket.service_ticket_id} className="cursor-pointer transition hover:bg-surface-container-low/60" onClick={() => openEdit(ticket)}><td className="px-5 py-4 font-mono text-sm font-medium text-primary">#{ticket.service_ticket_id}</td><td className="px-5 py-4"><p className="font-semibold text-on-surface">{ticket.customer_name || (ticket.legacy_customer_id ? "Legacy Customer" : "Customer unavailable")}</p>{/* The address is on the row because a technician reading this queue
        is deciding where to drive, and making them open each profile to
        find that out is the slowest possible way to answer it. */}
-    <p className="mt-0.5 max-w-[22rem] text-xs leading-5 text-on-surface-variant">{ticket.address || "No address on file"}</p>{ticket.customer_id ? <button type="button" onClick={(event) => { event.stopPropagation(); navigate(`/customers/${ticket.customer_id}`); }} className="mt-1 whitespace-nowrap text-left text-xs font-medium text-primary">Customer #{ticket.customer_id}</button> : <p className="mt-1 whitespace-nowrap text-xs text-on-surface-variant">{ticket.legacy_customer_id ? `Legacy Customer #${ticket.legacy_customer_id}` : "No linked customer profile"}</p>}</td><td className="max-w-xs px-5 py-4 text-sm text-on-surface"><p className="line-clamp-2">{ticket.issue_summary}</p><p className="mt-1 text-xs text-on-surface-variant">Pole {ticket.pole_box_number || "—"} · Port {ticket.port_number || "—"}</p></td><td className="px-5 py-4"><PriorityBadge priority={ticket.priority} /></td><td className="px-5 py-4"><StatusBadge status={ticket.status} /></td><td className="px-5 py-4 text-sm text-on-surface-variant">{ticket.assigned_employee_name || "Unassigned"}</td><td className="whitespace-nowrap px-5 py-4 text-sm text-on-surface-variant">{formatDate(ticket.reported_date)}</td><td className="px-5 py-4 text-right"><span className="material-symbols-outlined text-outline">chevron_right</span></td></tr>)}</tbody></table></div>
+    <p className="mt-0.5 max-w-[22rem] text-xs leading-5 text-on-surface-variant">{ticket.address || "No address on file"}</p>{ticket.customer_id ? <button type="button" onClick={(event) => { event.stopPropagation(); openCustomer(ticket.customer_id!); }} className="mt-1 whitespace-nowrap text-left text-xs font-medium text-primary">Customer #{ticket.customer_id}</button> : <p className="mt-1 whitespace-nowrap text-xs text-on-surface-variant">{ticket.legacy_customer_id ? `Legacy Customer #${ticket.legacy_customer_id}` : "No linked customer profile"}</p>}</td><td className="max-w-xs px-5 py-4 text-sm text-on-surface"><p className="line-clamp-2">{ticket.issue_summary}</p><p className="mt-1 text-xs text-on-surface-variant">Pole {ticket.pole_box_number || "—"} · Port {ticket.port_number || "—"}</p></td><td className="px-5 py-4"><PriorityBadge priority={ticket.priority} /></td><td className="px-5 py-4"><StatusBadge status={ticket.status} /></td><td className="px-5 py-4 text-sm text-on-surface-variant">{ticket.assigned_employee_name || "Unassigned"}</td><td className="whitespace-nowrap px-5 py-4 text-sm text-on-surface-variant">{formatDate(ticket.reported_date)}</td><td className="px-5 py-4 text-right"><span className="material-symbols-outlined text-outline">chevron_right</span></td></tr>)}</tbody></table></div>
         {loading && <EmptyState text="Loading service tickets..." />}{!loading && !error && tickets.length === 0 && <EmptyState text="No service tickets found." />}{!loading && tickets.length > 0 && <Pagination pagination={pagination} setPage={setPage} />}
       </section>
 

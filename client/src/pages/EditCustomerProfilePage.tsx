@@ -1,7 +1,8 @@
 /** Lets Admin and Head Office employees correct customer profile details. */
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { apiFetch } from "../lib/api";
+import { getCustomerReturnContext } from "../hooks/useOpenCustomerProfile";
 
 type EditableCustomer = {
   customer_id: number;
@@ -50,11 +51,19 @@ const textareaClass = `${inputClass} h-auto py-3`;
 
 function EditCustomerProfilePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { customerId } = useParams();
   const [form, setForm] = useState<EditForm>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const returnToCustomer = () => {
+    if (getCustomerReturnContext(location.state) && Number(window.history.state?.idx) > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate(`/customers/${customerId}`, { state: location.state });
+  };
 
   useEffect(() => {
     const loadCustomer = async () => {
@@ -102,7 +111,7 @@ function EditCustomerProfilePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not update customer profile.");
-      navigate(`/customers/${customerId}`);
+      returnToCustomer();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Could not update customer profile.");
     } finally {
@@ -118,7 +127,7 @@ function EditCustomerProfilePage() {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-8 lg:p-12">
       <button
         type="button"
-        onClick={() => navigate(`/customers/${customerId}`)}
+        onClick={returnToCustomer}
         className="flex w-fit items-center gap-2 text-sm font-semibold text-primary transition hover:opacity-70"
       >
         <span className="material-symbols-outlined text-lg">arrow_back</span>
@@ -204,7 +213,7 @@ function EditCustomerProfilePage() {
         {error && <div role="alert" className="rounded-xl bg-error/10 p-4 text-sm text-error">{error}</div>}
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button type="button" disabled={saving} onClick={() => navigate(`/customers/${customerId}`)} className="rounded-xl border border-outline-variant px-6 py-3 text-sm font-medium text-on-surface disabled:opacity-60">Cancel</button>
+          <button type="button" disabled={saving} onClick={returnToCustomer} className="rounded-xl border border-outline-variant px-6 py-3 text-sm font-medium text-on-surface disabled:opacity-60">Cancel</button>
           <button type="submit" disabled={saving} className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container disabled:opacity-60">
             <span className="material-symbols-outlined text-lg">save</span>
             {saving ? "Saving..." : "Save Changes"}

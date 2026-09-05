@@ -1,9 +1,11 @@
 /** Manages the application queue from intake through service, cancellation, or decline. */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import PaymentReceiptModal, { type PaymentReceipt } from "../components/PaymentReceiptModal";
 import { apiFetch } from "../lib/api";
+import { useOpenCustomerProfile } from "../hooks/useOpenCustomerProfile";
+import { useScrollRestoration } from "../hooks/useScrollRestoration";
 
 type ApplicationStatus =
   | "pending"
@@ -195,8 +197,8 @@ function initialNewApplication(): NewApplicationForm {
 }
 
 function ApplicationsPage() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const openCustomer = useOpenCustomerProfile();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { employee } = useAuth();
   const canDecide =
     employee?.role === "admin" || employee?.role === "head_office";
@@ -204,15 +206,38 @@ function ApplicationsPage() {
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [summary, setSummary] = useState<ApplicationSummary>(emptySummary);
   const [packages, setPackages] = useState<Package[]>([]);
-  const [view, setView] = useState<ApplicationView>("active");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const view = (searchParams.get("view") as ApplicationView) || "active";
+  const search = searchParams.get("search") ?? "";
+  const page = Math.max(Number.parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
+  const updateListParams = useCallback((
+    patch: Partial<Record<"view" | "search" | "page", string | null>>
+  ) => {
+    setLoading(true);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const [key, value] of Object.entries(patch)) {
+          if (!value) next.delete(key);
+          else next.set(key, value);
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+  const setView = (value: ApplicationView) => updateListParams({ view: value, page: null });
+  const setSearch = (value: string) => updateListParams({ search: value || null, page: null });
+  const setPage = useCallback((value: React.SetStateAction<number>) => {
+    const next = typeof value === "function" ? value(page) : value;
+    updateListParams({ page: next > 1 ? String(next) : null });
+  }, [page, updateListParams]);
   const [pagination, setPagination] =
     useState<ApplicationPagination>(emptyPagination);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeCustomerId, setNoticeCustomerId] = useState<number | null>(null);
+  useScrollRestoration(!loading);
 
   const [selected, setSelected] = useState<ApplicationRecord | null>(null);
   // Shown right after an installation fee is collected, and reprintable from
@@ -287,7 +312,7 @@ function ApplicationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, view]);
+  }, [page, search, setPage, view]);
 
   useEffect(() => {
     const timeout = window.setTimeout(loadApplications, 180);
@@ -508,7 +533,6 @@ function ApplicationsPage() {
       setAdditionalServiceCustomer(null);
       setAdditionalServiceSearch("");
       setView("active");
-      setPage(1);
       setNotice(
         data.installationPayment
           ? `Application #${data.application.application_id} was created and an installation fee of ${formatCurrency(data.installationPayment.amount_paid)} was recorded.`
@@ -762,7 +786,7 @@ function ApplicationsPage() {
             <span className="font-medium">{notice}</span>
           </div>
           {noticeCustomerId && (
-            <button type="button" onClick={() => navigate(`/customers/${noticeCustomerId}`)} className="font-medium underline">
+            <button type="button" onClick={() => openCustomer(noticeCustomerId)} className="font-medium underline">
               View customer
             </button>
           )}
@@ -791,7 +815,6 @@ function ApplicationsPage() {
                 type="button"
                 onClick={() => {
                   setView(value);
-                  setPage(1);
                 }}
                 className={
                   view === value
@@ -809,7 +832,6 @@ function ApplicationsPage() {
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
-                setPage(1);
               }}
               placeholder="Search name, ID, phone, or address..."
               className="w-full rounded-lg bg-surface-container-low py-2.5 pl-10 pr-4 text-sm"
@@ -1176,7 +1198,7 @@ function ApplicationsPage() {
                 <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Possible existing customer</p>
                 <p className="mt-2 font-semibold">{activeApplication.suggested_customer_name || "Existing customer"} · #{activeApplication.suggested_customer_id}</p>
                 <p className="mt-1 text-xs text-on-surface-variant">Match basis: {humanize(activeApplication.match_method || "review required")}</p>
-                <button type="button" onClick={() => navigate(`/customers/${activeApplication.suggested_customer_id}`)} className="mt-3 text-sm font-medium text-primary underline">Open customer profile</button>
+                <button type="button" onClick={() => openCustomer(activeApplication.suggested_customer_id!)} className="mt-3 text-sm font-medium text-primary underline">Open customer profile</button>
               </div>
             )}
 
@@ -1189,7 +1211,7 @@ function ApplicationsPage() {
                 <p className="mt-1 text-xs text-on-surface-variant">
                   Activation will create a new, independently billed account and show both accounts on one customer profile.
                 </p>
-                <button type="button" onClick={() => navigate(`/customers/${activeApplication.additional_service_for_customer_id}`)} className="mt-3 text-sm font-medium text-primary underline">Open existing profile</button>
+                <button type="button" onClick={() => openCustomer(activeApplication.additional_service_for_customer_id!)} className="mt-3 text-sm font-medium text-primary underline">Open existing profile</button>
               </div>
             )}
 
@@ -1202,7 +1224,7 @@ function ApplicationsPage() {
                   {activeApplication.match_confirmed_at ? ` on ${formatDate(activeApplication.match_confirmed_at)}` : ""}.
                   No customer record was changed.
                 </p>
-                <button type="button" onClick={() => navigate(`/customers/${activeApplication.customer_id}`)} className="mt-3 text-sm font-medium text-primary underline">Open customer profile</button>
+                <button type="button" onClick={() => openCustomer(activeApplication.customer_id!)} className="mt-3 text-sm font-medium text-primary underline">Open customer profile</button>
               </div>
             )}
 

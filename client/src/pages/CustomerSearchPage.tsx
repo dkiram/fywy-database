@@ -1,7 +1,9 @@
 /** Searches the customer directory and links each result to its full profile. */
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useSearchParams } from "react-router";
 import { apiFetch } from "../lib/api";
+import { useOpenCustomerProfile } from "../hooks/useOpenCustomerProfile";
+import { useScrollRestoration } from "../hooks/useScrollRestoration";
 
 type Customer = {
   customer_id: number;
@@ -19,12 +21,28 @@ type Customer = {
 };
 
 function CustomerSearchPage() {
-  const navigate = useNavigate();
+  const openCustomer = useOpenCustomerProfile();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [search, setSearch] = useState("");
+  // The live search remains debounced, but its current value is also the URL.
+  // Returning from a profile therefore remounts this page with the same query.
+  const search = searchParams.get("search") ?? "";
+  const setSearch = (value: string) => {
+    setLoading(true);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) next.set("search", value);
+        else next.delete("search");
+        return next;
+      },
+      { replace: true }
+    );
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  useScrollRestoration(!loading);
 
   useEffect(() => {
     // Wait briefly while staff type and cancel the superseded request. The old
@@ -131,11 +149,11 @@ function CustomerSearchPage() {
                     role="link"
                     tabIndex={0}
                     aria-label={`Open ${customer.name || "unnamed customer"}`}
-                    onClick={() => navigate(`/customers/${customer.customer_id}`)}
+                    onClick={() => openCustomer(customer.customer_id)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        navigate(`/customers/${customer.customer_id}`);
+                        openCustomer(customer.customer_id);
                       }
                     }}
                     className="cursor-pointer border-t border-surface-container transition hover:bg-surface-container-low/40 focus-visible:bg-surface-container-low/40"
@@ -185,7 +203,7 @@ function CustomerSearchPage() {
                         tabIndex={-1}
                         onClick={(event) => {
                           event.stopPropagation();
-                          navigate(`/customers/${customer.customer_id}`);
+                          openCustomer(customer.customer_id);
                         }}
                         className="rounded-lg px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10"
                       >

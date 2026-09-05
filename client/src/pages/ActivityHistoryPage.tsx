@@ -1,8 +1,9 @@
 /** Displays the latest auditable employee and system changes in readable form. */
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { apiFetch } from "../lib/api";
 import { useScrollRestoration } from "../hooks/useScrollRestoration";
+import { customerProfileState } from "../hooks/useOpenCustomerProfile";
 
 type AuditLog = {
   audit_log_id: number;
@@ -23,6 +24,7 @@ type AuditLogsResponse = {
 };
 
 function ActivityHistoryPage() {
+  const location = useLocation();
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -197,6 +199,7 @@ function ActivityHistoryPage() {
                     {log.related_customer_id ? (
                       <Link
                         to={`/customers/${log.related_customer_id}`}
+                        state={customerProfileState(location)}
                         className="text-primary hover:underline"
                       >
                         {log.related_customer_id}

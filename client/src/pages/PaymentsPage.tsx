@@ -1,8 +1,9 @@
 /** Shows the daily ledger, totals, breakdowns, and receipt access for recorded payments. */
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import PaymentReceiptModal, { type PaymentReceipt } from "../components/PaymentReceiptModal";
 import { apiFetch } from "../lib/api";
+import { useScrollRestoration } from "../hooks/useScrollRestoration";
 
 type DailySummary = {
   payment_count: number;
@@ -69,13 +70,34 @@ function jamaicaToday() {
 
 function PaymentsPage() {
   const navigate = useNavigate();
-  const [date, setDate] = useState(jamaicaToday());
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const date = searchParams.get("date") || jamaicaToday();
+  const page = Math.max(Number.parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
+  const updateParams = useCallback((patch: Partial<Record<"date" | "page", string | null>>) => {
+    setLoading(true);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const [key, value] of Object.entries(patch)) {
+          if (!value) next.delete(key);
+          else next.set(key, value);
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+  const setDate = (value: string) => updateParams({ date: value, page: null });
+  const setPage = useCallback((value: React.SetStateAction<number>) => {
+    const next = typeof value === "function" ? value(page) : value;
+    updateParams({ page: next > 1 ? String(next) : null });
+  }, [page, updateParams]);
   const [pagination, setPagination] = useState(emptyPagination);
   const [data, setData] = useState<DailyPaymentsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
+  useScrollRestoration(!loading);
 
   const loadDailyPayments = useCallback(async () => {
     try {
@@ -97,7 +119,7 @@ function PaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [date, page]);
+  }, [date, page, setPage]);
 
   useEffect(() => {
     loadDailyPayments();
@@ -139,7 +161,6 @@ function PaymentsPage() {
             value={date}
             onChange={(event) => {
               setDate(event.target.value);
-              setPage(1);
             }}
             className="mt-1.5 block rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm focus:border-primary"
           />

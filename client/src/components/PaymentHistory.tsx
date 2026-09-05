@@ -1,5 +1,5 @@
 /** Renders the searchable, paginated historical payment ledger. */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { apiFetch } from "../lib/api";
 import PaymentReceiptModal, { type PaymentReceipt } from "./PaymentReceiptModal";
@@ -47,7 +47,12 @@ function PaymentHistory({ refreshKey = 0 }: { refreshKey?: number }) {
     totalPages: 0,
   });
 
-  const [page, setPage] = useState(1);
+  const [page, setPageState] = useState(1);
+  const pendingScroll = useRef<number | null>(null);
+  const setPage: React.Dispatch<React.SetStateAction<number>> = (value) => {
+    pendingScroll.current = window.scrollY;
+    setPageState(value);
+  };
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -62,6 +67,14 @@ const [toDate, setToDate] = useState("");
 const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
 const [receiptError, setReceiptError] = useState("");
 const [voidRefreshKey, setVoidRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (loading || pendingScroll.current == null) return;
+    const saved = pendingScroll.current;
+    pendingScroll.current = null;
+    const frame = window.requestAnimationFrame(() => window.scrollTo(0, saved));
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading]);
 
   useEffect(() => {
     // A newly selected customer always starts at the first payment page.

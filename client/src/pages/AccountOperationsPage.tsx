@@ -1,9 +1,10 @@
 /** Lists customer account states and opens the status-operation panel for a selected account. */
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
 import { useScrollRestoration } from "../hooks/useScrollRestoration";
+import { useOpenCustomerProfile } from "../hooks/useOpenCustomerProfile";
 
 // MVP 3 queue page for finding accounts that need a service-status decision.
 // Status-changing actions stay on the customer profile so the operator can
@@ -114,7 +115,7 @@ function automaticReconnectLabel(status: string | null) {
 }
 
 function AccountOperationsPage() {
-  const navigate = useNavigate();
+  const openCustomer = useOpenCustomerProfile();
   const { employee } = useAuth();
   const isAdmin = employee?.role === "admin";
   // Kept in the URL rather than component state, so the browser back button
@@ -129,9 +130,10 @@ function AccountOperationsPage() {
     !isAdmin && ["active", "all"].includes(requestedView) ? "attention" : requestedView;
   const search = searchParams.get("search") ?? "";
   const page = Math.max(Number.parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
-  const updateParams = (
+  const updateParams = useCallback((
     patch: Partial<Record<"view" | "search" | "page", string | null>>
   ) => {
+    setLoading(true);
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -143,7 +145,7 @@ function AccountOperationsPage() {
       },
       { replace: true }
     );
-  };
+  }, [setSearchParams]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [approvingCustomerId, setApprovingCustomerId] = useState<number | null>(null);
@@ -184,7 +186,7 @@ function AccountOperationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, view]);
+  }, [page, search, updateParams, view]);
 
   const loadWaiverRequests = useCallback(async () => {
     if (!isAdmin) return;
@@ -438,7 +440,7 @@ function AccountOperationsPage() {
               {waiverRequests.map((request) => (
                 <div key={request.waiver_request_id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1.2fr_0.7fr_1.5fr_auto] lg:items-center">
                   <div>
-                    <button type="button" onClick={() => navigate(`/customers/${request.customer_id}`)} className="font-semibold text-primary hover:underline">
+                    <button type="button" onClick={() => openCustomer(request.customer_id)} className="font-semibold text-primary hover:underline">
                       {request.customer_name || `Customer #${request.customer_id}`}
                     </button>
                     <p className="mt-1 text-xs text-on-surface-variant">#{request.customer_id} · {request.telephone || "No telephone"}</p>
@@ -498,7 +500,7 @@ function AccountOperationsPage() {
               {reconnectionRequests.map((request) => (
                 <div key={request.reconnection_request_id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1.2fr_0.8fr_1.5fr_auto] lg:items-center">
                   <div>
-                    <button type="button" onClick={() => navigate(`/customers/${request.customer_id}`)} className="font-semibold text-primary hover:underline">
+                    <button type="button" onClick={() => openCustomer(request.customer_id)} className="font-semibold text-primary hover:underline">
                       {request.customer_name || `Customer #${request.customer_id}`}
                     </button>
                     <p className="mt-1 text-xs text-on-surface-variant">#{request.customer_id} · {request.telephone || "No telephone"}</p>
@@ -631,7 +633,7 @@ function AccountOperationsPage() {
                   <tr
                     key={account.customer_id}
                     className="cursor-pointer transition hover:bg-surface-container-low/60"
-                    onClick={() => navigate(`/customers/${account.customer_id}`)}
+                    onClick={() => openCustomer(account.customer_id)}
                   >
                     <td className="px-6 py-4">
                       <p className="font-semibold text-on-surface">
@@ -729,7 +731,7 @@ function AccountOperationsPage() {
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          navigate(`/customers/${account.customer_id}`);
+                          openCustomer(account.customer_id);
                         }}
                         className="rounded-lg px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10"
                       >
