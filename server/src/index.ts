@@ -417,27 +417,39 @@ app.get("/api/customers", requireAuth, async (req, res) => {
     if (req.query.grouped === "true") {
       const groupedResult = await pool.query(
         `
-        WITH visible AS (
+        WITH matching_keys AS (
+          SELECT DISTINCT
+            COALESCE(c.account_group_id, -c.customer_id::BIGINT) AS account_key
+          FROM public.customers c
+          WHERE c.hidden_from_app = FALSE
+            AND (
+              $1 = ''
+              OR c.customer_id::TEXT ILIKE $2
+              OR c.name ILIKE $2
+              OR c.telephone ILIKE $2
+            )
+        ), visible AS (
           SELECT
             c.*,
             p.name AS package_name,
             COALESCE(c.account_group_id, -c.customer_id::BIGINT) AS account_key
           FROM public.customers c
+          JOIN matching_keys match
+            ON match.account_key = COALESCE(c.account_group_id, -c.customer_id::BIGINT)
           LEFT JOIN public.packages p ON p.package_id = c.package_id
           WHERE c.hidden_from_app = FALSE
-        ), matching_keys AS (
-          SELECT DISTINCT account_key
+        ), grouped AS (
+          SELECT
+            account_key,
+            MIN(customer_id) AS representative_customer_id,
+            COUNT(*)::INTEGER AS account_count,
+            ARRAY_AGG(customer_id ORDER BY customer_id) AS account_ids,
+            ARRAY_AGG(COALESCE(package_name, 'No package') ORDER BY customer_id)
+              AS package_names,
+            ARRAY_AGG(status ORDER BY customer_id) AS account_statuses,
+            MAX(application_date) AS latest_application_date
           FROM visible
-          WHERE $1 = ''
-             OR customer_id::TEXT ILIKE $2
-             OR COALESCE(name, '') ILIKE $2
-             OR COALESCE(telephone, '') ILIKE $2
-        ), representatives AS (
-          SELECT DISTINCT ON (v.account_key)
-            v.*
-          FROM visible v
-          JOIN matching_keys match ON match.account_key = v.account_key
-          ORDER BY v.account_key, v.customer_id
+          GROUP BY account_key
         )
         SELECT
           representative.customer_id,
@@ -449,26 +461,17 @@ app.get("/api/customers", requireAuth, async (req, res) => {
           representative.package_id,
           representative.package_name,
           representative.account_group_id,
-          members.account_count,
-          members.account_ids,
-          members.package_names,
-          members.account_statuses
-        FROM representatives representative
+          grouped.account_count,
+          grouped.account_ids,
+          grouped.package_names,
+          grouped.account_statuses
+        FROM grouped
+        JOIN visible representative
+          ON representative.customer_id = grouped.representative_customer_id
         LEFT JOIN public.customer_account_groups account_group
           ON account_group.account_group_id = representative.account_group_id
-        CROSS JOIN LATERAL (
-          SELECT
-            COUNT(*)::INTEGER AS account_count,
-            ARRAY_AGG(member.customer_id ORDER BY member.customer_id) AS account_ids,
-            ARRAY_AGG(COALESCE(member.package_name, 'No package') ORDER BY member.customer_id)
-              AS package_names,
-            ARRAY_AGG(member.status ORDER BY member.customer_id) AS account_statuses,
-            MAX(member.application_date) AS latest_application_date
-          FROM visible member
-          WHERE member.account_key = representative.account_key
-        ) members
         ORDER BY
-          CASE WHEN $1 = '' THEN members.latest_application_date END DESC NULLS LAST,
+          CASE WHEN $1 = '' THEN grouped.latest_application_date END DESC NULLS LAST,
           CASE WHEN $1 <> '' THEN LOWER(COALESCE(account_group.display_name, representative.name)) END ASC NULLS LAST,
           representative.customer_id DESC
         LIMIT 50;
@@ -593,8 +596,16 @@ app.get("/api/customers/:customerId/accounts", requireAuth, async (req, res) => 
         END AS next_billing_date
       FROM public.customers c
       LEFT JOIN public.packages p ON p.package_id = c.package_id
-      LEFT JOIN public.customer_billing_status billing
-        ON billing.customer_id = c.customer_id
+      -- The full customer_billing_status view ranks every ledger debit in the
+      -- system. The selector only needs the balance for one small account
+      -- group, so use the customer/date index directly instead.
+      LEFT JOIN LATERAL (
+        SELECT
+          GREATEST(COALESCE(SUM(entry.amount), 0), 0)::NUMERIC(14,2)
+            AS outstanding_balance
+        FROM public.account_ledger_entries entry
+        WHERE entry.customer_id = c.customer_id
+      ) billing ON TRUE
       WHERE c.hidden_from_app = FALSE
         AND (
           ($2::BIGINT IS NULL AND c.customer_id = $1)

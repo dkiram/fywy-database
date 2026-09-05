@@ -450,7 +450,7 @@ if (error || !customer) {
 
       {/* One customer-facing shell, with every operational action still
           scoped to the visibly selected service account. */}
-      <section className="rounded-2xl border border-outline-variant bg-surface-container-lowest p-5 shadow-sm">
+      <section className="order-[10] rounded-2xl border border-outline-variant bg-surface-container-lowest p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -1101,7 +1101,7 @@ if (error || !customer) {
 )}
 
       {canManageSubscription && (
-        <section className="rounded-2xl border border-error/25 bg-error/5 p-6 shadow-sm">
+        <section className="order-[20] rounded-2xl border border-error/25 bg-error/5 p-6 shadow-sm">
           {customer.status === "terminated" ? (
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-on-surface-variant">

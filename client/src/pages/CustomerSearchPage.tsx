@@ -27,17 +27,19 @@ function CustomerSearchPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // Reload whenever the query changes; the API caps broad results at 50 customers.
+    // Wait briefly while staff type and cancel the superseded request. The old
+    // behavior sent one full directory query per keystroke, so slow responses
+    // piled up and could arrive out of order.
+    const controller = new AbortController();
     const loadCustomers = async () => {
       try {
         setLoading(true);
         setError("");
 
         const response = await apiFetch(
-  `/api/customers?grouped=true&search=${encodeURIComponent(
-    search
-  )}`
-);
+          `/api/customers?grouped=true&search=${encodeURIComponent(search)}`,
+          { signal: controller.signal }
+        );
 
         if (!response.ok) {
           throw new Error("Customer request failed");
@@ -47,14 +49,19 @@ function CustomerSearchPage() {
 
         setCustomers(data);
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
         console.error(error);
         setError("Could not load customers.");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
-    loadCustomers();
+    const timeout = window.setTimeout(loadCustomers, search ? 180 : 0);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [search]);
 
   return (
