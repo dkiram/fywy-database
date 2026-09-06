@@ -661,18 +661,6 @@ function JobCard({
           </span>
         )}
 
-        {job.address && (
-          <a
-            href={`https://maps.google.com/?q=${encodeURIComponent(job.address)}`}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(event) => event.stopPropagation()}
-            className="flex items-center justify-center gap-2 rounded-xl bg-surface-container px-4 py-3 text-sm font-semibold text-on-surface"
-          >
-            <span className="material-symbols-outlined text-lg">directions</span>
-          </a>
-        )}
-
         {!expanded && !closed && (
           <button
             type="button"
