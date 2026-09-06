@@ -240,7 +240,7 @@ function StatusBadge({ status }: { status: TicketStatus }) { const styles: Recor
  * they can be picked at all.
  *
  * Disabled rather than hidden. A technician who has vanished from the list
- * looks like somebody who left the company; one greyed out with "5 of 7, must
+ * looks like somebody who left the company; one greyed out with "5 of 10, must
  * clear first" explains itself and tells whoever is assigning when to come
  * back.
  *

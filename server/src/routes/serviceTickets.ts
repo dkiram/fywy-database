@@ -73,17 +73,17 @@ async function validateAssignee(
 }
 
 /**
- * Where a technician stands against the seven-job cap (migration 076).
+ * Where a technician stands against the job cap (migrations 076 and 077).
  *
- * The cap is a latch, not a ceiling: once somebody is holding seven, nothing
- * more is added until they are holding none. Finishing three of seven frees
- * nothing. `field_queue_locked_at` is what tells a batch still being filled
+ * The cap is a latch, not a ceiling: once somebody is holding a full load,
+ * nothing more is added until they are holding none. Finishing three of ten
+ * frees nothing. `field_queue_locked_at` is what tells a batch still being filled
  * (one to six open, latch clear) from one being worked through (one to six
  * open, latch set) - the two look identical from a count alone, which is why
  * the state is stored rather than recomputed here.
  *
  * The limit comes from the database function so this and the trigger that
- * maintains the latch cannot disagree about what seven means.
+ * maintains the latch cannot disagree about where the cap sits.
  */
 async function readTechnicianQueue(client: PoolClient, employeeId: number) {
   const result = await client.query(
@@ -411,16 +411,15 @@ serviceTicketsRouter.post("/service-tickets", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Selected technician is unavailable." });
     }
 
-    // The seven-job latch (migration 076). Checked inside the transaction so
-    // two people assigning at once cannot both find six open jobs and both
-    // decide there is room.
+    // The job-cap latch (migrations 076 and 077). Checked inside the
+    // transaction so two people assigning at once cannot both find room in
+    // the same last slot.
     //
-    // Urgent goes through regardless. The cap exists to stop work being
-    // trickled at somebody all day, and a genuine emergency is not that - a
-    // customer with no service and a technician already on their road is
-    // exactly the job that should jump the queue. It still lands on top of
-    // their seven rather than replacing one, and the latch stays shut behind
-    // it, so the exception cannot be used to keep feeding them ordinary work.
+    // Urgent goes through regardless, and there is no limit on how many -
+    // the cap exists to stop work being trickled at somebody all day, and a
+    // genuine emergency is not that. An urgent job lands on top of a full
+    // load rather than replacing one, and the latch stays shut behind it, so
+    // the exception cannot be used to keep feeding them ordinary work.
     if (assignedEmployeeId !== null && priority !== "urgent") {
       const queue = await readTechnicianQueue(client, assignedEmployeeId);
 

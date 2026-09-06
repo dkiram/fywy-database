@@ -924,8 +924,11 @@ function TechnicianPhoneAccessSection({
           </dl>
 
           <p className="mt-3 text-xs leading-5 text-on-surface-variant">
-            Have them open <span className="font-mono">/tech</span> on their phone,
-            sign in, and add the page to their home screen.
+            The code is made from their name, so it is the same one every time
+            and they can work it out if the card goes missing. The passcode is
+            the secret half — it changes on every reissue and is never shown
+            again. Have them open <span className="font-mono">/tech</span> on
+            their phone, sign in, and add the page to their home screen.
           </p>
         </div>
       ) : (

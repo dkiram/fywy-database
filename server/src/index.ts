@@ -2337,10 +2337,13 @@ app.post(
  *
  * A technician has no username and no password — migration 034 makes that a
  * database rule, not a convention — so the phone app is opened with a
- * credential of its own: a six-character code to identify them and a
- * six-digit passcode. Both are generated here rather than typed by an
- * administrator, because a PIN somebody chooses on a technician's behalf is
- * 1234 far more often than it is anything else.
+ * credential of its own: a code made from their name to identify them
+ * (migration 078) and a six-digit passcode to prove it is them.
+ *
+ * Only the passcode needs to be secret, and it is the one that is random.
+ * It is generated here rather than typed by an administrator, because a PIN
+ * somebody chooses on a technician's behalf is 1234 far more often than it is
+ * anything else.
  *
  * The passcode is shown exactly once, in the response to this call. It is
  * hashed before it is stored and never appears in a log, an audit row, or any
@@ -2348,9 +2351,9 @@ app.post(
  */
 
 /**
- * Drops the letters that get read back as digits off a printed card — I, O
- * and S — along with the digits 0 and 1. Must stay in step with the
- * login_code CHECK in migration 075.
+ * The fallback alphabet, used only when a name cannot produce a code (see
+ * deriveLoginCode below). Drops the letters that get read back as digits off
+ * a printed card — I, O and S — along with the digits 0 and 1.
  */
 const LOGIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRTUVWXYZ23456789";
 
@@ -2360,6 +2363,32 @@ function generateLoginCode() {
     code += LOGIN_CODE_ALPHABET[randomInt(LOGIN_CODE_ALPHABET.length)];
   }
   return code;
+}
+
+/**
+ * The technician's code, made from their name: Andre Clarke becomes ACLARK.
+ *
+ * The code says who is signing in; the passcode is what proves it. So this
+ * does not need to be unguessable, and paying for unguessability in
+ * memorability was the wrong trade - a technician who mislays the card cannot
+ * reconstruct ABC234, but can always reconstruct their own name.
+ *
+ * Accents and apostrophes are stripped rather than transliterated, so
+ * O'Brien becomes AOBRIE rather than something with a character nobody can
+ * type on a phone keyboard. A name that leaves fewer than two letters -
+ * initials only, or a record with a blank surname - falls back to the random
+ * generator above rather than producing a one-character code.
+ */
+function deriveLoginCode(firstName: string, lastName: string) {
+  const letters = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[^a-zA-Z]/g, "")
+      .toUpperCase();
+
+  const code = letters(firstName).slice(0, 1) + letters(lastName).slice(0, 5);
+
+  return code.length >= 2 ? code : generateLoginCode();
 }
 
 /** Six digits, uniformly random, leading zeros kept. */
@@ -2449,20 +2478,42 @@ app.post(
       const passcode = generatePasscode();
       const passcodeHash = await bcrypt.hash(passcode, 12);
 
-      // A technician who already has a code keeps it. They have it written in
-      // a van and read it out over the radio; changing it because the passcode
-      // was reissued would break the one half that was still working.
-      const existingResult = await client.query(
-        `SELECT login_code FROM public.technician_phone_access
-         WHERE employee_id = $1 AND revoked_at IS NULL;`,
-        [Number(employeeId)]
-      );
+      // The code is re-derived on every issue, including a reissue, so a
+      // technician carrying an old random code moves onto their name code the
+      // next time the office hands them a passcode. That is safe precisely
+      // BECAUSE it happens at issue time: a new passcode already invalidates
+      // whatever is on their phone, so both halves are being replaced at the
+      // same moment and go onto the same card. Changing the code at any other
+      // point would break a credential that was still working.
+      const base = deriveLoginCode(target.first_name, target.last_name);
 
-      let loginCode: string = existingResult.rows[0]?.login_code ?? "";
+      // Two Clarkes produce one code, so later ones take a digit. The check
+      // ignores this technician's own row: somebody reissued twice should get
+      // ACLARK again, not climb to ACLARK2 and then ACLARK3 for no reason.
+      //
+      // The unique index covers live credentials only, so a revoked ACLARK
+      // does not stand in the way of the next person to need it.
+      let loginCode = "";
 
+      for (const suffix of ["", "2", "3", "4", "5", "6", "7", "8", "9"]) {
+        const candidate = base + suffix;
+
+        const taken = await client.query(
+          `SELECT 1 FROM public.technician_phone_access
+           WHERE login_code = $1 AND revoked_at IS NULL AND employee_id <> $2;`,
+          [candidate, Number(employeeId)]
+        );
+
+        if (taken.rows.length === 0) {
+          loginCode = candidate;
+          break;
+        }
+      }
+
+      // Nine people sharing an initial and the first five letters of a
+      // surname. Vanishingly unlikely, but a random code is a better answer
+      // than a failed request.
       if (!loginCode) {
-        // The unique index is partial (live credentials only), so a collision
-        // is possible in principle and worth retrying rather than surfacing.
         for (let attempt = 0; attempt < 10 && !loginCode; attempt += 1) {
           const candidate = generateLoginCode();
           const taken = await client.query(
@@ -2472,13 +2523,13 @@ app.post(
           );
           if (taken.rows.length === 0) loginCode = candidate;
         }
+      }
 
-        if (!loginCode) {
-          await client.query("ROLLBACK");
-          return res
-            .status(500)
-            .json({ error: "Could not allocate a technician code. Try again." });
-        }
+      if (!loginCode) {
+        await client.query("ROLLBACK");
+        return res
+          .status(500)
+          .json({ error: "Could not allocate a technician code. Try again." });
       }
 
       await client.query(

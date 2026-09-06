@@ -424,7 +424,7 @@ function JobQueue({
           />
         </div>
 
-        {/* Says where the batch stands, because the seven-job latch is
+        {/* Says where the batch stands, because the job-cap latch is
             otherwise invisible from here: a technician who gets nothing new
             all afternoon should be able to see that it is the two jobs still
             on their list holding it up, not the office forgetting them. */}
