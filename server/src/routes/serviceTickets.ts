@@ -73,6 +73,72 @@ async function validateAssignee(
 }
 
 /**
+ * Where a technician stands against the seven-job cap (migration 076).
+ *
+ * The cap is a latch, not a ceiling: once somebody is holding seven, nothing
+ * more is added until they are holding none. Finishing three of seven frees
+ * nothing. `field_queue_locked_at` is what tells a batch still being filled
+ * (one to six open, latch clear) from one being worked through (one to six
+ * open, latch set) - the two look identical from a count alone, which is why
+ * the state is stored rather than recomputed here.
+ *
+ * The limit comes from the database function so this and the trigger that
+ * maintains the latch cannot disagree about what seven means.
+ */
+async function readTechnicianQueue(client: PoolClient, employeeId: number) {
+  const result = await client.query(
+    `
+    SELECT
+      public.technician_queue_limit() AS job_limit,
+      e.field_queue_locked_at,
+      CONCAT_WS(' ', e.first_name, e.last_name) AS name,
+      (
+        SELECT COUNT(*)::INTEGER
+        FROM public.service_tickets t
+        WHERE t.assigned_employee_id = e.employee_id
+          AND t.status IN ('assigned', 'in_progress')
+      ) AS open_jobs
+    FROM public.employees e
+    WHERE e.employee_id = $1;
+    `,
+    [employeeId]
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  const openJobs = Number(row.open_jobs);
+  const jobLimit = Number(row.job_limit);
+
+  return {
+    name: row.name as string,
+    openJobs,
+    jobLimit,
+    lockedAt: (row.field_queue_locked_at as Date | null) ?? null,
+    canTakeWork: row.field_queue_locked_at === null && openJobs < jobLimit,
+  };
+}
+
+/** Says why the queue is closed in terms of what the office has to do about it. */
+function queueFullMessage(queue: {
+  name: string;
+  openJobs: number;
+  jobLimit: number;
+}) {
+  if (queue.openJobs >= queue.jobLimit) {
+    return (
+      `${queue.name} already has ${queue.jobLimit} jobs. ` +
+      `The next batch goes out once that queue is clear.`
+    );
+  }
+
+  return (
+    `${queue.name} still has ${queue.openJobs} of ${queue.jobLimit} jobs to ` +
+    `finish. Nothing new goes to them until the queue is clear.`
+  );
+}
+
+/**
  * The assignee dropdown.
  *
  * Technicians only. This used to return every active employee, which put
@@ -89,14 +155,37 @@ serviceTicketsRouter.get(
   requireAuth,
   async (_req, res) => {
     try {
+      // Each technician's load comes down with the list. Without it the
+      // dropdown offers names the server is about to refuse, and whoever is
+      // assigning finds out only after choosing.
       const result = await pool.query(`
-        SELECT employee_id, first_name, last_name, role
-        FROM public.employees
-        WHERE is_active = TRUE
-          AND role = 'technician'
-        ORDER BY last_name, first_name;
+        SELECT
+          e.employee_id,
+          e.first_name,
+          e.last_name,
+          e.role,
+          e.field_queue_locked_at,
+          (
+            SELECT COUNT(*)::INTEGER
+            FROM public.service_tickets t
+            WHERE t.assigned_employee_id = e.employee_id
+              AND t.status IN ('assigned', 'in_progress')
+          ) AS open_jobs,
+          public.technician_queue_limit() AS job_limit
+        FROM public.employees e
+        WHERE e.is_active = TRUE
+          AND e.role = 'technician'
+        ORDER BY e.last_name, e.first_name;
       `);
-      res.json({ employees: result.rows });
+
+      res.json({
+        employees: result.rows.map((row) => ({
+          ...row,
+          can_take_work:
+            row.field_queue_locked_at === null &&
+            Number(row.open_jobs) < Number(row.job_limit),
+        })),
+      });
     } catch (error) {
       console.error("Could not load ticket assignees:", error);
       res.status(500).json({ error: "Could not load employees." });
@@ -316,6 +405,18 @@ serviceTicketsRouter.post("/service-tickets", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Selected technician is unavailable." });
     }
 
+    // The seven-job latch (migration 076). Checked inside the transaction so
+    // two people assigning at once cannot both find six open jobs and both
+    // decide there is room.
+    if (assignedEmployeeId !== null) {
+      const queue = await readTechnicianQueue(client, assignedEmployeeId);
+
+      if (queue && !queue.canTakeWork) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: queueFullMessage(queue) });
+      }
+    }
+
     const status: TicketStatus = assignedEmployeeId ? "assigned" : "open";
     const ticketResult = await client.query(
       `
@@ -438,6 +539,24 @@ serviceTicketsRouter.patch(
       if (!(await validateAssignee(client, assignedEmployeeId, current.assigned_employee_id))) {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "Selected technician is unavailable." });
+      }
+
+      // The cap applies to handing somebody NEW work, not to editing a ticket
+      // they already hold. Checking on every save would make a full
+      // technician's tickets uneditable - the office could not correct an
+      // address or raise a priority on the very jobs it is waiting to see
+      // finished.
+      const assigneeChanged =
+        assignedEmployeeId !== null &&
+        Number(assignedEmployeeId) !== Number(current.assigned_employee_id ?? -1);
+
+      if (assigneeChanged) {
+        const queue = await readTechnicianQueue(client, assignedEmployeeId);
+
+        if (queue && !queue.canTakeWork) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: queueFullMessage(queue) });
+        }
       }
 
       // Assigning an open ticket moves it into Assigned unless the user chose a

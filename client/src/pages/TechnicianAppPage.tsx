@@ -424,9 +424,16 @@ function JobQueue({
           />
         </div>
 
-        {activeCount > 0 && tab === "jobs" && (
+        {/* Says where the batch stands, because the seven-job latch is
+            otherwise invisible from here: a technician who gets nothing new
+            all afternoon should be able to see that it is the two jobs still
+            on their list holding it up, not the office forgetting them. */}
+        {tab === "jobs" && jobs.length > 0 && (
           <p className="mt-3 text-xs text-white/50">
-            {activeCount === 1 ? "1 job in progress" : `${activeCount} jobs in progress`}
+            {activeCount > 0 ? `${activeCount} in progress · ` : ""}
+            {jobs.length === 1
+              ? "1 left to clear before the next batch"
+              : `${jobs.length} left to clear before the next batch`}
           </p>
         )}
       </header>
@@ -467,7 +474,7 @@ function JobQueue({
             </span>
             <p className="mt-3 text-sm text-white/70">
               {tab === "jobs"
-                ? "Nothing assigned to you right now."
+                ? "Queue clear. The office can send your next batch."
                 : "Nothing finished in the last week."}
             </p>
           </div>
