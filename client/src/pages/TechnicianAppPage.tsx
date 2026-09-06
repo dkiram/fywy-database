@@ -1,6 +1,7 @@
 /** The standalone technician phone app: passcode sign-in, job queue, and field updates. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
+import fieldBackdrop from "../assets/technician-field-bg.jpg";
 
 /**
  * A separate app that happens to share a build.
@@ -97,6 +98,36 @@ function TechnicianAppPage() {
     <JobQueue technician={technician} onSignedOut={signOut} />
   ) : (
     <SignIn onSignedIn={setTechnician} />
+  );
+}
+
+/**
+ * The photograph behind the queue.
+ *
+ * Fixed rather than sitting on the scrolling panel, for two reasons. A
+ * background on the panel would have to stretch to whatever height seven jobs
+ * happen to make, so the same photo would be framed differently for every
+ * technician. And `background-attachment: fixed`, the usual answer, is the
+ * one CSS property Safari on iOS still gets wrong — it judders on every
+ * scroll. A fixed element under the content behaves everywhere.
+ *
+ * The gradient on top is not decoration. This screen is read outdoors, at
+ * arm's length, by somebody deciding which way to drive, and white cards over
+ * an unmuted photograph is where that stops being readable. The scrim is
+ * tinted with the sidebar navy rather than plain black so the header, the
+ * photo and the panel read as one surface.
+ */
+function FieldBackdrop() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 z-0 bg-sidebar bg-cover bg-center"
+      style={{
+        backgroundImage:
+          `linear-gradient(180deg, rgba(11,28,45,0.32) 0%, rgba(11,28,45,0.52) 100%), ` +
+          `url(${fieldBackdrop})`,
+      }}
+    />
   );
 }
 
@@ -358,7 +389,9 @@ function JobQueue({
 
   return (
     <TechnicianShell>
-      <header className="sticky top-0 z-10 bg-sidebar px-5 pb-4 pt-6">
+      <FieldBackdrop />
+
+      <header className="sticky top-0 z-20 bg-sidebar px-5 pb-4 pt-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-white/40">
@@ -398,7 +431,7 @@ function JobQueue({
         )}
       </header>
 
-      <div className="flex-1 rounded-t-3xl bg-surface px-4 pb-24 pt-5">
+      <div className="relative z-10 flex-1 rounded-t-3xl px-4 pb-24 pt-5">
         {newJobCount > 0 && (
           <button
             type="button"
@@ -416,23 +449,23 @@ function JobQueue({
         )}
 
         {error && (
-          <div className="mb-4 rounded-xl bg-error/10 px-4 py-3 text-sm text-error">
+          <div className="mb-4 rounded-xl bg-error/90 px-4 py-3 text-sm font-medium text-white">
             {error}
           </div>
         )}
 
         {loading && visible.length === 0 && (
-          <p className="py-16 text-center text-sm text-on-surface-variant">
+          <p className="py-16 text-center text-sm text-white/70">
             Loading your jobs…
           </p>
         )}
 
         {!loading && visible.length === 0 && (
           <div className="py-16 text-center">
-            <span className="material-symbols-outlined text-4xl text-outline">
+            <span className="material-symbols-outlined text-4xl text-white/40">
               {tab === "jobs" ? "check_circle" : "history"}
             </span>
-            <p className="mt-3 text-sm text-on-surface-variant">
+            <p className="mt-3 text-sm text-white/70">
               {tab === "jobs"
                 ? "Nothing assigned to you right now."
                 : "Nothing finished in the last week."}
@@ -551,8 +584,12 @@ function JobCard({
 
   return (
     <article
-      className={`overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm ${
-        job.status === "in_progress" ? "ring-2 ring-warning/40" : ""
+      // Just off solid. Enough that the photograph reads through as a tint
+      // and the cards sit ON the scene rather than on a grey sheet, not
+      // enough to cost any contrast against the text inside them. The blur
+      // is what keeps that true over the busiest part of the photo.
+      className={`overflow-hidden rounded-2xl bg-surface-container-lowest/88 shadow-lg shadow-black/25 ${
+        job.status === "in_progress" ? "ring-2 ring-warning/50" : ""
       }`}
     >
       <button
@@ -641,7 +678,7 @@ function JobCard({
       </div>
 
       {expanded && (
-        <div className="border-t border-surface-container bg-surface-container-low px-4 py-4">
+        <div className="border-t border-surface-container bg-surface-container-low/85 px-4 py-4">
           {job.description && (
             <p className="whitespace-pre-wrap text-sm leading-6 text-on-surface">
               {job.description}
