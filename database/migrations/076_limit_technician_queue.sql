@@ -11,6 +11,14 @@
 -- is the same trickle of work all day that the cap was meant to stop - a
 -- technician would never see the end of their list.
 --
+-- One thing gets through a shut gate: an urgent ticket. The cap exists to
+-- stop work being trickled at somebody all day, and a genuine emergency is
+-- not that. An urgent job lands on top of the seven rather than replacing
+-- one, and the latch stays shut behind it, so the exception cannot be used to
+-- keep feeding a technician ordinary work. That rule lives in the API, which
+-- is what decides whether an assignment is allowed; everything here only
+-- keeps the record of where each technician stands.
+--
 -- What counts as open is 'assigned' and 'in_progress'. 'unresolved' does not:
 -- it already leaves the technician's queue and goes back to the office to be
 -- rescheduled (migration 074), and counting it here would mean a technician

@@ -119,22 +119,28 @@ async function readTechnicianQueue(client: PoolClient, employeeId: number) {
   };
 }
 
-/** Says why the queue is closed in terms of what the office has to do about it. */
+/**
+ * Says why the queue is closed, in terms of what the office has to do about
+ * it - including the one thing that gets through it.
+ *
+ * Naming the urgent route in the refusal matters. Without it the only visible
+ * options are "wait" and "give it to somebody else", and a fault that really
+ * cannot wait ends up being forced through by inventing a spare technician or
+ * by closing somebody's jobs early to unlock them.
+ */
 function queueFullMessage(queue: {
   name: string;
   openJobs: number;
   jobLimit: number;
 }) {
-  if (queue.openJobs >= queue.jobLimit) {
-    return (
-      `${queue.name} already has ${queue.jobLimit} jobs. ` +
-      `The next batch goes out once that queue is clear.`
-    );
-  }
+  const standing =
+    queue.openJobs >= queue.jobLimit
+      ? `${queue.name} already has ${queue.jobLimit} jobs.`
+      : `${queue.name} still has ${queue.openJobs} of ${queue.jobLimit} jobs to finish.`;
 
   return (
-    `${queue.name} still has ${queue.openJobs} of ${queue.jobLimit} jobs to ` +
-    `finish. Nothing new goes to them until the queue is clear.`
+    `${standing} The next batch goes out once that queue is clear. ` +
+    `If this one cannot wait, set it to Urgent and it goes through anyway.`
   );
 }
 
@@ -408,7 +414,14 @@ serviceTicketsRouter.post("/service-tickets", requireAuth, async (req, res) => {
     // The seven-job latch (migration 076). Checked inside the transaction so
     // two people assigning at once cannot both find six open jobs and both
     // decide there is room.
-    if (assignedEmployeeId !== null) {
+    //
+    // Urgent goes through regardless. The cap exists to stop work being
+    // trickled at somebody all day, and a genuine emergency is not that - a
+    // customer with no service and a technician already on their road is
+    // exactly the job that should jump the queue. It still lands on top of
+    // their seven rather than replacing one, and the latch stays shut behind
+    // it, so the exception cannot be used to keep feeding them ordinary work.
+    if (assignedEmployeeId !== null && priority !== "urgent") {
       const queue = await readTechnicianQueue(client, assignedEmployeeId);
 
       if (queue && !queue.canTakeWork) {
@@ -550,7 +563,10 @@ serviceTicketsRouter.patch(
         assignedEmployeeId !== null &&
         Number(assignedEmployeeId) !== Number(current.assigned_employee_id ?? -1);
 
-      if (assigneeChanged) {
+      // `priority` here is what the ticket will be AFTER this save, not what
+      // it was, so raising a queued job to Urgent and assigning it in the same
+      // edit is one action rather than two.
+      if (assigneeChanged && priority !== "urgent") {
         const queue = await readTechnicianQueue(client, assignedEmployeeId);
 
         if (queue && !queue.canTakeWork) {
