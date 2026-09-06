@@ -32,7 +32,18 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
  * ended". Routing those through the expiry path would show a returning user a
  * session-timeout notice for what was really a typo.
  */
-const AUTH_ENDPOINTS = ["/api/auth/login", "/api/auth/me"];
+const AUTH_ENDPOINTS = [
+  "/api/auth/login",
+  "/api/auth/me",
+
+  // The technician app is not the staff app: it runs outside AuthProvider,
+  // owns its own sign-in screen, and a 401 from either of these means "no
+  // technician signed in on this phone". Routing them through the staff
+  // expiry handler would flip AuthContext into sessionExpired for a session
+  // it has nothing to do with.
+  "/api/tech/login",
+  "/api/tech/me",
+];
 
 export async function apiFetch(
   url: string,

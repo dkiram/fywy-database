@@ -11,13 +11,21 @@
  *   warning  needs attention — in progress, overdue, awaiting reconnection
  *   success  terminal good — active, serviced, completed, paid
  *   danger   actually wrong — declined, disconnected, voided, failed
+ *   stalled  went, could not do it — unresolved
  *
  * A normal ticket queue therefore renders as a calm grey list with a couple
  * of amber rows, instead of the wall of red it used to be (status `open`
  * was mapped to bg-error/10).
  */
 
-export type BadgeTone = "neutral" | "info" | "warning" | "success" | "danger";
+export type BadgeTone =
+  | "neutral"
+  | "info"
+  | "warning"
+  | "success"
+  | "danger"
+  /** Went, could not do it. Solid slate — see --color-stalled in index.css. */
+  | "stalled";
 
 const TONE_CLASS: Record<BadgeTone, string> = {
   neutral: "badge badge-neutral",
@@ -25,6 +33,7 @@ const TONE_CLASS: Record<BadgeTone, string> = {
   warning: "badge badge-warning",
   success: "badge badge-success",
   danger: "badge badge-danger",
+  stalled: "badge badge-stalled",
 };
 
 /** Every status string used across customers, tickets, applications and payments. */
@@ -47,6 +56,9 @@ const TONE_BY_STATUS: Record<string, BadgeTone> = {
   assigned: "info",
   in_progress: "warning",
   completed: "success",
+  // Not danger: nothing broke. Not neutral either — a job nobody could get to
+  // still has to be rescheduled, so it must not read as finished.
+  unresolved: "stalled",
   cancelled: "neutral",
 
   // Applications

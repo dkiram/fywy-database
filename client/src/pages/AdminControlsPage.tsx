@@ -15,6 +15,22 @@ type Employee = {
   location_name: string | null;
 };
 
+/**
+ * A technician's way into the phone app.
+ *
+ * Null for a technician who has never been issued one. `revoked_at` set means
+ * they had access and it was taken away — different from never having had it,
+ * and worth showing differently.
+ */
+type PhoneAccess = {
+  employee_id: number;
+  login_code: string | null;
+  issued_at: string | null;
+  last_used_at: string | null;
+  locked_until: string | null;
+  revoked_at: string | null;
+};
+
 type Location = {
   location_id: number;
   name: string;
@@ -44,16 +60,19 @@ function AdminControlsPage() {
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<Employee | null>(null);
   const [viewingSessions, setViewingSessions] = useState<Employee | null>(null);
+  const [phoneAccess, setPhoneAccess] = useState<Record<number, PhoneAccess>>({});
 
   const loadEmployees = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const [employeeResponse, locationResponse] = await Promise.all([
-        apiFetch("/api/admin/employees"),
-        apiFetch("/api/locations"),
-      ]);
+      const [employeeResponse, locationResponse, phoneAccessResponse] =
+        await Promise.all([
+          apiFetch("/api/admin/employees"),
+          apiFetch("/api/locations"),
+          apiFetch("/api/admin/technician-phone-access"),
+        ]);
 
       if (!employeeResponse.ok) throw new Error("Could not load employees.");
 
@@ -65,6 +84,20 @@ function AdminControlsPage() {
       if (locationResponse.ok) {
         const locationData = await locationResponse.json();
         setLocations(locationData.locations ?? []);
+      }
+
+      // Same reasoning: phone access is one section of one modal, so a failure
+      // here should not blank the employee table.
+      if (phoneAccessResponse.ok) {
+        const accessData = await phoneAccessResponse.json();
+        setPhoneAccess(
+          Object.fromEntries(
+            (accessData.technicians ?? []).map((row: PhoneAccess) => [
+              row.employee_id,
+              row,
+            ])
+          )
+        );
       }
     } catch (loadError) {
       console.error(loadError);
@@ -140,9 +173,21 @@ function AdminControlsPage() {
 
                       {/* Technicians have no username by design, so an empty
                           cell here would read as missing data rather than as
-                          the intended state. */}
+                          the intended state. A technician who has been given
+                          the phone app shows that code instead — it is the
+                          nearest thing they have to one, and it is what they
+                          will read back over the radio when they cannot get
+                          in. */}
                       <td className="px-6 py-4 text-sm text-on-surface-variant">
-                        {employee.username || "No login"}
+                        {employee.username ? (
+                          employee.username
+                        ) : isLiveAccess(phoneAccess[employee.employee_id]) ? (
+                          <span className="font-mono">
+                            Field {phoneAccess[employee.employee_id].login_code}
+                          </span>
+                        ) : (
+                          "No login"
+                        )}
                       </td>
 
                       <td className="px-6 py-4 text-sm text-on-surface-variant">
@@ -167,10 +212,14 @@ function AdminControlsPage() {
 
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
-                          {/* Technicians never sign in, so there is no login
-                              history to show and the button would only lead to
-                              a permanently empty panel. */}
-                          {employee.username && (
+                          {/* Staff have login history. So, since migration
+                              075, do technicians who have been given the phone
+                              app — their passcode sign-ins land in the same
+                              table. A technician with no phone access still
+                              has nothing to show, so the button stays hidden
+                              for them. */}
+                          {(employee.username ||
+                            phoneAccess[employee.employee_id]) && (
                             <button
                               type="button"
                               onClick={() => {
@@ -214,6 +263,8 @@ function AdminControlsPage() {
         <EditEmployeeModal
           employee={editing}
           locations={locations}
+          access={phoneAccess[editing.employee_id] ?? null}
+          onAccessChanged={loadEmployees}
           isSelf={editing.employee_id === currentUser?.employeeId}
           onClose={() => setEditing(null)}
           onSaved={(message) => {
@@ -420,12 +471,16 @@ function formatMoment(value: string | null) {
 function EditEmployeeModal({
   employee,
   locations,
+  access,
+  onAccessChanged,
   isSelf,
   onClose,
   onSaved,
 }: {
   employee: Employee;
   locations: Location[];
+  access: PhoneAccess | null;
+  onAccessChanged: () => void;
   isSelf: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -737,7 +792,241 @@ function EditEmployeeModal({
             )}
           </div>
         )}
+
+        {/* Technicians get the phone app instead of a login. */}
+        {isTechnician && (
+          <TechnicianPhoneAccessSection
+            employee={employee}
+            access={access}
+            onChanged={onAccessChanged}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+/** Live means issued and not revoked. A locked credential is still live. */
+function isLiveAccess(access: PhoneAccess | null | undefined) {
+  return Boolean(access && access.login_code && !access.revoked_at);
+}
+
+/**
+ * Issuing, reissuing and revoking a technician's phone app credentials.
+ *
+ * The passcode comes back from the server exactly once, in the response to
+ * the issue call, and is held in component state until this modal closes.
+ * There is no second chance to read it and no endpoint that will tell you
+ * what it was — which is the point. Losing it costs one click to reissue.
+ */
+function TechnicianPhoneAccessSection({
+  employee,
+  access,
+  onChanged,
+}: {
+  employee: Employee;
+  access: PhoneAccess | null;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [sectionError, setSectionError] = useState("");
+  const [issued, setIssued] = useState<{ loginCode: string; passcode: string } | null>(
+    null
+  );
+  const [confirmingRevoke, setConfirmingRevoke] = useState(false);
+
+  const live = isLiveAccess(access);
+  const locked = access?.locked_until
+    ? new Date(access.locked_until) > new Date()
+    : false;
+
+  const issue = async () => {
+    try {
+      setBusy(true);
+      setSectionError("");
+
+      const response = await apiFetch(
+        `/api/admin/employees/${employee.employee_id}/phone-access`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }
+      );
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not issue access.");
+
+      setIssued({ loginCode: data.loginCode, passcode: data.passcode });
+      onChanged();
+    } catch (issueError) {
+      setSectionError(
+        issueError instanceof Error ? issueError.message : "Could not issue access."
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async () => {
+    try {
+      setBusy(true);
+      setSectionError("");
+
+      const response = await apiFetch(
+        `/api/admin/employees/${employee.employee_id}/phone-access`,
+        { method: "DELETE", headers: { "Content-Type": "application/json" }, body: "{}" }
+      );
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not revoke access.");
+
+      setIssued(null);
+      setConfirmingRevoke(false);
+      onChanged();
+    } catch (revokeError) {
+      setSectionError(
+        revokeError instanceof Error ? revokeError.message : "Could not revoke access."
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-surface-container px-6 py-5">
+      <h4 className="font-semibold text-on-surface">Technician phone app</h4>
+      <p className="mt-1 text-sm text-on-surface-variant">
+        Lets {employee.first_name} see the jobs assigned to them on their own phone
+        and mark them done, unresolved or in progress. It reaches nothing else —
+        no customer search, no billing, no payments.
+      </p>
+
+      {issued ? (
+        <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm font-semibold text-on-surface">
+            Write these down now — the passcode is not shown again.
+          </p>
+
+          <dl className="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                Technician code
+              </dt>
+              <dd className="mt-1 font-mono text-2xl tracking-[0.2em] text-on-surface">
+                {issued.loginCode}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                Passcode
+              </dt>
+              <dd className="mt-1 font-mono text-2xl tracking-[0.2em] text-on-surface">
+                {issued.passcode}
+              </dd>
+            </div>
+          </dl>
+
+          <p className="mt-3 text-xs leading-5 text-on-surface-variant">
+            Have them open <span className="font-mono">/tech</span> on their phone,
+            sign in, and add the page to their home screen.
+          </p>
+        </div>
+      ) : (
+        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+              Status
+            </dt>
+            <dd className="mt-1 text-on-surface">
+              {live
+                ? locked
+                  ? "Locked out"
+                  : "Active"
+                : access?.revoked_at
+                  ? "Revoked"
+                  : "Not issued"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+              {live ? "Technician code" : "Last used"}
+            </dt>
+            <dd className="mt-1 font-mono text-on-surface">
+              {live
+                ? access?.login_code
+                : access?.last_used_at
+                  ? new Date(access.last_used_at).toLocaleDateString("en-JM")
+                  : "—"}
+            </dd>
+          </div>
+        </dl>
+      )}
+
+      {locked && !issued && (
+        <p className="mt-3 rounded-lg bg-warning-container p-3 text-sm text-warning">
+          Too many wrong passcodes. Issuing a new passcode clears the lock
+          immediately.
+        </p>
+      )}
+
+      {sectionError && (
+        <p className="mt-3 rounded-lg bg-error/10 p-3 text-sm text-error">
+          {sectionError}
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button
+          type="button"
+          disabled={busy || !employee.is_active}
+          onClick={issue}
+          className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-on-primary disabled:opacity-50"
+        >
+          {busy ? "Working..." : live ? "Issue a new passcode" : "Give phone access"}
+        </button>
+
+        {live &&
+          (confirmingRevoke ? (
+            <>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={revoke}
+                className="rounded-lg bg-error px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              >
+                Yes, revoke it
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirmingRevoke(false)}
+                className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant"
+              >
+                Keep it
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmingRevoke(true)}
+              className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium text-error"
+            >
+              Revoke access
+            </button>
+          ))}
+      </div>
+
+      {confirmingRevoke && (
+        <p className="mt-3 text-xs leading-5 text-on-surface-variant">
+          Revoking signs their phone out straight away, even if it is already
+          open. Use it for a lost or stolen phone. {employee.first_name} stays on
+          the technician list and keeps every ticket they have worked.
+        </p>
+      )}
+
+      {!employee.is_active && (
+        <p className="mt-3 text-xs text-on-surface-variant">
+          Inactive technicians cannot be given phone access.
+        </p>
+      )}
     </div>
   );
 }

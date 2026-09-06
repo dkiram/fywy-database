@@ -13,6 +13,10 @@ const ticketStatuses = [
   "assigned",
   "in_progress",
   "completed",
+  // A visit that happened but produced no fix: nobody home, no answer on the
+  // phone, gate locked. Closed like completed and cancelled, but it means the
+  // job still has to be rescheduled, which is why the attention view keeps it.
+  "unresolved",
   "cancelled",
 ] as const;
 type TicketStatus = (typeof ticketStatuses)[number];
@@ -114,11 +118,15 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   }
 
   const viewClauses: Record<string, string> = {
-    attention: "t.status IN ('open', 'assigned', 'in_progress')",
+    // Unresolved sits in here on purpose. It is a closed status, but it is the
+    // one closed status that still owes the customer a visit, so leaving it
+    // out of the default view is how a job quietly stops existing.
+    attention: "t.status IN ('open', 'assigned', 'in_progress', 'unresolved')",
     open: "t.status = 'open'",
     assigned: "t.status = 'assigned'",
     in_progress: "t.status = 'in_progress'",
     completed: "t.status = 'completed'",
+    unresolved: "t.status = 'unresolved'",
     cancelled: "t.status = 'cancelled'",
     all: "TRUE",
   };
@@ -192,11 +200,12 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
       pool.query(
         `
         SELECT
-          COUNT(*) FILTER (WHERE status IN ('open', 'assigned', 'in_progress'))::INTEGER AS attention,
+          COUNT(*) FILTER (WHERE status IN ('open', 'assigned', 'in_progress', 'unresolved'))::INTEGER AS attention,
           COUNT(*) FILTER (WHERE status = 'open')::INTEGER AS open,
           COUNT(*) FILTER (WHERE status = 'assigned')::INTEGER AS assigned,
           COUNT(*) FILTER (WHERE status = 'in_progress')::INTEGER AS in_progress,
-          COUNT(*) FILTER (WHERE status = 'completed')::INTEGER AS completed
+          COUNT(*) FILTER (WHERE status = 'completed')::INTEGER AS completed,
+          COUNT(*) FILTER (WHERE status = 'unresolved')::INTEGER AS unresolved
         FROM public.service_tickets
         WHERE ($1::INTEGER IS NULL OR customer_id = $1);
         `,
@@ -441,6 +450,13 @@ serviceTicketsRouter.patch(
       if (status === "completed" && (!serviceDate || resolutionNotes.length < 3)) {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "Completed tickets need a service date and resolution notes." });
+      }
+      // Unresolved asks for the reason but not a date: a technician who never
+      // got through the gate has no "work performed on" to record, and the
+      // database agrees (migration 074).
+      if (status === "unresolved" && resolutionNotes.length < 3) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Unresolved tickets need a note saying what happened." });
       }
 
       const updatedResult = await client.query(

@@ -8,6 +8,7 @@ import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcrypt";
+import { randomInt } from "node:crypto";
 import {
   checkLoginAllowed,
   recordFailedLogin,
@@ -21,6 +22,7 @@ import poleBoxesRouter from "./routes/poleBoxes.js";
 import reportsRouter from "./routes/reports.js";
 import dashboardRouter from "./routes/dashboard.js";
 import networkAccessRouter from "./routes/networkAccess.js";
+import technicianAppRouter from "./routes/technicianApp.js";
 import { startDelinquentAutomation } from "./huawei/delinquentAutomation.js";
 import { startReconnectionAutomation } from "./huawei/reconnectionAutomation.js";
 import { startDisconnectionEmailReminders } from "./email/disconnectionReminderAutomation.js";
@@ -230,6 +232,9 @@ app.use("/api", dashboardRouter);
 // Customer-to-OLT inventory. Actual Huawei commands will be added only after
 // a verified worker/service account is available on the management network.
 app.use("/api", networkAccessRouter);
+// The standalone technician phone app. Its own identity, its own sign-in, and
+// no overlap with the staff routes above.
+app.use("/api", technicianAppRouter);
 
 // Shared guards cover the older routes that still live in this entry file.
 function requireAuth(
@@ -2322,6 +2327,276 @@ app.post(
       res.status(500).json({ error: "Could not reset the password." });
     } finally {
       client.release();
+    }
+  }
+);
+
+
+/**
+ * Technician phone access.
+ *
+ * A technician has no username and no password — migration 034 makes that a
+ * database rule, not a convention — so the phone app is opened with a
+ * credential of its own: a six-character code to identify them and a
+ * six-digit passcode. Both are generated here rather than typed by an
+ * administrator, because a PIN somebody chooses on a technician's behalf is
+ * 1234 far more often than it is anything else.
+ *
+ * The passcode is shown exactly once, in the response to this call. It is
+ * hashed before it is stored and never appears in a log, an audit row, or any
+ * later read. Losing it means issuing a new one, which is a five-second job.
+ */
+
+/**
+ * Drops the letters that get read back as digits off a printed card — I, O
+ * and S — along with the digits 0 and 1. Must stay in step with the
+ * login_code CHECK in migration 075.
+ */
+const LOGIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRTUVWXYZ23456789";
+
+function generateLoginCode() {
+  let code = "";
+  for (let index = 0; index < 6; index += 1) {
+    code += LOGIN_CODE_ALPHABET[randomInt(LOGIN_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+/** Six digits, uniformly random, leading zeros kept. */
+function generatePasscode() {
+  return String(randomInt(1_000_000)).padStart(6, "0");
+}
+
+app.get(
+  "/api/admin/technician-phone-access",
+  requireAuth,
+  requireRole("admin"),
+  async (_req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          e.employee_id,
+          e.first_name,
+          e.last_name,
+          e.is_active,
+          a.login_code,
+          a.issued_at,
+          a.last_used_at,
+          a.locked_until,
+          a.revoked_at
+        FROM public.employees e
+        LEFT JOIN public.technician_phone_access a
+          ON a.employee_id = e.employee_id
+        WHERE e.role = 'technician'
+        ORDER BY e.last_name, e.first_name;
+      `);
+
+      res.json({ technicians: result.rows });
+    } catch (error) {
+      console.error("Could not load technician phone access:", error);
+      res.status(500).json({ error: "Could not load technician phone access." });
+    }
+  }
+);
+
+app.post(
+  "/api/admin/employees/:employeeId/phone-access",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    const actor = req.session.employee!;
+    const { employeeId } = req.params;
+
+    if (typeof employeeId !== "string" || !/^\d+$/.test(employeeId)) {
+      return res.status(400).json({ error: "Invalid employee ID." });
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const targetResult = await client.query(
+        `SELECT employee_id, first_name, last_name, role, is_active
+         FROM public.employees WHERE employee_id = $1 FOR UPDATE;`,
+        [Number(employeeId)]
+      );
+      const target = targetResult.rows[0];
+
+      if (!target) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Employee not found." });
+      }
+
+      // The table's composite foreign key would refuse this anyway. Checking
+      // here turns a constraint violation into a sentence.
+      if (target.role !== "technician") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error:
+            `${target.first_name} ${target.last_name} is not a technician. ` +
+            `The phone app is for field staff only.`,
+        });
+      }
+
+      if (!target.is_active) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: `${target.first_name} ${target.last_name} is inactive.`,
+        });
+      }
+
+      const passcode = generatePasscode();
+      const passcodeHash = await bcrypt.hash(passcode, 12);
+
+      // A technician who already has a code keeps it. They have it written in
+      // a van and read it out over the radio; changing it because the passcode
+      // was reissued would break the one half that was still working.
+      const existingResult = await client.query(
+        `SELECT login_code FROM public.technician_phone_access
+         WHERE employee_id = $1 AND revoked_at IS NULL;`,
+        [Number(employeeId)]
+      );
+
+      let loginCode: string = existingResult.rows[0]?.login_code ?? "";
+
+      if (!loginCode) {
+        // The unique index is partial (live credentials only), so a collision
+        // is possible in principle and worth retrying rather than surfacing.
+        for (let attempt = 0; attempt < 10 && !loginCode; attempt += 1) {
+          const candidate = generateLoginCode();
+          const taken = await client.query(
+            `SELECT 1 FROM public.technician_phone_access
+             WHERE login_code = $1 AND revoked_at IS NULL;`,
+            [candidate]
+          );
+          if (taken.rows.length === 0) loginCode = candidate;
+        }
+
+        if (!loginCode) {
+          await client.query("ROLLBACK");
+          return res
+            .status(500)
+            .json({ error: "Could not allocate a technician code. Try again." });
+        }
+      }
+
+      await client.query(
+        `
+        INSERT INTO public.technician_phone_access
+          (employee_id, login_code, passcode_hash, issued_by_employee_id)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (employee_id) DO UPDATE SET
+          login_code = EXCLUDED.login_code,
+          passcode_hash = EXCLUDED.passcode_hash,
+          issued_by_employee_id = EXCLUDED.issued_by_employee_id,
+          issued_at = CURRENT_TIMESTAMP,
+          -- Reissuing is also the way an administrator releases a technician
+          -- who has locked themselves out, so the counters reset here.
+          failed_attempts = 0,
+          locked_until = NULL,
+          revoked_at = NULL,
+          revoked_by_employee_id = NULL;
+        `,
+        [Number(employeeId), loginCode, passcodeHash, actor.employeeId]
+      );
+
+      // Records that it happened and to whom. Never the passcode.
+      await client.query(
+        `INSERT INTO public.audit_logs
+           (employee_id, actor_name, action, entity_type, entity_id, field_name, new_value, reason)
+         VALUES ($1, $2, $3, 'employee', $4, 'phone_access', $5, $6);`,
+        [
+          actor.employeeId,
+          `${actor.firstName} ${actor.lastName}`,
+          `Issued technician app access for ${target.first_name} ${target.last_name}`,
+          String(target.employee_id),
+          loginCode,
+          typeof req.body.reason === "string"
+            ? req.body.reason.trim().slice(0, 500) || null
+            : null,
+        ]
+      );
+
+      await client.query("COMMIT");
+
+      res.json({
+        loginCode,
+        passcode,
+        message:
+          `Write these down and hand them to ${target.first_name} directly. ` +
+          `The passcode is not shown again.`,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      console.error("Could not issue technician phone access:", error);
+      res.status(500).json({ error: "Could not issue phone access." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+app.delete(
+  "/api/admin/employees/:employeeId/phone-access",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    const actor = req.session.employee!;
+    const { employeeId } = req.params;
+
+    if (typeof employeeId !== "string" || !/^\d+$/.test(employeeId)) {
+      return res.status(400).json({ error: "Invalid employee ID." });
+    }
+
+    try {
+      const result = await pool.query(
+        `
+        UPDATE public.technician_phone_access
+        SET revoked_at = CURRENT_TIMESTAMP, revoked_by_employee_id = $2
+        WHERE employee_id = $1 AND revoked_at IS NULL
+        RETURNING login_code;
+        `,
+        [Number(employeeId), actor.employeeId]
+      );
+
+      if (result.rows.length === 0) {
+        return res
+          .status(404)
+          .json({ error: "That technician has no active phone access." });
+      }
+
+      // Live sessions are cut too. Revoking a lost phone that stays signed in
+      // for another thirty days would not be revoking anything.
+      await pool.query(
+        `
+        DELETE FROM public.user_sessions
+        WHERE (sess -> 'technician' ->> 'employeeId') = $1;
+        `,
+        [String(Number(employeeId))]
+      );
+
+      await pool.query(
+        `INSERT INTO public.audit_logs
+           (employee_id, actor_name, action, entity_type, entity_id, field_name, old_value, reason)
+         VALUES ($1, $2, 'Revoked technician app access', 'employee', $3, 'phone_access', $4, $5);`,
+        [
+          actor.employeeId,
+          `${actor.firstName} ${actor.lastName}`,
+          String(Number(employeeId)),
+          result.rows[0].login_code,
+          typeof req.body?.reason === "string"
+            ? req.body.reason.trim().slice(0, 500) || null
+            : null,
+        ]
+      );
+
+      res.json({
+        message: "Phone access revoked and any signed-in phone signed out.",
+      });
+    } catch (error) {
+      console.error("Could not revoke technician phone access:", error);
+      res.status(500).json({ error: "Could not revoke phone access." });
     }
   }
 );

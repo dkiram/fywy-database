@@ -13,6 +13,23 @@ declare module "express-session" {
       locationName: string | null;
     };
 
+    /**
+     * A technician signed in on their phone.
+     *
+     * Deliberately a separate field rather than an `employee` with role
+     * 'technician'. Every staff guard in this codebase asks for
+     * `session.employee`, so a technician session cannot satisfy one by
+     * accident — not through a route added later, not through a role check
+     * somebody forgets to write. The two identities never coexist on one
+     * session: signing in as either replaces the other.
+     */
+    technician?: {
+      employeeId: number;
+      firstName: string;
+      lastName: string;
+      loginCode: string;
+    };
+
     /** Row in login_sessions this browser session opened, so logout can close it. */
     loginSessionId?: number | null;
 

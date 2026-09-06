@@ -15,6 +15,7 @@ import AdminControlsPage from "./pages/AdminControlsPage";
 import SettingsPage from "./pages/SettingsPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import AccountOperationsPage from "./pages/AccountOperationsPage";
+import TechnicianAppPage from "./pages/TechnicianAppPage";
 import ProtectedRoute from "./auth/ProtectedRoute";
 
 function App() {
@@ -22,6 +23,15 @@ function App() {
     <Routes>
       {/* Login does NOT use the app sidebar/header */}
   <Route path="/" element={<LoginPage />} />
+
+  {/* The technician phone app.
+      Outside ProtectedRoute and outside AppLayout on purpose: it is signed
+      into with a technician passcode rather than a staff account, so there is
+      no employee session for ProtectedRoute to find and no sidebar that would
+      make sense on a phone. Its own guard is the server — every /api/tech
+      route requires a technician session. This is the manifest's start_url,
+      so it is the screen a home-screen icon opens. */}
+  <Route path="/tech" element={<TechnicianAppPage />} />
 
   {/* Dashboard data is administrator-only; denied roles return to Customers. */}
   <Route

@@ -45,6 +45,19 @@
   --color-warning-container: #fef3c7;
   --color-info: #1f5f8b;
 
+  /* 'unresolved' (migration 074) — the technician drove out and could not do
+     the work: nobody home, no answer, gate locked. It is neither a failure
+     nor a success, so neither --color-error nor --color-success is honest,
+     and it is not the amber of live work either.
+
+     A slate blue at 10% would land on top of --color-info's pale-blue
+     "assigned" pill, so unresolved is the one status rendered as a SOLID
+     pill. That is deliberate twice over: it cannot be confused with any
+     other state at a glance, and it stands slightly proud in a queue,
+     which is right for the one closed status that still owes somebody
+     a second visit. */
+  --color-stalled: #3f5a70;
+
   /* Our shared navy sidebar */
   --color-sidebar: #0b1c2d;
   --color-sidebar-text: #eef1f2;

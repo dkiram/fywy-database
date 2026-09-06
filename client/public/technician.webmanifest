@@ -1,0 +1,19 @@
+{
+  "name": "SPCL Field",
+  "short_name": "SPCL Field",
+  "description": "Service tickets assigned to you, on your phone.",
+  "start_url": "/tech",
+  "scope": "/tech",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1c2d",
+  "theme_color": "#0b1c2d",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

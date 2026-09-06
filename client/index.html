@@ -4,8 +4,25 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the technician app pad itself around the
+         notch and the home indicator with env(safe-area-inset-*), which is
+         the difference between a header under the clock and one below it. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>SPCL Database</title>
+
+    <!-- Added to the home screen, /tech opens without browser chrome and
+         looks like an app. Safari reads these three; Chrome and Android read
+         the manifest. Both point at the same start_url. -->
+    <link rel="manifest" href="/technician.webmanifest" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="SPCL Field" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#0b1c2d" />
 
     <!-- Inter is the UI font; Material Symbols supplies the icon ligatures. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
