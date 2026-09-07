@@ -21,6 +21,14 @@ const ticketStatuses = [
 ] as const;
 type TicketStatus = (typeof ticketStatuses)[number];
 
+/**
+ * Repairs belong to a customer; installations belong to an applicant who is
+ * not a customer yet (migration 079). Same rail, same queue on the phone,
+ * separate caps - they are different days' work drawn from different lists.
+ */
+const jobTypes = ["repair", "installation"] as const;
+export type JobType = (typeof jobTypes)[number];
+
 const ticketPriorities = ["low", "normal", "high", "urgent"] as const;
 type TicketPriority = (typeof ticketPriorities)[number];
 
@@ -85,23 +93,31 @@ async function validateAssignee(
  * The limit comes from the database function so this and the trigger that
  * maintains the latch cannot disagree about where the cap sits.
  */
-async function readTechnicianQueue(client: PoolClient, employeeId: number) {
+export async function readTechnicianQueue(
+  client: PoolClient,
+  employeeId: number,
+  jobType: JobType
+) {
   const result = await client.query(
     `
     SELECT
       public.technician_queue_limit() AS job_limit,
-      e.field_queue_locked_at,
       CONCAT_WS(' ', e.first_name, e.last_name) AS name,
+      EXISTS (
+        SELECT 1 FROM public.technician_queue_state s
+        WHERE s.employee_id = e.employee_id AND s.job_type = $2
+      ) AS gate_shut,
       (
         SELECT COUNT(*)::INTEGER
         FROM public.service_tickets t
         WHERE t.assigned_employee_id = e.employee_id
+          AND t.job_type = $2
           AND t.status IN ('assigned', 'in_progress')
       ) AS open_jobs
     FROM public.employees e
     WHERE e.employee_id = $1;
     `,
-    [employeeId]
+    [employeeId, jobType]
   );
 
   const row = result.rows[0];
@@ -112,10 +128,10 @@ async function readTechnicianQueue(client: PoolClient, employeeId: number) {
 
   return {
     name: row.name as string,
+    jobType,
     openJobs,
     jobLimit,
-    lockedAt: (row.field_queue_locked_at as Date | null) ?? null,
-    canTakeWork: row.field_queue_locked_at === null && openJobs < jobLimit,
+    canTakeWork: row.gate_shut === false && openJobs < jobLimit,
   };
 }
 
@@ -128,15 +144,21 @@ async function readTechnicianQueue(client: PoolClient, employeeId: number) {
  * cannot wait ends up being forced through by inventing a spare technician or
  * by closing somebody's jobs early to unlock them.
  */
-function queueFullMessage(queue: {
+export function queueFullMessage(queue: {
   name: string;
+  jobType: JobType;
   openJobs: number;
   jobLimit: number;
 }) {
+  // Named, because the two gates are separate: being told "Andre already has
+  // ten jobs" while looking at an empty installation queue would read as a
+  // bug rather than as the repair queue being full.
+  const kind = queue.jobType === "installation" ? "installations" : "repairs";
+
   const standing =
     queue.openJobs >= queue.jobLimit
-      ? `${queue.name} already has ${queue.jobLimit} jobs.`
-      : `${queue.name} still has ${queue.openJobs} of ${queue.jobLimit} jobs to finish.`;
+      ? `${queue.name} already has ${queue.jobLimit} ${kind}.`
+      : `${queue.name} still has ${queue.openJobs} of ${queue.jobLimit} ${kind} to finish.`;
 
   return (
     `${standing} The next batch goes out once that queue is clear. ` +
@@ -159,7 +181,13 @@ function queueFullMessage(queue: {
 serviceTicketsRouter.get(
   "/service-ticket-assignees",
   requireAuth,
-  async (_req, res) => {
+  async (req, res) => {
+    // Which queue the caller is filling. The applications page asks about
+    // installations, the tickets page about repairs, and a technician full of
+    // one is still free for the other.
+    const jobType: JobType =
+      cleanText(req.query.jobType) === "installation" ? "installation" : "repair";
+
     try {
       // Each technician's load comes down with the list. Without it the
       // dropdown offers names the server is about to refuse, and whoever is
@@ -170,11 +198,15 @@ serviceTicketsRouter.get(
           e.first_name,
           e.last_name,
           e.role,
-          e.field_queue_locked_at,
+          EXISTS (
+            SELECT 1 FROM public.technician_queue_state s
+            WHERE s.employee_id = e.employee_id AND s.job_type = $1
+          ) AS gate_shut,
           (
             SELECT COUNT(*)::INTEGER
             FROM public.service_tickets t
             WHERE t.assigned_employee_id = e.employee_id
+              AND t.job_type = $1
               AND t.status IN ('assigned', 'in_progress')
           ) AS open_jobs,
           public.technician_queue_limit() AS job_limit
@@ -182,13 +214,14 @@ serviceTicketsRouter.get(
         WHERE e.is_active = TRUE
           AND e.role = 'technician'
         ORDER BY e.last_name, e.first_name;
-      `);
+      `, [jobType]);
 
       res.json({
+        jobType,
         employees: result.rows.map((row) => ({
           ...row,
           can_take_work:
-            row.field_queue_locked_at === null &&
+            row.gate_shut === false &&
             Number(row.open_jobs) < Number(row.job_limit),
         })),
       });
@@ -216,6 +249,12 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   // unresolved.
   const closedOn = cleanText(req.query.closedOn);
 
+  // This screen is the repair queue. Installations live on the same rail but
+  // belong to the applications page, and letting them wash into here would
+  // put applicants who have no customer record into a list built around
+  // customers - which is the clutter this was meant to avoid.
+  const listJobType = cleanText(req.query.jobType) || "repair";
+
   if (!validDate(closedOn)) {
     return res.status(400).json({ error: "Choose a valid date." });
   }
@@ -240,6 +279,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     const params = [search, searchPattern, customerId, closedOn];
     const whereSql = `
       WHERE ${viewClause}
+        ${listJobType === "all" ? "" : `AND t.job_type = '${listJobType === "installation" ? "installation" : "repair"}'`}
         AND ($3::INTEGER IS NULL OR t.customer_id = $3)
         -- "Closed on this day" is read from the history rather than from the
         -- ticket, because the ticket cannot answer it. completed_at is set
@@ -333,7 +373,8 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           COUNT(*) FILTER (WHERE status = 'completed')::INTEGER AS completed,
           COUNT(*) FILTER (WHERE status = 'unresolved')::INTEGER AS unresolved
         FROM public.service_tickets
-        WHERE ($1::INTEGER IS NULL OR customer_id = $1);
+        WHERE ($1::INTEGER IS NULL OR customer_id = $1)
+          ${listJobType === "all" ? "" : `AND job_type = '${listJobType === "installation" ? "installation" : "repair"}'`};
         `,
         [customerId]
       ),
@@ -452,7 +493,9 @@ serviceTicketsRouter.post("/service-tickets", requireAuth, async (req, res) => {
     // load rather than replacing one, and the latch stays shut behind it, so
     // the exception cannot be used to keep feeding them ordinary work.
     if (assignedEmployeeId !== null && priority !== "urgent") {
-      const queue = await readTechnicianQueue(client, assignedEmployeeId);
+      // This screen only ever raises repairs; an installation is dispatched
+      // from the applications router against its own separate cap.
+      const queue = await readTechnicianQueue(client, assignedEmployeeId, "repair");
 
       if (queue && !queue.canTakeWork) {
         await client.query("ROLLBACK");
@@ -597,7 +640,9 @@ serviceTicketsRouter.patch(
       // it was, so raising a queued job to Urgent and assigning it in the same
       // edit is one action rather than two.
       if (assigneeChanged && priority !== "urgent") {
-        const queue = await readTechnicianQueue(client, assignedEmployeeId);
+        const queue = await readTechnicianQueue(
+          client, assignedEmployeeId, current.job_type as JobType
+        );
 
         if (queue && !queue.canTakeWork) {
           await client.query("ROLLBACK");

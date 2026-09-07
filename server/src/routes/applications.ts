@@ -12,6 +12,9 @@ import {
 import { OltVerificationError, readOntFromOlt } from "../huawei/verifyOnt.js";
 import { insertStatusHistory } from "./accounts.js";
 import { loadReceipt } from "./payments.js";
+// Shared so the installation cap is the same code as the repair cap,
+// rather than a second implementation that can drift from it.
+import { readTechnicianQueue, queueFullMessage } from "./serviceTickets.js";
 
 // Application workflow API, including the MVP 3 activation handoff from an
 // approved application to an active customer account.
@@ -234,8 +237,28 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           a.status = ANY($3::TEXT[])
           AND a.application_date <
             (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE - 14
-        ) AS is_overdue
+        ) AS is_overdue,
+        -- The most recent installation job sent to a technician, if any. Only
+        -- the latest matters: a first visit that found nobody home is history,
+        -- and what the office needs to see is where this stands now.
+        install.service_ticket_id AS install_ticket_id,
+        install.status AS install_status,
+        install.resolution_notes AS install_notes,
+        install.updated_at AS install_updated_at,
+        CONCAT_WS(' ', install_tech.first_name, install_tech.last_name)
+          AS install_technician_name
       FROM public.applications a
+      LEFT JOIN LATERAL (
+        SELECT t.service_ticket_id, t.status, t.resolution_notes,
+               t.updated_at, t.assigned_employee_id
+        FROM public.service_tickets t
+        WHERE t.application_id = a.application_id
+          AND t.job_type = 'installation'
+        ORDER BY t.service_ticket_id DESC
+        LIMIT 1
+      ) AS install ON TRUE
+      LEFT JOIN public.employees install_tech
+        ON install_tech.employee_id = install.assigned_employee_id
       LEFT JOIN public.packages p
         ON a.package_id = p.package_id
       LEFT JOIN public.customers suggested
@@ -1817,6 +1840,167 @@ applicationsRouter.patch(
       await client.query("ROLLBACK");
       console.error("Could not close application:", error);
       res.status(500).json({ error: "Could not close application." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/**
+ * Sends an application out to a technician to be installed.
+ *
+ * The installation rides the service-ticket rail (migration 079) rather than
+ * getting a workflow of its own, so it inherits the technician's queue, the
+ * ten-job latch, 'unresolved' and the history table without any of them being
+ * written a second time.
+ *
+ * What the technician can do with it is deliberately narrow: go, install,
+ * mark it done. They do not record pole box or port - the boxes are not
+ * numbered yet, so there is nothing true to record - and they cannot service
+ * the application. Servicing mints a customer ID, takes the installation fee
+ * and runs the OLT mapping, none of which belongs on a phone in a yard. The
+ * office does that afterwards, from the report.
+ */
+applicationsRouter.post(
+  "/applications/:applicationId/dispatch",
+  requireAuth,
+  async (req, res) => {
+    const employee = req.session.employee!;
+    const { applicationId } = req.params;
+
+    if (typeof applicationId !== "string" || !/^\d+$/.test(applicationId)) {
+      return res.status(400).json({ error: "Invalid application ID." });
+    }
+
+    const assigneeText = String(req.body?.assignedEmployeeId ?? "").trim();
+    if (!/^\d+$/.test(assigneeText)) {
+      return res.status(400).json({ error: "Choose a technician." });
+    }
+    const assignedEmployeeId = Number(assigneeText);
+
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const applicationResult = await client.query(
+        `SELECT application_id, name, address, status
+         FROM public.applications
+         WHERE application_id = $1
+         FOR UPDATE;`,
+        [Number(applicationId)]
+      );
+      const application = applicationResult.rows[0];
+
+      if (!application) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Application not found." });
+      }
+
+      // Only something still waiting to be installed can be sent out. A
+      // serviced application already has a customer; a declined or cancelled
+      // one should not have anybody driving to it.
+      if (application.status !== "pending") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: `This application is ${application.status.replace(/_/g, " ")}, so there is nothing to install.`,
+        });
+      }
+
+      const technicianResult = await client.query(
+        `SELECT employee_id, first_name, last_name
+         FROM public.employees
+         WHERE employee_id = $1 AND is_active = TRUE AND role = 'technician';`,
+        [assignedEmployeeId]
+      );
+      const technician = technicianResult.rows[0];
+
+      if (!technician) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Selected technician is unavailable." });
+      }
+
+      // The installation cap, which is separate from the repair one: somebody
+      // full of repairs can still be sent out to install.
+      const queue = await readTechnicianQueue(client, assignedEmployeeId, "installation");
+
+      if (queue && !queue.canTakeWork) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: queueFullMessage(queue) });
+      }
+
+      // The partial unique index from migration 079 refuses a second open
+      // installation for the same application; this turns that into a
+      // sentence rather than a constraint violation.
+      const openResult = await client.query(
+        `SELECT service_ticket_id FROM public.service_tickets
+         WHERE application_id = $1 AND job_type = 'installation'
+           AND status IN ('assigned', 'in_progress');`,
+        [Number(applicationId)]
+      );
+
+      if (openResult.rows.length > 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "This application is already out with a technician.",
+        });
+      }
+
+      const ticketResult = await client.query(
+        `
+        INSERT INTO public.service_tickets (
+          application_id, job_type, issue_summary, priority, status,
+          reported_date, assigned_employee_id,
+          created_by_employee_id, updated_by_employee_id
+        ) VALUES (
+          $1, 'installation', $2, 'normal', 'assigned',
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE, $3, $4, $4
+        )
+        RETURNING *;
+        `,
+        [
+          Number(applicationId),
+          `Install service for ${application.name}`,
+          assignedEmployeeId,
+          employee.employeeId,
+        ]
+      );
+      const ticket = ticketResult.rows[0];
+
+      await client.query(
+        `INSERT INTO public.service_ticket_history
+          (service_ticket_id, event_type, from_status, to_status, note, changed_by_employee_id)
+         VALUES ($1, 'created', NULL, 'assigned', $2, $3);`,
+        [
+          ticket.service_ticket_id,
+          `Installation sent to ${technician.first_name} ${technician.last_name}`,
+          employee.employeeId,
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO public.audit_logs
+          (employee_id, actor_name, action, entity_type, entity_id, field_name, new_value, reason)
+         VALUES ($1, $2, 'Sent application for installation', 'application', $3, 'installation', $4, $5);`,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(applicationId),
+          `${technician.first_name} ${technician.last_name}`,
+          `Install service for ${application.name}`,
+        ]
+      );
+
+      await client.query("COMMIT");
+
+      res.status(201).json({
+        ticket,
+        message: `Sent to ${technician.first_name} ${technician.last_name}.`,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      console.error("Could not dispatch the installation:", error);
+      res.status(500).json({ error: "Could not send this to a technician." });
     } finally {
       client.release();
     }

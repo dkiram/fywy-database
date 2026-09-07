@@ -405,13 +405,20 @@ technicianAppRouter.get("/tech/jobs", requireTechnician, async (req, res) => {
       t.service_date,
       t.resolution_notes,
       t.updated_at,
+      t.job_type,
+      t.application_id,
       c.customer_id,
-      c.name AS customer_name,
-      c.address,
-      c.telephone,
+      -- An installation has no customer yet: the person waiting at the
+      -- address is an applicant. Resolving all three from whichever side
+      -- exists means the card, and every line of the phone app that reads
+      -- it, stays identical for both kinds of job.
+      COALESCE(c.name, a.name) AS customer_name,
+      COALESCE(c.address, a.address) AS address,
+      COALESCE(c.telephone, a.telephone) AS telephone,
       COALESCE(notes.entries, '[]'::JSON) AS recent_notes
     FROM public.service_tickets t
     LEFT JOIN public.customers c ON c.customer_id = t.customer_id
+    LEFT JOIN public.applications a ON a.application_id = t.application_id
     LEFT JOIN LATERAL (
       SELECT JSON_AGG(
                recent.entry ORDER BY recent.changed_at DESC, recent.history_id DESC

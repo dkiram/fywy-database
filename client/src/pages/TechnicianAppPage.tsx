@@ -37,6 +37,15 @@ type HistoryNote = {
 
 type Job = {
   service_ticket_id: number;
+  /**
+   * A repair belongs to a customer, an installation to an applicant who is
+   * not a customer yet. The server resolves name, address and telephone from
+   * whichever side exists, so everything below this line is identical for
+   * both - the only difference a technician sees is the badge and what they
+   * are expected to write at the end.
+   */
+  job_type: "repair" | "installation";
+  application_id: number | null;
   issue_summary: string;
   description: string | null;
   priority: JobPriority;
@@ -387,6 +396,16 @@ function JobQueue({
     [jobs]
   );
 
+  const repairCount = useMemo(
+    () => jobs.filter((job) => job.job_type === "repair").length,
+    [jobs]
+  );
+
+  const installCount = useMemo(
+    () => jobs.filter((job) => job.job_type === "installation").length,
+    [jobs]
+  );
+
   return (
     <TechnicianShell>
       <FieldBackdrop />
@@ -428,12 +447,19 @@ function JobQueue({
             otherwise invisible from here: a technician who gets nothing new
             all afternoon should be able to see that it is the two jobs still
             on their list holding it up, not the office forgetting them. */}
+        {/* Counted separately, because the caps are: a technician full of
+            repairs can still be sent out to install, so one number covering
+            both would explain neither. */}
         {tab === "jobs" && jobs.length > 0 && (
           <p className="mt-3 text-xs text-white/50">
             {activeCount > 0 ? `${activeCount} in progress · ` : ""}
-            {jobs.length === 1
-              ? "1 left to clear before the next batch"
-              : `${jobs.length} left to clear before the next batch`}
+            {[
+              repairCount && `${repairCount} repair${repairCount === 1 ? "" : "s"}`,
+              installCount && `${installCount} install${installCount === 1 ? "" : "s"}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}{" "}
+            left to clear
           </p>
         )}
       </header>
@@ -610,6 +636,11 @@ function JobCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <JobStatusPill status={job.status} />
+            {job.job_type === "installation" && (
+              <span className="inline-flex whitespace-nowrap rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                Install
+              </span>
+            )}
             <span className="font-mono text-xs text-on-surface-variant">
               #{job.service_ticket_id}
             </span>
@@ -726,7 +757,7 @@ function JobCard({
                   onChange={(event) => onDraftChange(event.target.value)}
                   rows={3}
                   maxLength={1000}
-                  placeholder="Replaced the drop cable at the pole…"
+                  placeholder={job.job_type === "installation" ? "Installed and tested, customer signed…" : "Replaced the drop cable at the pole…"}
                   className="mt-2 w-full rounded-xl border border-outline-variant bg-white px-3 py-3 text-base text-on-surface"
                 />
               </label>
@@ -781,6 +812,12 @@ function JobCard({
                 Use <strong>Unresolved</strong> when nobody was home, nobody
                 answered, or you could not get to the line. The office picks it
                 back up.
+                {job.job_type === "installation" && (
+                  <>
+                    {" "}Mark it <strong>Done</strong> once the service is in
+                    and working — the office finishes the paperwork from there.
+                  </>
+                )}
               </p>
             </div>
           )}

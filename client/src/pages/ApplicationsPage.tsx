@@ -58,6 +58,15 @@ type ApplicationRecord = {
   installation_receipt_number: string | null;
   installation_voided: boolean;
   is_overdue: boolean;
+  // The latest installation job sent to a technician for this application,
+  // if any (migration 079). An installation rides the service-ticket rail, so
+  // its status is a ticket status: assigned, in_progress, completed,
+  // unresolved or cancelled.
+  install_ticket_id: number | null;
+  install_status: string | null;
+  install_notes: string | null;
+  install_updated_at: string | null;
+  install_technician_name: string | null;
 };
 
 // Minimal shape of /api/customers, used by the Match Review customer picker.
@@ -239,6 +248,7 @@ function ApplicationsPage() {
   const [noticeCustomerId, setNoticeCustomerId] = useState<number | null>(null);
   useScrollRestoration(!loading);
 
+  const [dispatching, setDispatching] = useState<ApplicationRecord | null>(null);
   const [selected, setSelected] = useState<ApplicationRecord | null>(null);
   // Shown right after an installation fee is collected, and reprintable from
   // the application drawer afterwards.
@@ -1132,6 +1142,16 @@ function ApplicationsPage() {
                 {activeApplication.status === "match_review" && (
                   <button type="button" onClick={() => openConfirmMatch(activeApplication)} className="flex items-center justify-center gap-2 rounded-lg bg-secondary/15 px-4 py-3 text-sm font-medium text-secondary transition hover:bg-secondary/25"><span className="material-symbols-outlined">how_to_reg</span>{activeApplication.suggested_customer_id ? `Same Person as Customer #${activeApplication.suggested_customer_id}` : "Same Person as an Existing Customer"}</button>
                 )}
+                {/* Sending someone out is a step BEFORE activation, so it
+                    sits above the two decisions rather than beside them: the
+                    technician installs, reports back, and only then does the
+                    office activate from what they found. */}
+                {activeApplication.status === "pending" && (
+                  <InstallationDispatchRow
+                    application={activeApplication}
+                    onDispatch={() => setDispatching(activeApplication)}
+                  />
+                )}
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button type="button" onClick={() => openServiceDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-tertiary px-4 py-3 text-sm font-medium text-white transition hover:bg-tertiary/90"><span className="material-symbols-outlined">check</span>Activate Customer</button>
                   <button type="button" onClick={() => openCloseDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error transition hover:bg-error/15"><span className="material-symbols-outlined">close</span>Not Serviced</button>
@@ -1235,6 +1255,18 @@ function ApplicationsPage() {
             )}
           </div>
         </ApplicationDrawer>
+      )}
+
+      {dispatching && (
+        <DispatchInstallationModal
+          application={dispatching}
+          onClose={() => setDispatching(null)}
+          onSent={(message) => {
+            setDispatching(null);
+            setNotice(message);
+            loadApplications();
+          }}
+        />
       )}
 
       {activeApplication && decision === "service" && (
@@ -1658,6 +1690,196 @@ function DrawerSection({ title, icon, children }: { title: string; icon: string;
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * Where an application's installation stands, and the button that starts one.
+ *
+ * Shown only while the application is pending, because that is the only state
+ * in which anybody should be driving to the address: a serviced application
+ * already has a customer, and a declined or cancelled one has nobody waiting.
+ *
+ * The technician's report is the whole point of the panel. Once they mark the
+ * job done, this is where the office sees it and knows the address is ready
+ * to be activated.
+ */
+function InstallationDispatchRow({
+  application,
+  onDispatch,
+}: {
+  application: ApplicationRecord;
+  onDispatch: () => void;
+}) {
+  const status = application.install_status;
+  const out = status === "assigned" || status === "in_progress";
+
+  if (status === "completed") {
+    return (
+      <div className="rounded-xl bg-tertiary/10 p-4">
+        <p className="flex items-center gap-2 text-sm font-semibold text-tertiary">
+          <span className="material-symbols-outlined text-lg">task_alt</span>
+          Installed by {application.install_technician_name || "a technician"}
+        </p>
+        {application.install_notes && (
+          <p className="mt-1.5 text-sm text-on-surface-variant">{application.install_notes}</p>
+        )}
+        <p className="mt-1 text-xs text-on-surface-variant">
+          Ready to activate. Fill in the pole box, port and package below.
+        </p>
+      </div>
+    );
+  }
+
+  if (out) {
+    return (
+      <div className="rounded-xl bg-surface-container-low p-4">
+        <p className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+          <span className="material-symbols-outlined text-lg">engineering</span>
+          {status === "in_progress" ? "Being installed" : "Sent"} — {application.install_technician_name || "a technician"}
+        </p>
+        <p className="mt-1 text-xs text-on-surface-variant">
+          It is on their phone. They mark it done when the service is in.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* An unresolved visit is not a failure to hide - it is the reason the
+          office is being asked to send somebody again, so it says what
+          happened and offers the same button. */}
+      {status === "unresolved" && (
+        <div className="rounded-xl bg-stalled/10 p-4">
+          <p className="text-sm font-semibold text-stalled">
+            {application.install_technician_name || "A technician"} could not complete this
+          </p>
+          {application.install_notes && (
+            <p className="mt-1.5 text-sm text-on-surface-variant">{application.install_notes}</p>
+          )}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onDispatch}
+        className="flex items-center justify-center gap-2 rounded-lg bg-primary/10 px-4 py-3 text-sm font-medium text-primary transition hover:bg-primary/20"
+      >
+        <span className="material-symbols-outlined">send_to_mobile</span>
+        {status === "unresolved" ? "Send to a technician again" : "Send to a technician"}
+      </button>
+    </div>
+  );
+}
+
+/** Picks the technician, against the installation cap rather than the repair one. */
+function DispatchInstallationModal({
+  application,
+  onClose,
+  onSent,
+}: {
+  application: ApplicationRecord;
+  onClose: () => void;
+  onSent: (message: string) => void;
+}) {
+  const [technicians, setTechnicians] = useState<
+    Array<{
+      employee_id: number; first_name: string; last_name: string;
+      open_jobs: number; job_limit: number; can_take_work: boolean;
+    }>
+  >([]);
+  const [chosen, setChosen] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    // jobType matters: the two caps are separate, so a technician full of
+    // repairs is still free to install.
+    apiFetch("/api/service-ticket-assignees?jobType=installation")
+      .then(async (response) => {
+        const data = await response.json();
+        if (response.ok) setTechnicians(data.employees);
+      })
+      .catch(() => setTechnicians([]));
+  }, []);
+
+  const send = async () => {
+    try {
+      setSaving(true);
+      setError("");
+
+      const response = await apiFetch(
+        `/api/applications/${application.application_id}/dispatch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assignedEmployeeId: chosen }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not send this out.");
+
+      onSent(`${application.name}: ${data.message}`);
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "Could not send this out.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const everyoneFull = technicians.length > 0 && technicians.every((t) => !t.can_take_work);
+
+  return (
+    <Modal title="Send for installation" onClose={() => !saving && onClose()}>
+      <div className="space-y-5">
+        <div className="rounded-xl bg-surface-container-low p-4">
+          <p className="font-medium text-on-surface">{application.name}</p>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            {application.address || "No address on file"}
+            {application.telephone ? ` · ${application.telephone}` : ""}
+          </p>
+        </div>
+
+        <Field label="Technician" required>
+          <select value={chosen} onChange={(event) => setChosen(event.target.value)} className={inputClass}>
+            <option value="">Choose a technician</option>
+            {technicians.map((technician) => (
+              <option key={technician.employee_id} value={technician.employee_id} disabled={!technician.can_take_work}>
+                {technician.first_name} {technician.last_name} —{" "}
+                {technician.can_take_work
+                  ? technician.open_jobs === 0
+                    ? "no installs"
+                    : `${technician.open_jobs} of ${technician.job_limit} installs`
+                  : `${technician.open_jobs} of ${technician.job_limit} installs, must clear first`}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        {everyoneFull && (
+          <p className="text-xs text-on-surface-variant">
+            Every technician is working through a full installation queue. This
+            one waits until somebody clears theirs.
+          </p>
+        )}
+
+        <p className="text-xs leading-5 text-on-surface-variant">
+          They see the name, address and phone number, and mark it done once the
+          service is in. Activating the customer stays here.
+        </p>
+
+        {error && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{error}</p>}
+
+        <ModalActions
+          saving={saving || !chosen}
+          primaryLabel="Send"
+          onCancel={onClose}
+          onPrimary={send}
+        />
+      </div>
+    </Modal>
   );
 }
 
