@@ -23,3 +23,32 @@ export function isHanoverNoDescriptionPlaceholder(
       "ont_no_description"
   );
 }
+
+/**
+ * Hanover temporarily accepts an unverified location when its live read is
+ * unavailable or returns no ONT. Other OLTs preserve the original result or
+ * error so their strict activation checks remain unchanged.
+ */
+export async function readWithTemporaryHanoverFallback<T>(
+  isHanoverWorkflow: boolean,
+  readLiveValue: () => Promise<T | null>
+) {
+  try {
+    const liveValue = await readLiveValue();
+    return {
+      liveValue,
+      usedUnverifiedFallback: isHanoverWorkflow && liveValue === null,
+      issue: null as string | null,
+    };
+  } catch (error) {
+    if (!isHanoverWorkflow) throw error;
+    return {
+      liveValue: null,
+      usedUnverifiedFallback: true,
+      issue:
+        error instanceof Error
+          ? error.message
+          : "The automated Hanover verification did not complete.",
+    };
+  }
+}

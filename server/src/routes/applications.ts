@@ -7,6 +7,7 @@ import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
 import {
   isHanoverNoDescriptionPlaceholder,
   isTemporaryHanoverWorkflow as matchesTemporaryHanoverWorkflow,
+  readWithTemporaryHanoverFallback,
 } from "../huawei/temporaryOltWorkflows.js";
 import { OltVerificationError, readOntFromOlt } from "../huawei/verifyOnt.js";
 import { insertStatusHistory } from "./accounts.js";
@@ -756,35 +757,37 @@ applicationsRouter.patch(
           submittedManagementIp: oltManagementIp,
         });
         try {
-          liveOnt = await readOntFromOlt(oltTarget);
+          const readResult = await readWithTemporaryHanoverFallback(
+            isTemporaryHanoverWorkflow,
+            () => readOntFromOlt(oltTarget!)
+          );
+          liveOnt = readResult.liveValue;
+          usedHanoverUnverifiedFallback =
+            readResult.usedUnverifiedFallback;
+          liveVerificationIssue =
+            readResult.issue ??
+            (readResult.usedUnverifiedFallback
+              ? `No ONT answered at ${oltLocation} during the automated read.`
+              : null);
         } catch (error) {
-          if (isTemporaryHanoverWorkflow) {
-            usedHanoverUnverifiedFallback = true;
-            liveVerificationIssue =
-              error instanceof Error
-                ? error.message
-                : "The automated Hanover verification did not complete.";
-          } else if (error instanceof OltVerificationError) {
+          if (error instanceof OltVerificationError) {
             return res.status(error.kind === "configuration" ? 503 : 502).json({
               error: error.message,
               code: `olt_${error.kind}_error`,
             });
+          } else {
+            console.error(
+              "Could not verify the ONT location during activation:",
+              error
+            );
+            return res.status(502).json({
+              error: "Could not reach the OLT to verify the ONT location.",
+            });
           }
-          console.error(
-            "Could not verify the ONT location during activation:",
-            error
-          );
-          return res.status(502).json({
-            error: "Could not reach the OLT to verify the ONT location.",
-          });
         }
 
         if (!liveOnt) {
-          if (isTemporaryHanoverWorkflow) {
-            usedHanoverUnverifiedFallback = true;
-            liveVerificationIssue ??=
-              `No ONT answered at ${oltLocation} during the automated read.`;
-          } else {
+          if (!usedHanoverUnverifiedFallback) {
             return res.status(409).json({
               error:
                 `No ONT answers at ${oltName} ${oltLocation}. ` +
