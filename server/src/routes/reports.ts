@@ -27,6 +27,7 @@ const ADMIN_ONLY_REPORTS = new Set([
   "payments-by-date",
   "payments-by-location",
   "nightly-disconnection-runs",
+  "technician-jobs",
 ]);
 
 // Sortable columns, per report. The client sends a column key; this maps it to
@@ -354,6 +355,155 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             OR COALESCE(run.error_message, '') ILIKE $2)
           ORDER BY run.started_at DESC, run.olt_automation_run_id DESC
           LIMIT $3 OFFSET $4;`;
+        break;
+
+      case "technician-jobs":
+        // One row per technician: what they closed in the report period, split
+        // by how it ended, plus what is on their phone right now.
+        //
+        // Counted out of service_ticket_history, not off the ticket. The ticket
+        // cannot answer "when did this end": completed_at is set only for
+        // 'completed' and is NULL for cancelled and unresolved, service_date is
+        // usually NULL on an unresolved job because nobody got through the
+        // gate, and updated_at moves again whenever somebody edits a note
+        // months later. The history is append-only and records the moment each
+        // status was actually set. This is the same source the service queue's
+        // close-date filter reads.
+        //
+        // `from_status IS DISTINCT FROM to_status` is what separates a real
+        // ending from a note. Adding a note without changing the status still
+        // writes a history row, and that row carries the status the ticket
+        // already had - so without this test, a note typed on a job in
+        // December would be counted as a job closed in December.
+        //
+        // Jamaica time, not UTC: a job closed at 7pm on the 5th was closed on
+        // the 5th to the person who closed it, and would otherwise be filed
+        // under the 6th and found by nobody looking for it.
+        //
+        // Attribution is the ticket's assigned technician, not whoever pressed
+        // the button. The office closing a job on the phone's behalf does not
+        // move that job to the office's name.
+        //
+        // Repairs and installations are counted together. Migration 079 put
+        // installations on the service-ticket rail precisely because they are
+        // the same thing to the technician - an address, a name, and a job
+        // that ends in done or not done - and a report about a technician's
+        // day should not pretend one of them did not happen.
+        //
+        // A ticket that ends twice counts twice. An unresolved job is meant to
+        // be re-scheduled (migration 074), so one that came back unresolved in
+        // March and was completed in April is two trips, and the technician
+        // made both. Each ending is filed on its own date under the status set
+        // at that moment, which also keeps Completed + Unresolved + Cancelled
+        // equal to Jobs Closed in every period.
+        countSql = `
+          SELECT COUNT(*)::INTEGER AS total FROM (
+            SELECT e.employee_id
+            FROM public.employees e
+            LEFT JOIN LATERAL (
+              SELECT h.to_status
+              FROM public.service_tickets t
+              JOIN public.service_ticket_history h
+                ON h.service_ticket_id = t.service_ticket_id
+              WHERE t.assigned_employee_id = e.employee_id
+                AND h.to_status IN ('completed', 'unresolved', 'cancelled')
+                AND h.from_status IS DISTINCT FROM h.to_status
+                AND ($3 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE >= $3::DATE)
+                AND ($4 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE <= $4::DATE)
+            ) closing ON TRUE
+            WHERE e.role = 'technician'
+              AND ($1 = '' OR CONCAT_WS(' ', e.first_name, e.last_name) ILIKE $2)
+            GROUP BY e.employee_id, e.is_active
+            HAVING e.is_active OR COUNT(closing.to_status) > 0
+          ) grouped;`;
+        rowsSql = `
+          SELECT
+            e.employee_id,
+            CONCAT_WS(' ', e.first_name, e.last_name) AS technician,
+            COUNT(closing.to_status)::INTEGER AS jobs_closed,
+            COUNT(*) FILTER (WHERE closing.to_status = 'completed')::INTEGER AS completed_count,
+            COUNT(*) FILTER (WHERE closing.to_status = 'unresolved')::INTEGER AS unresolved_count,
+            COUNT(*) FILTER (WHERE closing.to_status = 'cancelled')::INTEGER AS cancelled_count,
+            -- Of the jobs the technician actually went out on, how many ended
+            -- in the work being done. Cancelled is left out of both halves on
+            -- purpose: a job called off by the office is not a visit that
+            -- failed, and counting it against the technician would make
+            -- "we no longer need this" read as "they could not do it".
+            --
+            -- NULL rather than zero when there is nothing to divide, so a
+            -- technician who closed nothing this period shows an em dash
+            -- instead of a 0% that looks like a failing score.
+            CASE
+              WHEN COUNT(*) FILTER (WHERE closing.to_status IN ('completed', 'unresolved')) = 0
+                THEN NULL
+              ELSE ROUND(
+                100.0 * COUNT(*) FILTER (WHERE closing.to_status = 'completed')
+                / COUNT(*) FILTER (WHERE closing.to_status IN ('completed', 'unresolved'))
+              )::INTEGER
+            END AS completion_rate,
+            -- Deliberately outside the date range. This is the queue on the
+            -- technician's phone as of now, which is what somebody deciding
+            -- who to send the next job to needs, and it is why the column is
+            -- labelled "Open Now" rather than sitting among the period counts
+            -- as though it were one of them. Same two statuses the queue cap
+            -- in migration 076 counts, so the two never disagree.
+            (
+              SELECT COUNT(*)::INTEGER
+              FROM public.service_tickets open_t
+              WHERE open_t.assigned_employee_id = e.employee_id
+                AND open_t.status IN ('assigned', 'in_progress')
+            ) AS open_now
+          FROM public.employees e
+          LEFT JOIN LATERAL (
+            SELECT h.to_status
+            FROM public.service_tickets t
+            JOIN public.service_ticket_history h
+              ON h.service_ticket_id = t.service_ticket_id
+            WHERE t.assigned_employee_id = e.employee_id
+              AND h.to_status IN ('completed', 'unresolved', 'cancelled')
+              AND h.from_status IS DISTINCT FROM h.to_status
+              AND ($3 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE >= $3::DATE)
+              AND ($4 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE <= $4::DATE)
+          ) closing ON TRUE
+          WHERE e.role = 'technician'
+            AND ($1 = '' OR CONCAT_WS(' ', e.first_name, e.last_name) ILIKE $2)
+          GROUP BY e.employee_id, e.first_name, e.last_name, e.is_active
+          -- An inactive technician is kept only while the period still has
+          -- their work in it, so last month's report does not quietly lose a
+          -- man who left in between. Active technicians are always listed,
+          -- including the ones who closed nothing: a row of zeros is the
+          -- answer to "who is not being given work", and dropping it hides
+          -- exactly the person an admin opened this report to find.
+          HAVING e.is_active OR COUNT(closing.to_status) > 0
+          ORDER BY COUNT(closing.to_status) DESC, e.first_name, e.last_name, e.employee_id
+          LIMIT $5 OFFSET $6;`;
+        totalsSql = `
+          SELECT
+            COALESCE(SUM(jobs_closed), 0)::INTEGER AS jobs_closed,
+            COALESCE(SUM(completed_count), 0)::INTEGER AS completed_count,
+            COALESCE(SUM(unresolved_count), 0)::INTEGER AS unresolved_count
+          FROM (
+            SELECT
+              COUNT(closing.to_status)::INTEGER AS jobs_closed,
+              COUNT(*) FILTER (WHERE closing.to_status = 'completed')::INTEGER AS completed_count,
+              COUNT(*) FILTER (WHERE closing.to_status = 'unresolved')::INTEGER AS unresolved_count
+            FROM public.employees e
+            LEFT JOIN LATERAL (
+              SELECT h.to_status
+              FROM public.service_tickets t
+              JOIN public.service_ticket_history h
+                ON h.service_ticket_id = t.service_ticket_id
+              WHERE t.assigned_employee_id = e.employee_id
+                AND h.to_status IN ('completed', 'unresolved', 'cancelled')
+                AND h.from_status IS DISTINCT FROM h.to_status
+                AND ($3 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE >= $3::DATE)
+                AND ($4 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE <= $4::DATE)
+            ) closing ON TRUE
+            WHERE e.role = 'technician'
+              AND ($1 = '' OR CONCAT_WS(' ', e.first_name, e.last_name) ILIKE $2)
+            GROUP BY e.employee_id, e.is_active
+            HAVING e.is_active OR COUNT(closing.to_status) > 0
+          ) per_technician;`;
         break;
 
       default:
