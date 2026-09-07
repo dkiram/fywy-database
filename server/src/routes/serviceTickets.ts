@@ -212,18 +212,12 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Invalid customer ID." });
   }
 
-  // Reported-date range, both ends optional. Reported rather than service
-  // date because this is the queue as the office thinks about it - "what came
-  // in last week" - and a ticket that has not been serviced yet has no
-  // service date to be found by at all.
-  const fromDate = cleanText(req.query.from);
-  const toDate = cleanText(req.query.to);
+  // One day, asking "what did we close on it" - completed, cancelled or
+  // unresolved.
+  const closedOn = cleanText(req.query.closedOn);
 
-  if (!validDate(fromDate) || !validDate(toDate)) {
-    return res.status(400).json({ error: "Choose a valid date range." });
-  }
-  if (fromDate && toDate && fromDate > toDate) {
-    return res.status(400).json({ error: "That date range ends before it starts." });
+  if (!validDate(closedOn)) {
+    return res.status(400).json({ error: "Choose a valid date." });
   }
 
   const viewClauses: Record<string, string> = {
@@ -243,12 +237,33 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   const limit = 10;
 
   try {
-    const params = [search, searchPattern, customerId, fromDate, toDate];
+    const params = [search, searchPattern, customerId, closedOn];
     const whereSql = `
       WHERE ${viewClause}
         AND ($3::INTEGER IS NULL OR t.customer_id = $3)
-        AND (NULLIF($4, '')::DATE IS NULL OR t.reported_date >= NULLIF($4, '')::DATE)
-        AND (NULLIF($5, '')::DATE IS NULL OR t.reported_date <= NULLIF($5, '')::DATE)
+        -- "Closed on this day" is read from the history rather than from the
+        -- ticket, because the ticket cannot answer it. completed_at is set
+        -- only for 'completed' and is deliberately NULL for cancelled and
+        -- unresolved; service_date is often NULL on an unresolved job, since
+        -- nobody got through the gate; and updated_at moves every time anyone
+        -- edits a note months later. service_ticket_history is append-only and
+        -- records the moment each status was actually set, which is the only
+        -- one of the four that means what is being asked here.
+        --
+        -- Jamaica time, not UTC: a job closed at 7pm on the 5th is closed on
+        -- the 5th to the person who closed it, and would otherwise be found
+        -- under the 6th.
+        AND (
+          NULLIF($4, '')::DATE IS NULL
+          OR EXISTS (
+            SELECT 1
+            FROM public.service_ticket_history h
+            WHERE h.service_ticket_id = t.service_ticket_id
+              AND h.to_status IN ('completed', 'cancelled', 'unresolved')
+              AND (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE
+                  = NULLIF($4, '')::DATE
+          )
+        )
         AND (
           $1 = ''
           OR t.service_ticket_id::TEXT ILIKE $2
@@ -304,7 +319,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
           t.reported_date ASC,
           t.service_ticket_id ASC
-        LIMIT $6 OFFSET $7;
+        LIMIT $5 OFFSET $6;
         `,
         [...params, limit, offset]
       ),

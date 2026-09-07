@@ -55,14 +55,13 @@ function ServiceRequestsPage() {
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const view = (searchParams.get("view") as TicketView) || "attention";
   const search = searchParams.get("search") ?? "";
-  // Reported-date range, both ends optional and both in the URL alongside the
-  // view and the search, so a filtered queue survives opening a ticket and
-  // coming back - and can be pasted to somebody else.
-  const fromDate = searchParams.get("from") ?? "";
-  const toDate = searchParams.get("to") ?? "";
+  // The day a ticket was closed - completed, cancelled or unresolved. In the
+  // URL alongside the view and the search, so a filtered queue survives
+  // opening a ticket and coming back, and can be pasted to somebody else.
+  const closedOn = searchParams.get("closedOn") ?? "";
   const page = Math.max(Number.parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
   const updateListParams = useCallback((
-    patch: Partial<Record<"view" | "search" | "page" | "from" | "to", string | null>>
+    patch: Partial<Record<"view" | "search" | "page" | "closedOn", string | null>>
   ) => {
     setLoading(true);
     setSearchParams(
@@ -79,9 +78,28 @@ function ServiceRequestsPage() {
   }, [setSearchParams]);
   const setView = (value: TicketView) => updateListParams({ view: value, page: null });
   const setSearch = (value: string) => updateListParams({ search: value || null, page: null });
-  const setFromDate = (value: string) => updateListParams({ from: value || null, page: null });
-  const setToDate = (value: string) => updateListParams({ to: value || null, page: null });
-  const clearDates = () => updateListParams({ from: null, to: null, page: null });
+  /**
+   * Picking a close date on the default view also widens it to All.
+   *
+   * Needs Attention is open/assigned/in_progress/unresolved, so asking it
+   * "what closed on Tuesday" can only ever answer with the unresolved ones -
+   * every completed and cancelled ticket is filtered out before the date is
+   * even considered. Landing on that page, choosing a date and seeing almost
+   * nothing reads as a broken filter rather than as two filters disagreeing.
+   *
+   * Only the default is overridden. Somebody who has deliberately chosen
+   * Completed, or Cancelled, meant it, and keeps it.
+   */
+  const setClosedOn = (value: string) =>
+    updateListParams({
+      closedOn: value || null,
+      page: null,
+      // Spread rather than a null branch: updateListParams DELETES any key it
+      // is handed a falsy value for, so passing view:null here would clear a
+      // view the user had deliberately chosen and drop them back to the
+      // default. The key has to be absent, not empty.
+      ...(value && view === "attention" ? { view: "all" } : {}),
+    });
   const setPage = useCallback((value: React.SetStateAction<number>) => {
     const next = typeof value === "function" ? value(page) : value;
     updateListParams({ page: next > 1 ? String(next) : null });
@@ -106,7 +124,7 @@ function ServiceRequestsPage() {
   const loadTickets = useCallback(async () => {
     try {
       setLoading(true); setError("");
-      const response = await apiFetch(`/api/service-tickets?view=${view}&search=${encodeURIComponent(search)}&page=${page}&from=${fromDate}&to=${toDate}`);
+      const response = await apiFetch(`/api/service-tickets?view=${view}&search=${encodeURIComponent(search)}&page=${page}&closedOn=${closedOn}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not load service tickets.");
       setTickets(data.tickets); setSummary(data.summary); setPagination(data.pagination);
@@ -114,7 +132,7 @@ function ServiceRequestsPage() {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load service tickets.");
     } finally { setLoading(false); }
-  }, [fromDate, page, search, setPage, toDate, view]);
+  }, [closedOn, page, search, setPage, view]);
 
   useEffect(() => { const timeout = window.setTimeout(loadTickets, 180); return () => window.clearTimeout(timeout); }, [loadTickets]);
 
@@ -217,7 +235,7 @@ function ServiceRequestsPage() {
       {error && <div className="rounded-lg bg-error/10 p-4 text-sm text-error">{error}</div>}
 
       <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4"><div className="flex flex-wrap gap-2">{([['attention', 'Needs Attention'], ['open', 'Open'], ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['unresolved', 'Unresolved'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => setView(value)} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><div className="flex flex-wrap items-center justify-between gap-3"><DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} onClear={clearDates} /><SearchInput value={search} onChange={setSearch} placeholder="Search ticket, customer, phone, issue..." /></div></div>
+        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4"><div className="flex flex-wrap gap-2">{([['attention', 'Needs Attention'], ['open', 'Open'], ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['unresolved', 'Unresolved'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => setView(value)} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><div className="flex flex-wrap items-center justify-between gap-3"><ClosedOnFilter value={closedOn} onChange={setClosedOn} /><SearchInput value={search} onChange={setSearch} placeholder="Search ticket, customer, phone, issue..." /></div></div>
         <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-surface-container-low"><tr><Heading>Ticket</Heading><Heading>Customer</Heading><Heading>Problem</Heading><Heading>Priority</Heading><Heading>Status</Heading><Heading>Technician</Heading><Heading>Reported</Heading><th className="px-5 py-4" /></tr></thead><tbody className="divide-y divide-surface-container">{!loading && tickets.map((ticket) => <tr key={ticket.service_ticket_id} className="cursor-pointer transition hover:bg-surface-container-low/60" onClick={() => openEdit(ticket)}><td className="px-5 py-4 font-mono text-sm font-medium text-primary">#{ticket.service_ticket_id}</td><td className="px-5 py-4"><p className="font-semibold text-on-surface">{ticket.customer_name || (ticket.legacy_customer_id ? "Legacy Customer" : "Customer unavailable")}</p>{/* The address is on the row because a technician reading this queue
        is deciding where to drive, and making them open each profile to
        find that out is the slowest possible way to answer it. */}
@@ -241,36 +259,29 @@ const idleChip = "rounded-full bg-surface-container px-4 py-2 text-xs font-mediu
 
 function Summary({ label, value, icon, tone }: { label: string; value: number; icon: string; tone: "primary" | "positive" | "warning" | "stalled" }) { const tones = { primary: "bg-info/10 text-info", positive: "bg-tertiary/10 text-tertiary", warning: "bg-warning-container text-warning", stalled: "bg-stalled/10 text-stalled" }; return <div className="rounded-xl bg-surface-container-lowest p-4 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p><p className="mt-1 text-2xl font-medium text-on-surface">{value.toLocaleString()}</p></div><span className={`material-symbols-outlined rounded-lg p-2 ${tones[tone]}`}>{icon}</span></div></div>; }
 /**
- * Reported-date range for the queue below.
+ * One day, answering "what did we close on it".
  *
- * Two open-ended dates rather than presets like "this week". The questions
- * this actually gets asked are "what came in while I was out" and "what did
- * we do in August", and a preset list never has the range somebody wants.
+ * Closed means completed, cancelled or unresolved - the three endings a
+ * ticket has - and the date is when that ending was recorded, not when the
+ * customer first reported the fault.
  *
  * It sits in the section toolbar next to the search, not up with the summary
  * cards, because like the search it narrows the TABLE. The counts above stay
- * whole - they are the standing workload, and a Needs Attention figure that
- * moved every time somebody looked at last month would stop being the number
- * anyone could act on.
+ * whole: they are the standing workload, and a Needs Attention figure that
+ * moved every time somebody looked at last Tuesday would stop being the
+ * number anyone could act on.
  */
-function DateRangeFilter({
-  from, to, onFrom, onTo, onClear,
+function ClosedOnFilter({
+  value, onChange,
 }: {
-  from: string; to: string;
-  onFrom: (value: string) => void; onTo: (value: string) => void; onClear: () => void;
+  value: string; onChange: (value: string) => void;
 }) {
-  const dateClass = "rounded-lg bg-surface-container-low px-3 py-2 text-sm text-on-surface";
-
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-medium uppercase tracking-wider text-on-surface-variant">Reported</span>
-      {/* max stops the two ends crossing in the picker itself, so the range is
-          hard to get wrong rather than merely rejected once it already is. */}
-      <input type="date" aria-label="Reported on or after" value={from} max={to || undefined} onChange={(event) => onFrom(event.target.value)} className={dateClass} />
-      <span className="text-sm text-on-surface-variant">to</span>
-      <input type="date" aria-label="Reported on or before" value={to} min={from || undefined} onChange={(event) => onTo(event.target.value)} className={dateClass} />
-      {(from || to) && (
-        <button type="button" onClick={onClear} aria-label="Clear the date range" className="rounded-full p-1.5 text-on-surface-variant transition hover:bg-surface-container">
+      <span className="text-xs font-medium uppercase tracking-wider text-on-surface-variant">Closed on</span>
+      <input type="date" aria-label="Closed on this date" value={value} onChange={(event) => onChange(event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-2 text-sm text-on-surface" />
+      {value && (
+        <button type="button" onClick={() => onChange("")} aria-label="Clear the date" className="rounded-full p-1.5 text-on-surface-variant transition hover:bg-surface-container">
           <span className="material-symbols-outlined text-lg">close</span>
         </button>
       )}
