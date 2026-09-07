@@ -212,6 +212,20 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Invalid customer ID." });
   }
 
+  // Reported-date range, both ends optional. Reported rather than service
+  // date because this is the queue as the office thinks about it - "what came
+  // in last week" - and a ticket that has not been serviced yet has no
+  // service date to be found by at all.
+  const fromDate = cleanText(req.query.from);
+  const toDate = cleanText(req.query.to);
+
+  if (!validDate(fromDate) || !validDate(toDate)) {
+    return res.status(400).json({ error: "Choose a valid date range." });
+  }
+  if (fromDate && toDate && fromDate > toDate) {
+    return res.status(400).json({ error: "That date range ends before it starts." });
+  }
+
   const viewClauses: Record<string, string> = {
     // Unresolved sits in here on purpose. It is a closed status, but it is the
     // one closed status that still owes the customer a visit, so leaving it
@@ -229,10 +243,12 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   const limit = 10;
 
   try {
-    const params = [search, searchPattern, customerId];
+    const params = [search, searchPattern, customerId, fromDate, toDate];
     const whereSql = `
       WHERE ${viewClause}
         AND ($3::INTEGER IS NULL OR t.customer_id = $3)
+        AND (NULLIF($4, '')::DATE IS NULL OR t.reported_date >= NULLIF($4, '')::DATE)
+        AND (NULLIF($5, '')::DATE IS NULL OR t.reported_date <= NULLIF($5, '')::DATE)
         AND (
           $1 = ''
           OR t.service_ticket_id::TEXT ILIKE $2
@@ -288,7 +304,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
           t.reported_date ASC,
           t.service_ticket_id ASC
-        LIMIT $4 OFFSET $5;
+        LIMIT $6 OFFSET $7;
         `,
         [...params, limit, offset]
       ),

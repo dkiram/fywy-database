@@ -475,7 +475,7 @@ function JobQueue({
             <p className="mt-3 text-sm text-white/70">
               {tab === "jobs"
                 ? "Queue clear. The office can send your next batch."
-                : "Nothing finished in the last week."}
+                : "Nothing finished yet."}
             </p>
           </div>
         )}

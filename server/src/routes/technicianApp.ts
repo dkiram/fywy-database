@@ -56,6 +56,20 @@ const PASSCODE_MAX_ATTEMPTS = 5;
 /** How long a locked credential stays locked. */
 const PASSCODE_LOCK_MINUTES = 15;
 
+/**
+ * How many finished jobs the phone gets back.
+ *
+ * The Finished tab answers "did that one save?" and "what did I write on the
+ * Barrett job", both of which are about the last few hours. A technician's
+ * whole history is neither useful on a phone nor free: every row carries the
+ * customer, the address and up to five history notes, fetched again on every
+ * refresh over whatever signal exists at the side of a road.
+ *
+ * A fixed count rather than a time window, so somebody back from leave still
+ * sees their last fifteen instead of an empty tab.
+ */
+const FINISHED_JOBS_SHOWN = 15;
+
 /** Statuses a technician is allowed to move a job into from the phone. */
 const technicianStatuses = ["in_progress", "completed", "unresolved"] as const;
 type TechnicianStatus = (typeof technicianStatuses)[number];
@@ -446,9 +460,8 @@ technicianAppRouter.get("/tech/jobs", requireTechnician, async (req, res) => {
         ${selectJob}
         WHERE t.assigned_employee_id = $1
           AND t.status IN ('completed', 'unresolved', 'cancelled')
-          AND t.updated_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
         ORDER BY t.updated_at DESC
-        LIMIT 25;
+        LIMIT ${FINISHED_JOBS_SHOWN};
         `,
         [technician.employeeId]
       ),
