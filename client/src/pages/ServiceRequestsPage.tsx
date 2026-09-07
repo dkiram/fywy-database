@@ -55,13 +55,14 @@ function ServiceRequestsPage() {
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const view = (searchParams.get("view") as TicketView) || "attention";
   const search = searchParams.get("search") ?? "";
-  // The day a ticket was closed - completed, cancelled or unresolved. In the
-  // URL alongside the view and the search, so a filtered queue survives
-  // opening a ticket and coming back, and can be pasted to somebody else.
-  const closedOn = searchParams.get("closedOn") ?? "";
+  // One day, read through whichever view is selected: the chip picks the
+  // status, the date asks when a ticket moved into it. In the URL alongside
+  // the view and the search, so a filtered queue survives opening a ticket and
+  // coming back, and can be pasted to somebody else.
+  const onDate = searchParams.get("onDate") ?? "";
   const page = Math.max(Number.parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
   const updateListParams = useCallback((
-    patch: Partial<Record<"view" | "search" | "page" | "closedOn", string | null>>
+    patch: Partial<Record<"view" | "search" | "page" | "onDate", string | null>>
   ) => {
     setLoading(true);
     setSearchParams(
@@ -79,27 +80,21 @@ function ServiceRequestsPage() {
   const setView = (value: TicketView) => updateListParams({ view: value, page: null });
   const setSearch = (value: string) => updateListParams({ search: value || null, page: null });
   /**
-   * Picking a close date on the default view also widens it to All.
+   * The date no longer overrides the view.
    *
-   * Needs Attention is open/assigned/in_progress/unresolved, so asking it
-   * "what closed on Tuesday" can only ever answer with the unresolved ones -
-   * every completed and cancelled ticket is filtered out before the date is
-   * even considered. Landing on that page, choosing a date and seeing almost
-   * nothing reads as a broken filter rather than as two filters disagreeing.
+   * It used to: the date meant "closed on", so asking Needs Attention - which
+   * is open/assigned/in_progress/unresolved - what closed on Tuesday could
+   * only ever answer with the unresolved ones, and that read as a broken
+   * filter rather than as two filters disagreeing. Picking a date therefore
+   * widened the default view to All to get out of the way.
    *
-   * Only the default is overridden. Somebody who has deliberately chosen
-   * Completed, or Cancelled, meant it, and keeps it.
+   * Now the date means "moved into whatever this chip names", so every chip
+   * has an answer of its own and there is nothing to get out of the way of.
+   * Needs Attention plus a date is the tickets that landed in the attention
+   * pile that day, which is a question worth being able to ask.
    */
-  const setClosedOn = (value: string) =>
-    updateListParams({
-      closedOn: value || null,
-      page: null,
-      // Spread rather than a null branch: updateListParams DELETES any key it
-      // is handed a falsy value for, so passing view:null here would clear a
-      // view the user had deliberately chosen and drop them back to the
-      // default. The key has to be absent, not empty.
-      ...(value && view === "attention" ? { view: "all" } : {}),
-    });
+  const setOnDate = (value: string) =>
+    updateListParams({ onDate: value || null, page: null });
   const setPage = useCallback((value: React.SetStateAction<number>) => {
     const next = typeof value === "function" ? value(page) : value;
     updateListParams({ page: next > 1 ? String(next) : null });
@@ -124,7 +119,7 @@ function ServiceRequestsPage() {
   const loadTickets = useCallback(async () => {
     try {
       setLoading(true); setError("");
-      const response = await apiFetch(`/api/service-tickets?view=${view}&search=${encodeURIComponent(search)}&page=${page}&closedOn=${closedOn}`);
+      const response = await apiFetch(`/api/service-tickets?view=${view}&search=${encodeURIComponent(search)}&page=${page}&onDate=${onDate}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not load service tickets.");
       setTickets(data.tickets); setSummary(data.summary); setPagination(data.pagination);
@@ -132,7 +127,7 @@ function ServiceRequestsPage() {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load service tickets.");
     } finally { setLoading(false); }
-  }, [closedOn, page, search, setPage, view]);
+  }, [onDate, page, search, setPage, view]);
 
   useEffect(() => { const timeout = window.setTimeout(loadTickets, 180); return () => window.clearTimeout(timeout); }, [loadTickets]);
 
@@ -235,7 +230,7 @@ function ServiceRequestsPage() {
       {error && <div className="rounded-lg bg-error/10 p-4 text-sm text-error">{error}</div>}
 
       <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4"><div className="flex flex-wrap gap-2">{([['attention', 'Needs Attention'], ['open', 'Open'], ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['unresolved', 'Unresolved'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => setView(value)} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><div className="flex flex-wrap items-center justify-between gap-3"><ClosedOnFilter value={closedOn} onChange={setClosedOn} /><SearchInput value={search} onChange={setSearch} placeholder="Search ticket, customer, phone, issue..." /></div></div>
+        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4"><div className="flex flex-wrap gap-2">{([['attention', 'Needs Attention'], ['open', 'Open'], ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['unresolved', 'Unresolved'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => setView(value)} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><div className="flex flex-wrap items-center justify-between gap-3"><OnDateFilter view={view} value={onDate} onChange={setOnDate} /><SearchInput value={search} onChange={setSearch} placeholder="Search ticket, customer, phone, issue..." /></div></div>
         <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-surface-container-low"><tr><Heading>Ticket</Heading><Heading>Customer</Heading><Heading>Problem</Heading><Heading>Priority</Heading><Heading>Status</Heading><Heading>Technician</Heading><Heading>Reported</Heading><th className="px-5 py-4" /></tr></thead><tbody className="divide-y divide-surface-container">{!loading && tickets.map((ticket) => <tr key={ticket.service_ticket_id} className="cursor-pointer transition hover:bg-surface-container-low/60" onClick={() => openEdit(ticket)}><td className="px-5 py-4 font-mono text-sm font-medium text-primary">#{ticket.service_ticket_id}</td><td className="px-5 py-4"><p className="font-semibold text-on-surface">{ticket.customer_name || (ticket.legacy_customer_id ? "Legacy Customer" : "Customer unavailable")}</p>{/* The address is on the row because a technician reading this queue
        is deciding where to drive, and making them open each profile to
        find that out is the slowest possible way to answer it. */}
@@ -259,11 +254,33 @@ const idleChip = "rounded-full bg-surface-container px-4 py-2 text-xs font-mediu
 
 function Summary({ label, value, icon, tone }: { label: string; value: number; icon: string; tone: "primary" | "positive" | "warning" | "stalled" }) { const tones = { primary: "bg-info/10 text-info", positive: "bg-tertiary/10 text-tertiary", warning: "bg-warning-container text-warning", stalled: "bg-stalled/10 text-stalled" }; return <div className="rounded-xl bg-surface-container-lowest p-4 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p><p className="mt-1 text-2xl font-medium text-on-surface">{value.toLocaleString()}</p></div><span className={`material-symbols-outlined rounded-lg p-2 ${tones[tone]}`}>{icon}</span></div></div>; }
 /**
- * One day, answering "what did we close on it".
+ * What the date means, per view.
  *
- * Closed means completed, cancelled or unresolved - the three endings a
- * ticket has - and the date is when that ending was recorded, not when the
- * customer first reported the fault.
+ * The date filters on the day a ticket MOVED INTO the status the chip names,
+ * so its label has to move with the chip - a single fixed word would be wrong
+ * for six of the eight. Reading "Opened on" above the box under the Open chip
+ * is the whole explanation of what the filter does, delivered where it is
+ * needed instead of in a tooltip nobody opens.
+ *
+ * Needs Attention names four statuses rather than one, so it gets the honest
+ * general word: something moved into the pile that day.
+ */
+const ON_DATE_LABELS: Record<TicketView, string> = {
+  attention: "Moved on",
+  open: "Opened on",
+  assigned: "Assigned on",
+  in_progress: "Started on",
+  completed: "Completed on",
+  unresolved: "Unresolved on",
+  cancelled: "Cancelled on",
+  all: "Any change on",
+};
+
+/**
+ * One day, answering "when did a ticket reach the status beside it".
+ *
+ * The date is when that move was recorded, not when the customer first
+ * reported the fault - the Reported column already answers that one.
  *
  * It sits in the section toolbar next to the search, not up with the summary
  * cards, because like the search it narrows the TABLE. The counts above stay
@@ -271,15 +288,16 @@ function Summary({ label, value, icon, tone }: { label: string; value: number; i
  * moved every time somebody looked at last Tuesday would stop being the
  * number anyone could act on.
  */
-function ClosedOnFilter({
-  value, onChange,
+function OnDateFilter({
+  view, value, onChange,
 }: {
-  value: string; onChange: (value: string) => void;
+  view: TicketView; value: string; onChange: (value: string) => void;
 }) {
+  const label = ON_DATE_LABELS[view] ?? ON_DATE_LABELS.attention;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-medium uppercase tracking-wider text-on-surface-variant">Closed on</span>
-      <input type="date" aria-label="Closed on this date" value={value} onChange={(event) => onChange(event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-2 text-sm text-on-surface" />
+      <span className="text-xs font-medium uppercase tracking-wider text-on-surface-variant">{label}</span>
+      <input type="date" aria-label={`${label} this date`} value={value} onChange={(event) => onChange(event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-2 text-sm text-on-surface" />
       {value && (
         <button type="button" onClick={() => onChange("")} aria-label="Clear the date" className="rounded-full p-1.5 text-on-surface-variant transition hover:bg-surface-container">
           <span className="material-symbols-outlined text-lg">close</span>

@@ -245,9 +245,11 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Invalid customer ID." });
   }
 
-  // One day, asking "what did we close on it" - completed, cancelled or
-  // unresolved.
-  const closedOn = cleanText(req.query.closedOn);
+  // One day. What it asks depends on the view beside it: the chip picks the
+  // status, the date asks when a ticket moved INTO that status. So Open plus a
+  // date is "what came in that day", Assigned is "what we dispatched", and
+  // Completed is "what we finished".
+  const onDate = cleanText(req.query.onDate);
 
   // This screen is the repair queue. Installations live on the same rail but
   // belong to the applications page, and letting them wash into here would
@@ -255,7 +257,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   // customers - which is the clutter this was meant to avoid.
   const listJobType = cleanText(req.query.jobType) || "repair";
 
-  if (!validDate(closedOn)) {
+  if (!validDate(onDate)) {
     return res.status(400).json({ error: "Choose a valid date." });
   }
 
@@ -272,23 +274,65 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     cancelled: "t.status = 'cancelled'",
     all: "TRUE",
   };
-  const viewClause = viewClauses[view] ?? viewClauses.attention;
+  // The statuses each view's date looks for a move INTO. Keyed by the same
+  // names as viewClauses above so a chip and its date can never drift apart,
+  // and read with Object.hasOwn so that a view of "__proto__" arriving in the
+  // query string resolves to the default instead of to Object.prototype.
+  //
+  // Needs Attention is not excluded. It names four statuses instead of one,
+  // but "which tickets landed in the attention pile that day" is a question
+  // with an answer, and giving one chip no date filter when every other chip
+  // has one is harder to explain than just answering it.
+  const viewTransitionStatuses: Record<string, string[]> = {
+    attention: ["open", "assigned", "in_progress", "unresolved"],
+    open: ["open"],
+    assigned: ["assigned"],
+    in_progress: ["in_progress"],
+    completed: ["completed"],
+    unresolved: ["unresolved"],
+    cancelled: ["cancelled"],
+    all: ["open", "assigned", "in_progress", "completed", "unresolved", "cancelled"],
+  };
+  const safeView = Object.hasOwn(viewTransitionStatuses, view) ? view : "attention";
+  const viewClause = viewClauses[safeView] ?? viewClauses.attention;
+  // Built from the map above, never from the request, so no status name
+  // reaches the SQL as text from the query string.
+  const transitionList = viewTransitionStatuses[safeView]
+    .map((status) => `'${status}'`)
+    .join(", ");
   const limit = 10;
 
   try {
-    const params = [search, searchPattern, customerId, closedOn];
+    const params = [search, searchPattern, customerId, onDate];
     const whereSql = `
-      WHERE ${viewClause}
+      WHERE ${onDate ? "TRUE" : viewClause}
         ${listJobType === "all" ? "" : `AND t.job_type = '${listJobType === "installation" ? "installation" : "repair"}'`}
         AND ($3::INTEGER IS NULL OR t.customer_id = $3)
-        -- "Closed on this day" is read from the history rather than from the
-        -- ticket, because the ticket cannot answer it. completed_at is set
-        -- only for 'completed' and is deliberately NULL for cancelled and
-        -- unresolved; service_date is often NULL on an unresolved job, since
-        -- nobody got through the gate; and updated_at moves every time anyone
-        -- edits a note months later. service_ticket_history is append-only and
-        -- records the moment each status was actually set, which is the only
-        -- one of the four that means what is being asked here.
+        -- The day a ticket moved into the status the chip names, read from the
+        -- history rather than from the ticket, because the ticket cannot
+        -- answer it. A ticket carries only where it is now, not when it got
+        -- there: completed_at is set only for 'completed' and is NULL for
+        -- cancelled and unresolved, service_date is often NULL on an
+        -- unresolved job since nobody got through the gate, and updated_at
+        -- moves every time anyone edits a note months later.
+        -- service_ticket_history is append-only and records the moment each
+        -- status was actually set.
+        --
+        -- from_status IS DISTINCT FROM to_status is what separates a real
+        -- move from a note. Adding a note without changing the status still
+        -- writes a history row, and that row carries the status the ticket
+        -- already had - so without this test, a note typed on a job in
+        -- December would read as a job completed in December, which is the
+        -- exact drift that ruled updated_at out above. IS DISTINCT FROM
+        -- rather than <> so that a 'created' row, whose from_status is NULL,
+        -- still counts as the ticket arriving in its first status.
+        --
+        -- When a date is set the view clause above is dropped for TRUE and
+        -- this takes over the filtering, because the two ask about different
+        -- moments. The chip alone means "where is it now"; the chip with a
+        -- date means "when did it get there", and a ticket assigned on Tuesday
+        -- is still the answer to "what did we dispatch Tuesday" after the
+        -- technician starts it on Wednesday and it stops being 'assigned'.
         --
         -- Jamaica time, not UTC: a job closed at 7pm on the 5th is closed on
         -- the 5th to the person who closed it, and would otherwise be found
@@ -299,7 +343,8 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
             SELECT 1
             FROM public.service_ticket_history h
             WHERE h.service_ticket_id = t.service_ticket_id
-              AND h.to_status IN ('completed', 'cancelled', 'unresolved')
+              AND h.to_status IN (${transitionList})
+              AND h.from_status IS DISTINCT FROM h.to_status
               AND (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE
                   = NULLIF($4, '')::DATE
           )
@@ -408,12 +453,20 @@ serviceTicketsRouter.get(
           -- Who marked it done, taken from the history rather than the ticket:
           -- updated_by_employee_id is whoever touched it last, which is not the
           -- same person once anybody edits a note after the work was finished.
+          --
+          -- The history needs the same care, for the same reason. A note added
+          -- to an already-completed ticket writes a row whose to_status is
+          -- still 'completed', and being the newest such row it would win this
+          -- ORDER BY - crediting the completion to whoever last edited a note,
+          -- which is precisely what reading the ticket was avoiding. Only a
+          -- row that actually changed the status is a completion.
           (
             SELECT CONCAT_WS(' ', e.first_name, e.last_name)
             FROM public.service_ticket_history h
             LEFT JOIN public.employees e ON e.employee_id = h.changed_by_employee_id
             WHERE h.service_ticket_id = t.service_ticket_id
               AND h.to_status = 'completed'
+              AND h.from_status IS DISTINCT FROM h.to_status
             ORDER BY h.changed_at DESC, h.service_ticket_history_id DESC
             LIMIT 1
           ) AS completed_by_name
