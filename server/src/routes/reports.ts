@@ -27,7 +27,6 @@ const ADMIN_ONLY_REPORTS = new Set([
   "payments-by-date",
   "payments-by-location",
   "nightly-disconnection-runs",
-  "technician-jobs",
 ]);
 
 // Sortable columns, per report. The client sends a column key; this maps it to
