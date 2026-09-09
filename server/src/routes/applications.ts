@@ -149,6 +149,31 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
     );
     const limit = 5;
 
+    /**
+     * The state of the most recent installation sent out for an application.
+     *
+     * Written as a correlated subquery rather than reading the LATERAL join in
+     * the list SELECT, because the same clause has to work in the COUNT query
+     * and the summary query, and neither of those joins anything.
+     *
+     * Only the latest one counts. A first visit that found nobody home is
+     * history; what the office needs to act on is where this stands now.
+     */
+    const latestInstall = (alias: string) => `
+      (SELECT t.status FROM public.service_tickets t
+        WHERE t.application_id = ${alias}.application_id
+          AND t.job_type = 'installation'
+        ORDER BY t.service_ticket_id DESC
+        LIMIT 1)
+    `;
+
+    const openInstall = (alias: string) => `
+      EXISTS (SELECT 1 FROM public.service_tickets t
+        WHERE t.application_id = ${alias}.application_id
+          AND t.job_type = 'installation'
+          AND t.status IN ('assigned', 'in_progress'))
+    `;
+
     const viewClauses: Record<string, string> = {
       active: `
         (
@@ -165,6 +190,24 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
       serviced: "a.status = 'serviced'",
       closed: "a.status IN ('cancelled', 'declined')",
       unresolved: "a.status = 'legacy_unresolved'",
+
+      // The three installation states, which the office was previously having
+      // to find by opening applications one at a time.
+      //
+      // Note these are about the INSTALLATION, not the application: all three
+      // hold applications that are still 'pending', because the office has
+      // not activated them yet. 'legacy_unresolved' above is a different
+      // thing entirely - an artefact of the Access import - which is why the
+      // tab for it is now labelled Legacy rather than Unresolved.
+      out_for_install: openInstall("a"),
+
+      // Done, and waiting on the office. This is the queue that matters most:
+      // a technician has finished and nobody has activated the customer yet.
+      installed: `a.status = 'pending' AND ${latestInstall("a")} = 'completed'`,
+
+      // The technician got there and could not do it - nobody home, no answer.
+      // It needs re-sending, and until now there was no way to see it at all.
+      install_failed: `a.status = 'pending' AND ${latestInstall("a")} = 'unresolved'`,
       // Applications confirmed to be an existing customer. Deliberately absent
       // from every other view, including 'active' and 'review', so confirming
       // one clears it off the queue. Still reachable here and under 'all'.
@@ -330,7 +373,18 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           )
           AND application_date <
             (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE - 14
-        )::INTEGER AS overdue
+        )::INTEGER AS overdue,
+        COUNT(*) FILTER (
+          WHERE ${openInstall("applications")}
+        )::INTEGER AS out_for_install,
+        COUNT(*) FILTER (
+          WHERE status = 'pending'
+            AND ${latestInstall("applications")} = 'completed'
+        )::INTEGER AS installed,
+        COUNT(*) FILTER (
+          WHERE status = 'pending'
+            AND ${latestInstall("applications")} = 'unresolved'
+        )::INTEGER AS install_failed
       FROM public.applications;
     `);
 

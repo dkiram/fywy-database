@@ -93,6 +93,9 @@ type ApplicationSummary = {
   closed: number;
   confirmed: number;
   overdue: number;
+  out_for_install: number;
+  installed: number;
+  install_failed: number;
 };
 
 type ApplicationPagination = {
@@ -107,8 +110,17 @@ type ApplicationView =
   | "review"
   | "serviced"
   | "closed"
+  // The Access import artefact, NOT a technician who could not install. The
+  // two were both called "unresolved" and that was genuinely confusing on
+  // screen, so this one is labelled Legacy in the tab strip.
   | "unresolved"
   | "confirmed"
+  // Where an installation sent to a technician has got to. All three hold
+  // applications that are still pending, because the office has not activated
+  // them yet.
+  | "out_for_install"
+  | "installed"
+  | "install_failed"
   | "all";
 
 type OltOption = {
@@ -151,6 +163,9 @@ const emptySummary: ApplicationSummary = {
   closed: 0,
   confirmed: 0,
   overdue: 0,
+  out_for_install: 0,
+  installed: 0,
+  install_failed: 0,
 };
 
 const emptyPagination: ApplicationPagination = {
@@ -784,8 +799,13 @@ function ApplicationsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryCard label="Active Queue" value={summary.active} icon="pending_actions" />
+        {/* The one the office is waiting on. An installation finished
+            yesterday afternoon shows up here this morning without anybody
+            reading down the table to find it. */}
+        <SummaryCard label="Installed, To Activate" value={summary.installed} icon="task_alt" />
+        <SummaryCard label="Out For Install" value={summary.out_for_install} icon="engineering" />
         <SummaryCard label="Over 14 Days" value={summary.overdue} icon="schedule" warning />
       </div>
 
@@ -810,13 +830,26 @@ function ApplicationsPage() {
               [
                 ["active", "Active"],
                 ["review", "Match Review"],
+                // Where an installation has got to. Installed is the one that
+                // matters day to day: a technician has finished and the office
+                // has not activated the customer yet, which is exactly the
+                // thing that used to be found only by opening applications one
+                // at a time to look.
+                ["out_for_install", "Out for Install"],
+                ["installed", "Installed"],
+                ["install_failed", "Couldn't Install"],
                 ["serviced", "Serviced"],
                 ["closed", "Closed"],
                 // No tab for confirmed_existing. It is an artefact of the
                 // one-off Access import and will only ever hold a handful of
                 // rows; the status, who confirmed it and when all stay in the
                 // database, and the rows are still reachable under All.
-                ["unresolved", "Unresolved"],
+                //
+                // Labelled Legacy, not Unresolved. 'legacy_unresolved' is an
+                // import artefact and has nothing to do with a technician who
+                // could not install - two different things sharing one word on
+                // screen was worse than a slightly longer label.
+                ["unresolved", "Legacy"],
                 ["all", "All"],
               ] as Array<[ApplicationView, string]>
             ).map(([value, label]) => (
@@ -882,7 +915,14 @@ function ApplicationsPage() {
                       <p>{formatDate(application.application_date)}</p>
                       {application.is_overdue && <span className="mt-1 inline-flex rounded-full bg-warning-container px-2 py-0.5 text-[11px] font-medium text-warning">Over 14 days</span>}
                     </td>
-                    <td className="px-6 py-4"><StatusBadge status={application.status} /></td>
+                    <td className="px-6 py-4">
+                      <StatusBadge status={application.status} />
+                      {/* The installation, on the row. This is the whole point
+                          of the change: whether a job came back done, failed
+                          or is still out has to be readable down a column,
+                          not one drawer at a time. */}
+                      <InstallBadge application={application} />
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex justify-end gap-2">
                         {canDecide && canTakeDecision(application) && (
@@ -1704,6 +1744,46 @@ function DrawerSection({ title, icon, children }: { title: string; icon: string;
  * job done, this is where the office sees it and knows the address is ready
  * to be activated.
  */
+/**
+ * The installation state of one application, small enough to sit in a table row.
+ *
+ * Renders nothing when no technician has ever been sent, so an ordinary
+ * application looks exactly as it did - the badge only appears once there is
+ * something to say.
+ *
+ * Only shown while the application is still pending. Once the office
+ * activates it the installation is history, and a "Done" badge on a serviced
+ * row would just be repeating the status beside it.
+ */
+function InstallBadge({ application }: { application: ApplicationRecord }) {
+  const status = application.install_status;
+
+  if (!status || application.status !== "pending") return null;
+
+  const who = application.install_technician_name;
+
+  const shown: Record<string, { label: string; className: string }> = {
+    assigned: { label: "Out for install", className: "bg-info/10 text-info" },
+    in_progress: { label: "Being installed", className: "bg-warning-container text-warning" },
+    // Solid, matching the unresolved pill on the service ticket queue, so the
+    // one state that needs somebody to act reads the same in both places.
+    unresolved: { label: "Couldn't install", className: "bg-stalled text-white" },
+    completed: { label: "Installed", className: "bg-tertiary/10 text-tertiary" },
+  };
+
+  const badge = shown[status];
+  if (!badge) return null;
+
+  return (
+    <span
+      className={`mt-1.5 inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium ${badge.className}`}
+      title={who ? `${badge.label} — ${who}` : badge.label}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 function InstallationDispatchRow({
   application,
   onDispatch,
