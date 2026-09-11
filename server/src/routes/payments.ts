@@ -8,6 +8,7 @@ import {
   insertStatusHistory,
   resolvePendingReconnectionRequests,
 } from "./accounts.js";
+import { ensureMonthlyChargeForPayment } from "./paymentMonthCharge.js";
 
 const paymentsRouter = Router();
 
@@ -355,6 +356,23 @@ paymentsRouter.post(
         });
       }
 
+      // A Monthly Fee payment must land on a charge for the month it pays
+      // for. If that month was never billed, bill it now; if the customer was
+      // cut off that month, refuse - see paymentMonthCharge.ts for why.
+      let raisedCharge: { dueDate: string; amount: string } | null = null;
+      if (paymentType === "Monthly Fee") {
+        const outcome = await ensureMonthlyChargeForPayment(client, {
+          customerId,
+          monthPaid,
+          employeeId: employee.employeeId,
+        });
+        if (outcome.kind === "refused") {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: outcome.message });
+        }
+        if (outcome.kind === "charged") raisedCharge = outcome;
+      }
+
       const paymentResult = await client.query(
         `
         INSERT INTO public.payments (
@@ -510,6 +528,25 @@ paymentsRouter.post(
         reconnectionPending = true;
       }
 
+      if (raisedCharge) {
+        await client.query(
+          `
+          INSERT INTO public.audit_logs (
+            employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason, occurred_at
+          ) VALUES ($1, $2, 'Raised unbilled monthly charge at payment', 'customer', $3,
+            'monthly_charge', NULL, $4, $5, CURRENT_TIMESTAMP);
+          `,
+          [
+            employee.employeeId,
+            `${employee.firstName} ${employee.lastName}`,
+            String(customerId),
+            `${raisedCharge.amount} due ${raisedCharge.dueDate}`,
+            `Monthly Fee payment ${paymentId} was tagged to ${monthPaid}, which had no charge on the ledger.`,
+          ]
+        );
+      }
+
       await client.query(
         `
         INSERT INTO public.audit_logs (
@@ -554,7 +591,7 @@ paymentsRouter.post(
 
       const receipt = await loadReceipt(client, paymentId);
 
-      res.status(201).json({ payment: receipt, reconnectionPending });
+      res.status(201).json({ payment: receipt, reconnectionPending, raisedCharge });
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Could not record payment:", error);
