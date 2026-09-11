@@ -59,9 +59,9 @@ type AutomaticRunOptions = {
    */
   maxGraceEndDate?: string;
   /**
-   * Explicit one-time override for legacy balances that still contain an
-   * unverified imported ledger entry. Scheduled runs never set this, so their
-   * existing billing-safety gate remains closed.
+   * Use the current delinquent balance, including imported/unverified entries,
+   * by default. An explicit false retains the stricter maintenance-run filter.
+   * This policy must be identical at selection and locked preflight.
    */
   includeUnverifiedLedgerEntries?: boolean;
   /**
@@ -578,6 +578,9 @@ async function processCandidate(
 export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOptions = {}) {
   if (!isEnabled()) return { ran: false, reason: "disabled" };
 
+  // Apply the same billing policy to candidate selection and the final payment-locked check.
+  options = { ...options, includeUnverifiedLedgerEntries: options.includeUnverifiedLedgerEntries ?? true };
+
   const clock = jamaicaClock();
   const dayBlock = disconnectionDayBlock(clock.date);
   if (dayBlock.blocked) {
@@ -640,8 +643,8 @@ export async function runAutomaticDelinquentDisconnect(options: AutomaticRunOpti
        LEFT JOIN public.olts olt ON olt.olt_id = assignment.olt_id
        WHERE billing.eligible_for_disconnection
          AND customer.hidden_from_app = FALSE
-         -- Estimated legacy ledger balances remain visible to staff, but are
-         -- not authoritative enough for an unattended disconnection.
+         -- Scheduled runs follow the current delinquent balance. Maintenance
+         -- callers can explicitly request verified ledger entries only.
          AND ($4::BOOLEAN OR billing.unverified_entries = 0)
          -- An explicitly confirmed one-time run can require an actionable
          -- mapping up front instead of spending its cap on known safe skips.

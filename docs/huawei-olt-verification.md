@@ -209,9 +209,11 @@ location, an already-saved serial, and exact customer description. Only exact ma
 marked verified; missing ONTs and serial/name mismatches remain unverified and
 are counted without printing customer identity data.
 
-Automatic disconnection additionally requires `unverified_entries = 0` in the
-billing view. Legacy estimated ledger entries remain visible to staff but can
-never be used as the basis for an unattended service cutoff.
+Automatic disconnection uses the current delinquent balance, including imported
+and unverified ledger entries (policy confirmed September 9, 2026). These flags
+do not by themselves block the nightly run. Active holds, payment rechecks,
+verified mappings, live identity checks, and unresolved-action safeguards still
+apply. Maintenance callers can explicitly require verified ledger entries only.
 
 ### Explicit same-day continuation
 
