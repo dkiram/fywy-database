@@ -26,6 +26,7 @@ type Customer = {
   package_service_type: "cable" | "internet" | "cable_internet" | null;
   package_plan_tier: string | null;
   package_speed_mbps: number | null;
+  additional_cable_boxes: number;
   monthly_fee: string | null;
 
   application_date: string | null;
@@ -112,6 +113,9 @@ const [error, setError] = useState("");
 
 const [packages, setPackages] = useState<PackageOption[]>([]);
 const [editingSubscription, setEditingSubscription] = useState(false);
+const [confirmingCableBox, setConfirmingCableBox] = useState<"add" | "remove" | null>(null);
+const [savingCableBox, setSavingCableBox] = useState(false);
+const [cableBoxError, setCableBoxError] = useState("");
 const [selectedPackageId, setSelectedPackageId] = useState("");
 const [subscriptionReason, setSubscriptionReason] = useState("");
 const [savingSubscription, setSavingSubscription] = useState(false);
@@ -1039,13 +1043,16 @@ if (error || !customer) {
 
                 <p className="text-xs leading-5 opacity-75">
                   The catalog price applies to future billing anniversaries. Existing ledger charges are not changed.
+                  {customer.additional_cable_boxes > 0 && (
+                    <> Cable plans retain the extra box charge of J${(customer.additional_cable_boxes * 1000).toLocaleString()}/month. Switching to internet only removes the extra boxes and their recurring charge.</>
+                  )}
                 </p>
                 {subscriptionError && <p className="text-sm text-error">{subscriptionError}</p>}
 
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    disabled={savingSubscription}
+                    disabled={savingSubscription || savingCableBox}
                     onClick={async () => {
                       try {
                         setSavingSubscription(true);
@@ -1076,10 +1083,12 @@ if (error || !customer) {
                           package_plan_tier: data.planTier,
                           package_speed_mbps: data.speedMbps,
                           monthly_fee: data.monthlyFee,
+                          additional_cable_boxes: data.additionalCableBoxes,
                           default_monthly_charge:
                             chosen?.default_monthly_charge ?? data.monthlyFee,
                         } : current);
                         setEditingSubscription(false);
+                        setConfirmingCableBox(null);
                         setSubscriptionReason("");
                       } catch (error) {
                         setSubscriptionError(
@@ -1095,7 +1104,7 @@ if (error || !customer) {
                   </button>
                   <button
                     type="button"
-                    disabled={savingSubscription}
+                    disabled={savingSubscription || savingCableBox}
                     onClick={() => {
                       setEditingSubscription(false);
                       setSubscriptionError("");
@@ -1105,6 +1114,77 @@ if (error || !customer) {
                     Cancel
                   </button>
                 </div>
+              </div>
+            )}
+
+            {(customer.package_service_type === "cable" || customer.package_service_type === "cable_internet") && (
+              <div className="mt-4 space-y-3 border-t border-white/20 pt-4">
+                <div>
+                  <p className="text-sm font-semibold">Number of cable boxes: {1 + customer.additional_cable_boxes}</p>
+                  <p className="mt-1 text-xs opacity-75">
+                    1 included · {customer.additional_cable_boxes} additional · J${(customer.additional_cable_boxes * 1000).toLocaleString()}/month extra
+                  </p>
+                </div>
+                {canManageSubscription && customer.status !== "terminated" && (
+                  confirmingCableBox ? (
+                    <div className="space-y-3 rounded-xl bg-black/15 p-4">
+                      <p className="text-sm">
+                        {confirmingCableBox === "add" ? "Add" : "Remove"} one cable box? Your monthly bill will {confirmingCableBox === "add" ? "increase" : "decrease"} by J$1,000 to J${(Number(customer.monthly_fee) + (confirmingCableBox === "add" ? 1000 : -1000)).toLocaleString()}. Number of cable boxes: {customer.additional_cable_boxes + (confirmingCableBox === "add" ? 2 : 0)}.
+                      </p>
+                      <p className="text-xs leading-5 opacity-75">
+                        Applies to future billing anniversaries. Staff record installation fees and payments separately.
+                      </p>
+                      {cableBoxError && <p role="alert" className="text-sm text-white">{cableBoxError}</p>}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={savingCableBox || savingSubscription}
+                          className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-primary disabled:opacity-60"
+                          onClick={async () => {
+                            setSavingCableBox(true);
+                            setCableBoxError("");
+                            try {
+                              const response = await apiFetch(`/api/customers/${customer.customer_id}/cable-boxes`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ expectedCount: customer.additional_cable_boxes, action: confirmingCableBox }),
+                              });
+                              const data = await response.json();
+                              if (!response.ok) throw new Error(data.error || "Could not update cable boxes.");
+                              setCustomer((current) => current ? {
+                                ...current,
+                                additional_cable_boxes: data.additionalCableBoxes,
+                                monthly_fee: data.monthlyFee,
+                              } : current);
+                              setConfirmingCableBox(null);
+                            } catch (error) {
+                              setCableBoxError(error instanceof Error ? error.message : "Could not update cable boxes.");
+                            } finally {
+                              setSavingCableBox(false);
+                            }
+                          }}
+                        >{savingCableBox ? "Saving..." : confirmingCableBox === "add" ? "Confirm Add Cable Box" : "Confirm Remove Cable Box"}</button>
+                        <button type="button" disabled={savingCableBox} onClick={() => setConfirmingCableBox(null)} className="rounded-lg bg-black/20 px-4 py-2 text-sm disabled:opacity-60">Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                    <button
+                      type="button"
+                      disabled={savingSubscription || customer.monthly_fee == null}
+                      onClick={() => { setCableBoxError(""); setConfirmingCableBox("add"); }}
+                      className="w-full rounded-lg bg-white py-3 font-medium text-primary transition hover:bg-white/90 disabled:opacity-60"
+                    >Add Cable Box · +J$1,000/month</button>
+                    <button
+                      type="button"
+                      disabled={savingSubscription || customer.monthly_fee == null || customer.additional_cable_boxes === 0}
+                      onClick={() => { setCableBoxError(""); setConfirmingCableBox("remove"); }}
+                      className="w-full rounded-lg bg-white py-3 font-medium text-primary transition hover:bg-white/90 disabled:opacity-60"
+                    >Remove Cable Box · −J$1,000/month</button>
+                    {customer.additional_cable_boxes === 0 && <p className="text-xs opacity-75">The included cable box cannot be removed.</p>}
+                    </div>
+                  )
+                )}
               </div>
             )}
           </section>

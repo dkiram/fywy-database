@@ -1,5 +1,6 @@
 /** Configures the Express API, session authentication, core customer routes, and routers. */
 import express from "express";
+import { addCableBox, removeCableBox, CableBoxError, hasCable, CABLE_BOX_MONTHLY_FEE } from "./cableBoxes.js";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -846,6 +847,7 @@ app.get("/api/customers/:customerId", requireAuth, async (req, res) => {
         c.pole_box_number,
         c.port_number,
 
+        c.additional_cable_boxes,
         p.name AS package_name,
         p.service_type AS package_service_type,
         p.plan_tier AS package_plan_tier,
@@ -2992,6 +2994,39 @@ app.patch(
   }
 );
 
+app.post(
+  "/api/customers/:customerId/cable-boxes",
+  requireAuth,
+  requireRole("admin", "head_office"),
+  async (req, res) => {
+    const customerId = Number(req.params.customerId);
+    if (!Number.isSafeInteger(customerId) || customerId <= 0) {
+      return res.status(400).json({ error: "Invalid customer ID" });
+    }
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const action = req.body.action ?? "add";
+      if (action !== "add" && action !== "remove") {
+        throw new CableBoxError(400, "Invalid cable box action.");
+      }
+      const changeBox = action === "remove" ? removeCableBox : addCableBox;
+      const result = await changeBox(client, customerId, req.body.expectedCount, req.session.employee!);
+      await client.query("COMMIT");
+      res.json(result);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (error instanceof CableBoxError) {
+        return res.status(error.status).json({ error: error.message });
+      }
+      console.error("Could not update cable boxes:", error);
+      res.status(500).json({ error: "Could not update cable boxes." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 app.patch(
   "/api/customers/:customerId/subscription",
   requireAuth,
@@ -3020,7 +3055,7 @@ app.patch(
       await client.query("BEGIN");
 
       const customerResult = await client.query(
-        `SELECT c.customer_id, c.package_id, c.monthly_fee, c.status,
+        `SELECT c.customer_id, c.package_id, c.monthly_fee, c.status, c.additional_cable_boxes,
             old_package.name AS package_name
          FROM public.customers c
          LEFT JOIN public.packages old_package ON old_package.package_id = c.package_id
@@ -3053,7 +3088,8 @@ app.patch(
         });
       }
       const selectedPackage = packageResult.rows[0];
-      const newFee = Number(selectedPackage.default_monthly_charge).toFixed(2);
+      const additionalCableBoxes = hasCable(selectedPackage.service_type) ? customer.additional_cable_boxes : 0;
+      const newFee = (Number(selectedPackage.default_monthly_charge) + additionalCableBoxes * CABLE_BOX_MONTHLY_FEE).toFixed(2);
       if (
         Number(customer.package_id) === Number(selectedPackage.package_id) &&
         Number(customer.monthly_fee) === Number(newFee)
@@ -3064,9 +3100,9 @@ app.patch(
 
       await client.query(
         `UPDATE public.customers
-         SET package_id = $1, monthly_fee = $2
+         SET package_id = $1, monthly_fee = $2, additional_cable_boxes = $4
          WHERE customer_id = $3;`,
-        [selectedPackage.package_id, newFee, Number(customerId)]
+        [selectedPackage.package_id, newFee, Number(customerId), additionalCableBoxes]
       );
 
       await client.query(
@@ -3106,6 +3142,7 @@ app.patch(
         planTier: selectedPackage.plan_tier,
         speedMbps: selectedPackage.speed_mbps,
         monthlyFee: newFee,
+        additionalCableBoxes,
         effectiveDate: new Intl.DateTimeFormat("en-CA", {
           timeZone: "America/Jamaica",
           year: "numeric",
