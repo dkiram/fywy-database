@@ -1168,20 +1168,20 @@ if (error || !customer) {
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       disabled={savingSubscription || customer.monthly_fee == null}
                       onClick={() => { setCableBoxError(""); setConfirmingCableBox("add"); }}
-                      className="w-full rounded-lg bg-white py-3 font-medium text-primary transition hover:bg-white/90 disabled:opacity-60"
-                    >Add Cable Box · +J$1,000/month</button>
+                      className="min-w-0 rounded-lg bg-white px-2 py-3 text-xs font-medium text-primary transition hover:bg-white/90 disabled:opacity-60"
+                    >Add Cable Box</button>
                     <button
                       type="button"
                       disabled={savingSubscription || customer.monthly_fee == null || customer.additional_cable_boxes === 0}
                       onClick={() => { setCableBoxError(""); setConfirmingCableBox("remove"); }}
-                      className="w-full rounded-lg bg-white py-3 font-medium text-primary transition hover:bg-white/90 disabled:opacity-60"
-                    >Remove Cable Box · −J$1,000/month</button>
-                    {customer.additional_cable_boxes === 0 && <p className="text-xs opacity-75">The included cable box cannot be removed.</p>}
+                      className="min-w-0 rounded-lg bg-white px-2 py-3 text-xs font-medium text-primary transition hover:bg-white/90 disabled:opacity-60"
+                    >Remove Cable Box</button>
+                    {customer.additional_cable_boxes === 0 && <p className="col-span-2 text-xs opacity-75">The included cable box cannot be removed.</p>}
                     </div>
                   )
                 )}
