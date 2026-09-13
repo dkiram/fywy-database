@@ -37,3 +37,13 @@ deploy/deploy.conf
 staff.json
 staff*.json
 !deploy/staff.example.json
+
+# Local design work and one-off account maintenance notes
+/kitchen-design/
+/scratchpad/disconnection-diagnosis-2026-09-09.txt
+/scratchpad/fix-javid-giovanie-2026-09.sql
+/scratchpad/fix-miriam-11321-credit-2026-09.sql
+/scratchpad/fix-phantom-credits-2026-09.sql
+/scratchpad/mark-hanover-olt-disconnected-2026-09.sql
+/scratchpad/mark-hanover-olt-disconnected-batch2-2026-09.sql
+/scratchpad/zero-credits-2026-09.sql

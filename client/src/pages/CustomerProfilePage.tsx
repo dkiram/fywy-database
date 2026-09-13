@@ -1129,7 +1129,7 @@ if (error || !customer) {
                   confirmingCableBox ? (
                     <div className="space-y-3 rounded-xl bg-black/15 p-4">
                       <p className="text-sm">
-                        {confirmingCableBox === "add" ? "Add" : "Remove"} one cable box? Your monthly bill will {confirmingCableBox === "add" ? "increase" : "decrease"} by J$1,000 to J${(Number(customer.monthly_fee) + (confirmingCableBox === "add" ? 1000 : -1000)).toLocaleString()}. Number of cable boxes: {customer.additional_cable_boxes + (confirmingCableBox === "add" ? 2 : 0)}.
+                        {confirmingCableBox === "add" ? "This monthly bill will add J$1,000 to" : "Remove one cable box? Your monthly bill will decrease by J$1,000 to"} J${(Number(customer.monthly_fee) + (confirmingCableBox === "add" ? 1000 : -1000)).toLocaleString()}. Number of cable boxes: {customer.additional_cable_boxes + (confirmingCableBox === "add" ? 2 : 0)}.
                       </p>
                       <p className="text-xs leading-5 opacity-75">
                         Applies to future billing anniversaries. Staff record installation fees and payments separately.
