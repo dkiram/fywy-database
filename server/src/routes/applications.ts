@@ -288,6 +288,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         install.status AS install_status,
         install.resolution_notes AS install_notes,
         install.updated_at AS install_updated_at,
+        install.assigned_employee_id AS install_technician_id,
         CONCAT_WS(' ', install_tech.first_name, install_tech.last_name)
           AS install_technician_name
       FROM public.applications a
@@ -2055,6 +2056,150 @@ applicationsRouter.post(
       await client.query("ROLLBACK").catch(() => undefined);
       console.error("Could not dispatch the installation:", error);
       res.status(500).json({ error: "Could not send this to a technician." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/**
+ * Moves an installation that is still out to a different technician.
+ *
+ * It leaves the first technician's phone on their next refresh and appears on
+ * the second's, and the latch trigger (migration 079) re-reads both queues.
+ *
+ * Only while it is out - assigned or in progress. Once it is done or failed
+ * there is nothing to move; a failed one is re-sent from scratch instead,
+ * which keeps the record of who could not get in the first time.
+ *
+ * Head Office and admin only, the same people who can decide an application.
+ * Branch staff can see where a job is; changing who is driving to it is a
+ * dispatch decision.
+ */
+applicationsRouter.patch(
+  "/applications/:applicationId/dispatch",
+  requireApplicationDecisionRole,
+  async (req, res) => {
+    const employee = req.session.employee!;
+    const { applicationId } = req.params;
+
+    if (typeof applicationId !== "string" || !/^\d+$/.test(applicationId)) {
+      return res.status(400).json({ error: "Invalid application ID." });
+    }
+
+    const assigneeText = String(req.body?.assignedEmployeeId ?? "").trim();
+    if (!/^\d+$/.test(assigneeText)) {
+      return res.status(400).json({ error: "Choose a technician." });
+    }
+    const assignedEmployeeId = Number(assigneeText);
+
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // Locked, so a technician tapping Start on their phone at the same
+      // moment cannot have that write land on a row that has just been
+      // handed to somebody else.
+      const ticketResult = await client.query(
+        `SELECT t.service_ticket_id, t.status, t.assigned_employee_id,
+                CONCAT_WS(' ', e.first_name, e.last_name) AS current_name
+         FROM public.service_tickets t
+         LEFT JOIN public.employees e ON e.employee_id = t.assigned_employee_id
+         WHERE t.application_id = $1
+           AND t.job_type = 'installation'
+           AND t.status IN ('assigned', 'in_progress')
+         FOR UPDATE OF t;`,
+        [Number(applicationId)]
+      );
+      const ticket = ticketResult.rows[0];
+
+      if (!ticket) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "This application is not out with a technician right now.",
+        });
+      }
+
+      if (Number(ticket.assigned_employee_id) === assignedEmployeeId) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: `It is already with ${ticket.current_name}.`,
+        });
+      }
+
+      const technicianResult = await client.query(
+        `SELECT employee_id, first_name, last_name
+         FROM public.employees
+         WHERE employee_id = $1 AND is_active = TRUE AND role = 'technician';`,
+        [assignedEmployeeId]
+      );
+      const technician = technicianResult.rows[0];
+
+      if (!technician) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Selected technician is unavailable." });
+      }
+
+      // The receiving technician's installation cap. Moving a job is still
+      // giving somebody work.
+      const queue = await readTechnicianQueue(client, assignedEmployeeId, "installation");
+
+      if (queue && !queue.canTakeWork) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: queueFullMessage(queue) });
+      }
+
+      const newName = `${technician.first_name} ${technician.last_name}`;
+
+      // Back to 'assigned' whatever it was. If the first technician had tapped
+      // Start, that progress was theirs; the new one has not been to the
+      // address yet, and their phone should show it as new work.
+      await client.query(
+        `UPDATE public.service_tickets
+         SET assigned_employee_id = $1,
+             status = 'assigned',
+             updated_by_employee_id = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE service_ticket_id = $3;`,
+        [assignedEmployeeId, employee.employeeId, ticket.service_ticket_id]
+      );
+
+      const note = `Moved from ${ticket.current_name || "unassigned"} to ${newName}`;
+
+      await client.query(
+        `INSERT INTO public.service_ticket_history
+          (service_ticket_id, event_type, from_status, to_status, note, changed_by_employee_id)
+         VALUES ($1, $2, $3, 'assigned', $4, $5);`,
+        [
+          ticket.service_ticket_id,
+          ticket.status === "assigned" ? "updated" : "status_changed",
+          ticket.status,
+          note,
+          employee.employeeId,
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO public.audit_logs
+          (employee_id, actor_name, action, entity_type, entity_id, field_name, old_value, new_value)
+         VALUES ($1, $2, 'Moved installation to another technician', 'application', $3, 'installation', $4, $5);`,
+        [
+          employee.employeeId,
+          `${employee.firstName} ${employee.lastName}`,
+          String(applicationId),
+          ticket.current_name,
+          newName,
+        ]
+      );
+
+      await client.query("COMMIT");
+
+      res.json({ message: `Moved to ${newName}.` });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      console.error("Could not move the installation:", error);
+      res.status(500).json({ error: "Could not move this to another technician." });
     } finally {
       client.release();
     }

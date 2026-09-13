@@ -66,6 +66,7 @@ type ApplicationRecord = {
   install_status: string | null;
   install_notes: string | null;
   install_updated_at: string | null;
+  install_technician_id: number | null;
   install_technician_name: string | null;
 };
 
@@ -263,7 +264,9 @@ function ApplicationsPage() {
   const [noticeCustomerId, setNoticeCustomerId] = useState<number | null>(null);
   useScrollRestoration(!loading);
 
-  const [dispatching, setDispatching] = useState<ApplicationRecord | null>(null);
+  const [dispatching, setDispatching] = useState<
+    { application: ApplicationRecord; mode: "send" | "move" } | null
+  >(null);
   const [selected, setSelected] = useState<ApplicationRecord | null>(null);
   // Shown right after an installation fee is collected, and reprintable from
   // the application drawer afterwards.
@@ -1189,7 +1192,8 @@ function ApplicationsPage() {
                 {activeApplication.status === "pending" && (
                   <InstallationDispatchRow
                     application={activeApplication}
-                    onDispatch={() => setDispatching(activeApplication)}
+                    onDispatch={() => setDispatching({ application: activeApplication, mode: "send" })}
+                    onMove={() => setDispatching({ application: activeApplication, mode: "move" })}
                   />
                 )}
                 <div className="flex flex-col gap-3 sm:flex-row">
@@ -1299,7 +1303,8 @@ function ApplicationsPage() {
 
       {dispatching && (
         <DispatchInstallationModal
-          application={dispatching}
+          application={dispatching.application}
+          mode={dispatching.mode}
           onClose={() => setDispatching(null)}
           onSent={(message) => {
             setDispatching(null);
@@ -1787,9 +1792,11 @@ function InstallBadge({ application }: { application: ApplicationRecord }) {
 function InstallationDispatchRow({
   application,
   onDispatch,
+  onMove,
 }: {
   application: ApplicationRecord;
   onDispatch: () => void;
+  onMove: () => void;
 }) {
   const status = application.install_status;
   const out = status === "assigned" || status === "in_progress";
@@ -1814,13 +1821,27 @@ function InstallationDispatchRow({
   if (out) {
     return (
       <div className="rounded-xl bg-surface-container-low p-4">
-        <p className="flex items-center gap-2 text-sm font-semibold text-on-surface">
-          <span className="material-symbols-outlined text-lg">engineering</span>
-          {status === "in_progress" ? "Being installed" : "Sent"} — {application.install_technician_name || "a technician"}
-        </p>
-        <p className="mt-1 text-xs text-on-surface-variant">
-          It is on their phone. They mark it done when the service is in.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+              <span className="material-symbols-outlined text-lg">engineering</span>
+              {status === "in_progress" ? "Being installed" : "Sent"} — {application.install_technician_name || "a technician"}
+            </p>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              It is on their phone. They mark it done when the service is in.
+            </p>
+          </div>
+          {/* Only while it is out. This whole panel already sits behind the
+              admin / head-office footer, so the button inherits that gate
+              without checking again. */}
+          <button
+            type="button"
+            onClick={onMove}
+            className="shrink-0 rounded-lg bg-surface-container-high px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-highest"
+          >
+            Change technician
+          </button>
+        </div>
       </div>
     );
   }
@@ -1856,13 +1877,17 @@ function InstallationDispatchRow({
 /** Picks the technician, against the installation cap rather than the repair one. */
 function DispatchInstallationModal({
   application,
+  mode,
   onClose,
   onSent,
 }: {
   application: ApplicationRecord;
+  /** "send" creates the job; "move" hands an open one to somebody else. */
+  mode: "send" | "move";
   onClose: () => void;
   onSent: (message: string) => void;
 }) {
+  const moving = mode === "move";
   const [technicians, setTechnicians] = useState<
     Array<{
       employee_id: number; first_name: string; last_name: string;
@@ -1892,14 +1917,16 @@ function DispatchInstallationModal({
       const response = await apiFetch(
         `/api/applications/${application.application_id}/dispatch`,
         {
-          method: "POST",
+          // Same address, two verbs: POST sends a new job out, PATCH moves the
+          // one that is already out.
+          method: moving ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ assignedEmployeeId: chosen }),
         }
       );
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not send this out.");
+      if (!response.ok) throw new Error(data.error || (moving ? "Could not move this." : "Could not send this out."));
 
       onSent(`${application.name}: ${data.message}`);
     } catch (sendError) {
@@ -1912,7 +1939,7 @@ function DispatchInstallationModal({
   const everyoneFull = technicians.length > 0 && technicians.every((t) => !t.can_take_work);
 
   return (
-    <Modal title="Send for installation" onClose={() => !saving && onClose()}>
+    <Modal title={moving ? "Change technician" : "Send for installation"} onClose={() => !saving && onClose()}>
       <div className="space-y-5">
         <div className="rounded-xl bg-surface-container-low p-4">
           <p className="font-medium text-on-surface">{application.name}</p>
@@ -1920,13 +1947,24 @@ function DispatchInstallationModal({
             {application.address || "No address on file"}
             {application.telephone ? ` · ${application.telephone}` : ""}
           </p>
+          {moving && application.install_technician_name && (
+            <p className="mt-2 text-xs text-on-surface-variant">
+              Currently with <strong>{application.install_technician_name}</strong>. It leaves
+              their phone on the next refresh and shows as new work on the other.
+            </p>
+          )}
         </div>
 
         <Field label="Technician" required>
           <select value={chosen} onChange={(event) => setChosen(event.target.value)} className={inputClass}>
             <option value="">Choose a technician</option>
             {technicians.map((technician) => (
-              <option key={technician.employee_id} value={technician.employee_id} disabled={!technician.can_take_work}>
+              <option
+                key={technician.employee_id}
+                value={technician.employee_id}
+                // The one who already has it is not somebody to move it to.
+                disabled={!technician.can_take_work || (moving && technician.employee_id === application.install_technician_id)}
+              >
                 {technician.first_name} {technician.last_name} —{" "}
                 {technician.can_take_work
                   ? technician.open_jobs === 0
@@ -1954,7 +1992,7 @@ function DispatchInstallationModal({
 
         <ModalActions
           saving={saving || !chosen}
-          primaryLabel="Send"
+          primaryLabel={moving ? "Move" : "Send"}
           onCancel={onClose}
           onPrimary={send}
         />
