@@ -1,7 +1,7 @@
 /** Authenticates employees through the branded public entry screen. */
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import loginArtwork from "../assets/login-green-art.jpg";
+import loginArtwork from "../assets/login-green-art.webp";
 import { useAuth } from "../auth/AuthContext";
 
 function LoginPage() {
@@ -44,7 +44,7 @@ function LoginPage() {
         <section className="relative min-h-56 overflow-hidden rounded-[1.45rem] sm:min-h-72 lg:min-h-[680px]">
           <img
             src={loginArtwork}
-            alt="Abstract green layered forms"
+            alt="SPC Limited logo embroidered on a green staff polo"
             className="absolute inset-0 h-full w-full object-cover"
           />
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,18,22,0.08)_20%,rgba(4,18,22,0.84)_100%)]" />
