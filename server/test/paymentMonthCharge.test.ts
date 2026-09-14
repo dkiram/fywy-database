@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { PoolClient } from 'pg';
-import { ensureMonthlyChargeForPayment } from '../src/routes/paymentMonthCharge.js';
+import { ensureMonthlyChargeForPayment, paymentBalanceDeduction } from '../src/routes/paymentMonthCharge.js';
 
 // Drive the guard with a fake client: the first query is the month lookup and
 // returns whatever the test says the ledger looks like; any INSERT is
@@ -126,4 +126,28 @@ test('a charge the service-timeline trigger drops fails the payment instead of p
     () => ensureMonthlyChargeForPayment(client, input),
     /Could not raise the July 2026 charge for customer 6105/,
   );
+});
+
+test('explicit override accepts cut-off months without raising a charge', async () => {
+  for (const isPast of [true, false]) {
+    const { client, inserts } = fakeClient({ ...baseRow, is_past: isPast, service_on: false, status_then: 'disconnected' });
+    const outcome = await ensureMonthlyChargeForPayment(client, { ...input, overrideDisconnectedMonth: true });
+    assert.equal(outcome.kind, 'overridden');
+    assert.equal(inserts.length, 0);
+  }
+});
+
+test('past monthly payments only deduct outstanding debt, never creating credit', () => {
+  assert.equal(paymentBalanceDeduction('2500', '4000.00', true), '2500.00');
+  assert.equal(paymentBalanceDeduction('2500', '1000.25', true), '1000.25');
+  assert.equal(paymentBalanceDeduction('2500', '0.00', true), '0.00');
+  assert.equal(paymentBalanceDeduction('2500', '-500.00', true), '0.00');
+  assert.equal(paymentBalanceDeduction('0.01', '0.02', true), '0.01');
+  assert.equal(paymentBalanceDeduction('999999999998.99', '999999999998.98', true), '999999999998.98');
+});
+
+test('advance payments retain their full deduction, clearing debt before creating credit', () => {
+  for (const balance of ['4000.00', '1000.00', '0.00', '-500.00']) {
+    assert.equal(paymentBalanceDeduction('2500', balance, false), '2500.00');
+  }
 });

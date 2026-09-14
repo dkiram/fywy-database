@@ -8,7 +8,7 @@ import {
   insertStatusHistory,
   resolvePendingReconnectionRequests,
 } from "./accounts.js";
-import { ensureMonthlyChargeForPayment } from "./paymentMonthCharge.js";
+import { ensureMonthlyChargeForPayment, paymentBalanceDeduction } from "./paymentMonthCharge.js";
 
 const paymentsRouter = Router();
 
@@ -281,6 +281,7 @@ paymentsRouter.post(
     const amountText = String(req.body.amount ?? "").trim();
     const monthPaid = cleanText(req.body.monthPaid);
     const note = cleanText(req.body.note);
+    const overrideDisconnectedMonth = req.body.overrideDisconnectedMonth === true;
     const receiptDeliveryMethod = cleanText(req.body.receiptDeliveryMethod) || "physical";
     const receiptEmail = cleanText(req.body.receiptEmail).toLowerCase();
 
@@ -328,7 +329,7 @@ paymentsRouter.post(
         SELECT customer_id, email, status
         FROM public.customers
         WHERE customer_id = $1
-        FOR SHARE;
+        FOR UPDATE;
         `,
         [customerId]
       );
@@ -356,22 +357,44 @@ paymentsRouter.post(
         });
       }
 
-      // A Monthly Fee payment must land on a charge for the month it pays
-      // for. If that month was never billed, bill it now; if the customer was
-      // cut off that month, refuse - see paymentMonthCharge.ts for why.
+      // Keep the cut-off warning unless the cashier explicitly overrides it.
+      let overrideWarning: string | null = null;
       let raisedCharge: { dueDate: string; amount: string } | null = null;
       if (paymentType === "Monthly Fee") {
         const outcome = await ensureMonthlyChargeForPayment(client, {
           customerId,
           monthPaid,
           employeeId: employee.employeeId,
+          overrideDisconnectedMonth,
         });
         if (outcome.kind === "refused") {
           await client.query("ROLLBACK");
-          return res.status(409).json({ error: outcome.message });
+          return res.status(409).json({ error: outcome.message, code: "DISCONNECTED_PAYMENT_MONTH" });
         }
         if (outcome.kind === "charged") raisedCharge = outcome;
+        if (outcome.kind === "overridden") overrideWarning = outcome.message;
       }
+
+      // Generate any anniversary charge due through today before deciding
+      // whether the payment has completely cleared the account.
+      await client.query(
+        `SELECT public.spcl_generate_monthly_charges(
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+        );`
+      );
+
+      // Serialize payments for this customer and cap past-month deductions
+      // using the latest ledger balance, after generating charges due today.
+      const allocation = await client.query(
+        `SELECT COALESCE(SUM(amount), 0)::TEXT AS balance,
+          ($2 || '-01')::DATE < DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE AS is_past
+        FROM public.account_ledger_entries WHERE customer_id = $1;`,
+        [customerId, monthPaid || '2000-01'],
+      );
+      const appliedAmount = paymentBalanceDeduction(
+        amountText, allocation.rows[0].balance,
+        paymentType === "Monthly Fee" && allocation.rows[0].is_past,
+      );
 
       const paymentResult = await client.query(
         `
@@ -447,7 +470,7 @@ paymentsRouter.post(
         : paymentType === "Reconnection Fee"
           ? "reconnection_payment"
           : null;
-      if (ledgerEntryType) {
+      if (ledgerEntryType && Number(appliedAmount) > 0) {
         await client.query(
           `
           INSERT INTO public.account_ledger_entries (
@@ -463,7 +486,7 @@ paymentsRouter.post(
           [
             customerId,
             ledgerEntryType,
-            amountText,
+            appliedAmount,
             paymentType === "Monthly Fee" ? "Monthly fee payment" : "Reconnection fee payment",
             paymentId,
             employee.employeeId,
@@ -471,14 +494,6 @@ paymentsRouter.post(
           ]
         );
       }
-
-      // Generate any anniversary charge due through today before deciding
-      // whether the payment has completely cleared the account.
-      await client.query(
-        `SELECT public.spcl_generate_monthly_charges(
-          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
-        );`
-      );
 
       let reconnectionPending = false;
       const billingResult = await client.query(
@@ -547,6 +562,14 @@ paymentsRouter.post(
         );
       }
 
+      const paymentAuditNote = [
+        note,
+        overrideWarning ? `Disconnected month override for ${monthPaid}: ${overrideWarning}` : "",
+        paymentType === "Monthly Fee"
+          ? `Received J$${amountText}; applied J$${appliedAmount} to the balance. Past-month payments do not create credit.`
+          : "",
+      ].filter(Boolean).join("\n");
+
       await client.query(
         `
         INSERT INTO public.audit_logs (
@@ -579,7 +602,7 @@ paymentsRouter.post(
           `${employee.firstName} ${employee.lastName}`,
           String(paymentId),
           amountText,
-          note,
+          paymentAuditNote,
         ]
       );
 

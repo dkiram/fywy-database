@@ -15,11 +15,9 @@
  *      better evidence - customer and cashier agreed on it with the money on
  *      the desk - so we raise the charge for that month right here.
  *
- *   2. The month was one the customer was cut off. SPCL does not bill months
- *      a customer was disconnected (migration 054 enforces it), so money
- *      tagged to those months has nothing to land against. It cannot be
- *      right, so it is refused and the cashier records it against the months
- *      actually owed, or as a Reconnection Fee.
+ *   2. A cut-off month normally requires a warning. An explicit cashier
+ *      override accepts the payment without inventing a service charge.
+ *      The payment route caps past-month deductions at the outstanding balance.
  *
  * Called inside the payment transaction, before the payment is written, so a
  * refusal costs nothing and a raised charge commits with the payment or not
@@ -29,6 +27,7 @@ import type { PoolClient } from "pg";
 
 export type MonthChargeOutcome =
   | { kind: "ok"; reason: "already_charged" | "not_past" | "suspended" | "no_activation_date" | "no_rate" }
+  | { kind: "overridden"; message: string }
   | { kind: "charged"; dueDate: string; amount: string }
   | { kind: "refused"; message: string };
 
@@ -37,6 +36,7 @@ type MonthChargeInput = {
   /** YYYY-MM as typed on the payment form. */
   monthPaid: string;
   employeeId: number;
+  overrideDisconnectedMonth?: boolean;
 };
 
 const MONTH_LABEL = new Intl.DateTimeFormat("en-JM", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -137,13 +137,12 @@ export async function ensureMonthlyChargeForPayment(
 
   if (row.has_charge) return { kind: "ok", reason: "already_charged" };
 
-  // Rule 2: months the customer was cut off are never billed, so money cannot
-  // be taken for them. A suspension is the one "off" status that still bills
+  // Cut-off months require explicit acknowledgement before taking payment. A suspension is the one "off" status that still bills
   // (J$500 holding charges), so a suspended month is accepted as-is.
   if (row.service_on === false) {
     if (row.status_then === "suspended") return { kind: "ok", reason: "suspended" };
     return {
-      kind: "refused",
+      kind: input.overrideDisconnectedMonth ? "overridden" : "refused",
       message:
         `This account was ${describeStatus(row.status_then)} in ${describeMonth(row.month_start)}, ` +
         "and SPCL does not bill months a customer was cut off. Record this payment " +
@@ -193,4 +192,20 @@ export async function ensureMonthlyChargeForPayment(
     );
   }
   return { kind: "charged", dueDate: row.due_date, amount: row.monthly_fee };
+}
+
+/** Decimal strings stay exact even for the largest accepted receipt amounts. */
+export function paymentBalanceDeduction(amount: string, balance: string, isPastMonthlyPayment: boolean): string {
+  const cents = (value: string) => {
+    const negative = value.startsWith("-");
+    const [whole, fraction = ""] = value.replace(/^-/, "").split(".");
+    const result = BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
+    return negative ? -result : result;
+  };
+  let applied = cents(amount);
+  if (isPastMonthlyPayment) {
+    const outstanding = cents(balance);
+    applied = outstanding <= 0n ? 0n : applied < outstanding ? applied : outstanding;
+  }
+  return `${applied / 100n}.${String(applied % 100n).padStart(2, "0")}`;
 }

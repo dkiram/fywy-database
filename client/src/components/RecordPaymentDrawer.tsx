@@ -54,6 +54,12 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
   const [alternateEmail, setAlternateEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [overrideWarning, setOverrideWarning] = useState("");
+
+  useEffect(() => {
+    setOverrideWarning("");
+    setError("");
+  }, [paymentType, monthPaid, amount]);
 
   useEffect(() => {
     // Lock background scrolling while the full-height drawer is open.
@@ -76,6 +82,8 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
 
   const submitPayment = async (event: React.FormEvent) => {
     event.preventDefault();
+    const overrideDisconnectedMonth = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("name") === "overrideDisconnectedMonth";
+    if (saving) return;
     try {
       if (!receiptDeliveryMethod) {
         setError("Ask the customer to choose email or physical receipt delivery.");
@@ -94,6 +102,7 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           paymentType,
+          overrideDisconnectedMonth: overrideDisconnectedMonth && Boolean(overrideWarning),
           amount,
           monthPaid: paymentType === "Monthly Fee" ? monthPaid : "",
           note,
@@ -102,7 +111,13 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not record payment.");
+      if (!response.ok) {
+        if (data.code === "DISCONNECTED_PAYMENT_MONTH") {
+          setOverrideWarning(data.error);
+          return;
+        }
+        throw new Error(data.error || "Could not record payment.");
+      }
       onRecorded(data.payment);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Could not record payment.");
@@ -238,6 +253,13 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
               </div>
             </div>
 
+            {overrideWarning && (
+              <div role="alert" className="rounded-lg bg-error/10 p-3 text-sm font-medium text-error">
+                <p>{overrideWarning}</p>
+                <p className="mt-2">You can override this warning if the month is correct. Past-month payments only reduce the outstanding balance; any excess does not become credit. Advance payments can still create credit after the balance is cleared.</p>
+                <button type="submit" name="overrideDisconnectedMonth" disabled={saving} className="mt-3 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary disabled:opacity-50">Override and add</button>
+              </div>
+            )}
             {error && <p className="rounded-lg bg-error/10 p-3 text-sm font-medium text-error">{error}</p>}
           </div>
 
