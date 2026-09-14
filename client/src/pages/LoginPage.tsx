@@ -35,11 +35,11 @@ function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-sidebar px-4 py-6 text-on-surface sm:px-6 lg:flex lg:items-center lg:px-10 lg:py-10">
-      <div aria-hidden="true" className="pointer-events-none absolute -left-44 -top-44 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
-      <div aria-hidden="true" className="pointer-events-none absolute -bottom-56 right-0 h-[32rem] w-[32rem] rounded-full bg-[#173d43]/55 blur-3xl" />
+    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(ellipse_at_85%_45%,var(--color-primary)_0%,#203e3e_45%,#0b1c2d_100%)] px-4 py-6 text-on-surface sm:px-6 lg:flex lg:items-center lg:px-10 lg:py-10">
+      <div aria-hidden="true" className="pointer-events-none absolute -left-44 -top-44 h-96 w-96 rounded-full bg-primary/35 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-56 right-0 h-[32rem] w-[32rem] rounded-full bg-primary/50 blur-3xl" />
 
-      <main className="relative mx-auto grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white/10 bg-[#102336] p-2 shadow-[0_32px_90px_rgba(0,0,0,0.42)] sm:p-3 lg:grid-cols-[minmax(0,1.18fr)_minmax(390px,0.82fr)]">
+      <main className="relative mx-auto grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(120deg,#102b31_0%,#294b49_60%,var(--color-primary)_100%)] p-2 shadow-[0_32px_90px_rgba(0,0,0,0.42)] sm:p-3 lg:grid-cols-[minmax(0,1.18fr)_minmax(390px,0.82fr)]">
         {/* Brand artwork becomes a compact banner above the form on smaller screens. */}
         <section className="relative min-h-56 overflow-hidden rounded-[1.45rem] sm:min-h-72 lg:min-h-[680px]">
           <img
