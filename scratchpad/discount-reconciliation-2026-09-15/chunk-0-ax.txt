@@ -1,0 +1,1749 @@
+Window: "SPCL_PROD_WRITE : spcl_db - PostgreSQL 17.11", App: TablePlus.
+0 standard window SPCL_PROD_WRITE : spcl_db - PostgreSQL 17.11, Secondary Actions: Raise
+	1 split group
+		2 container
+			3 search text field (settable) Search for item...
+				4 button search
+			5 button
+			6 scroll area Secondary Actions: Scroll Up, Scroll Down
+				7 outline (showing 85-124 of 124 items)
+					8 row (selectable, collapsed) Description: table dark, Value: customer_account_groups, Secondary Actions: Expand
+						9 disclosure triangle 0
+					10 row (selectable, collapsed) Description: table dark, Value: customer_billing_start, Secondary Actions: Expand
+						11 disclosure triangle 0
+					12 row (selectable, collapsed) Description: view dark, Value: customer_billing_status, Secondary Actions: Expand
+						13 disclosure triangle 0
+					14 row (selectable, collapsed) Description: table dark, Value: customer_email_notification_runs, Secondary Actions: Expand
+						15 disclosure triangle 0
+					16 row (selectable, collapsed) Description: table dark, Value: customer_email_notifications, Secondary Actions: Expand
+						17 disclosure triangle 0
+					18 row (selectable, collapsed) Description: table dark, Value: customer_merge_plan, Secondary Actions: Expand
+						19 disclosure triangle 0
+					20 row (selectable, collapsed) Description: table dark, Value: customer_notes, Secondary Actions: Expand
+						21 disclosure triangle 0
+					22 row (selectable, collapsed) Description: view dark, Value: customer_offline_monthly_charge_review, Secondary Actions: Expand
+						23 disclosure triangle 0
+					24 row (selectable, collapsed) Description: table dark, Value: customer_ont_assignments, Secondary Actions: Expand
+						25 disclosure triangle 0
+					26 row (selectable, collapsed) Description: table dark, Value: customer_rate_history, Secondary Actions: Expand
+						27 disclosure triangle 0
+					28 row (selectable, collapsed) Description: view dark, Value: customer_suspension_episodes, Secondary Actions: Expand
+						29 disclosure triangle 0
+					30 row (selectable, collapsed) Description: view dark, Value: customer_suspension_status, Secondary Actions: Expand
+						31 disclosure triangle 0
+					32 row (selectable, collapsed) Description: table dark, Value: customers, Secondary Actions: Expand
+						33 disclosure triangle 0
+					34 row (selectable, collapsed) Description: table dark, Value: cutover_snapshot, Secondary Actions: Expand
+						35 disclosure triangle 0
+					36 row (selectable, collapsed) Description: table dark, Value: disconnection_holds, Secondary Actions: Expand
+						37 disclosure triangle 0
+					38 row (selectable, collapsed) Description: table dark, Value: employees, Secondary Actions: Expand
+						39 disclosure triangle 0
+					40 row (selectable, collapsed) Description: table dark, Value: legacy_balance_rebuild, Secondary Actions: Expand
+						41 disclosure triangle 0
+					42 row (selectable, collapsed) Description: table dark, Value: locations, Secondary Actions: Expand
+						43 disclosure triangle 0
+					44 row (selectable, collapsed) Description: table dark, Value: login_sessions, Secondary Actions: Expand
+						45 disclosure triangle 0
+					46 row (selectable, collapsed) Description: table dark, Value: olt_action_attempts, Secondary Actions: Expand
+						47 disclosure triangle 0
+					48 row (selectable, collapsed) Description: table dark, Value: olt_automation_run_items, Secondary Actions: Expand
+						49 disclosure triangle 0
+					50 row (selectable, collapsed) Description: table dark, Value: olt_automation_runs, Secondary Actions: Expand
+						51 disclosure triangle 0
+					52 row (selectable, collapsed) Description: table dark, Value: olt_automation_save_jobs, Secondary Actions: Expand
+						53 disclosure triangle 0
+					54 row (selectable, collapsed) Description: table dark, Value: olt_reconnection_automation_jobs, Secondary Actions: Expand
+						55 disclosure triangle 0
+					56 row (selectable, collapsed) Description: table dark, Value: olts, Secondary Actions: Expand
+						57 disclosure triangle 0
+					58 row (selectable, collapsed) Description: table dark, Value: packages, Secondary Actions: Expand
+						59 disclosure triangle 0
+					60 row (selectable, collapsed) Description: table dark, Value: payments, Secondary Actions: Expand
+						61 disclosure triangle 0
+					62 row (selectable, collapsed) Description: view dark, Value: pole_box_usage, Secondary Actions: Expand
+						63 disclosure triangle 0
+					64 row (selectable, collapsed) Description: table dark, Value: pole_boxes, Secondary Actions: Expand
+						65 disclosure triangle 0
+					66 row (selectable, collapsed) Description: table dark, Value: receipt_email_deliveries, Secondary Actions: Expand
+						67 disclosure triangle 0
+					68 row (selectable, collapsed) Description: table dark, Value: reconnection_requests, Secondary Actions: Expand
+						69 disclosure triangle 0
+					70 row (selectable, collapsed) Description: table dark, Value: schema_migrations, Secondary Actions: Expand
+						71 disclosure triangle 0
+					72 row (selectable, collapsed) Description: table dark, Value: service_ticket_history, Secondary Actions: Expand
+						73 disclosure triangle 0
+					74 row (selectable, collapsed) Description: table dark, Value: service_tickets, Secondary Actions: Expand
+						75 disclosure triangle 0
+					76 row (selectable, collapsed) Description: table dark, Value: suspension_terms, Secondary Actions: Expand
+						77 disclosure triangle 0
+					78 row (selectable, collapsed) Description: table dark, Value: technician_phone_access, Secondary Actions: Expand
+						79 disclosure triangle 0
+					80 row (selectable, collapsed) Description: table dark, Value: technician_queue_state, Secondary Actions: Expand
+						81 disclosure triangle 0
+					82 row (selectable, collapsed) Description: table dark, Value: user_sessions, Secondary Actions: Expand
+						83 disclosure triangle 0
+					84 row (selectable, collapsed) Description: table dark, Value: waiver_requests, Secondary Actions: Expand
+						85 disclosure triangle 0
+				86 scroll bar (settable, float) 1
+					87 value indicator (settable, float) 1
+					88 increment arrow button
+					89 decrement arrow button
+					90 increment page button
+					91 decrement page button
+			92 pop up button Help: Name space, Value: public
+			93 container Add new items
+				94 button add
+				95 button
+		96 toggle button Items, Value: on
+		97 toggle button Queries, Value: off
+		98 toggle button History, Value: off
+		99 splitter (disabled, settable, float) 240
+		100 split group
+			101 image tableBackground2 dark
+			102 button Button, Help: SQL Query
+			103 button Button, Help: public.customer_billing_status
+			104 button Description: go back, Help: Go back (⌘⌃←)
+			105 button (disabled) Description: go forward, Help: Go forward (⌘⌃→)
+			106 button Split Right
+			107 split group
+				108 scroll area Secondary Actions: Scroll Up, Scroll Down
+					109 text entry area (settable) SELECT jsonb_agg(jsonb_build_array(customer_id,name,status,monthly_fee,activation_date,balance,target_balance,recent_net_paid,last_paid,recent_receipts,recent_unlabelled,future_paid,oldest_unpaid_due_date,grace_end_date,hidden_from_app,payment_fingerprint,recent_evidence)) AS payload FROM (SELECT * FROM spcl_reconciliation_20260915_snapshot WHERE balance>target_balance OR (status='disconnected' AND (recent_net_paid>0 OR future_paid>0)) ORDER BY customer_id LIMIT 100 OFFSET 0) p
+					110 scroll bar (disabled, settable, float) 0
+					111 ruler
+				112 button SQL Editor settings
+				113 container Run statements
+					114 button Run Current
+					115 button
+				116 text 482 characters selected
+				117 container Beautify statements ⌘I
+					118 button Beautify ⌘I
+					119 button
+				120 container Beautify statements ⌘I
+					121 button No limit
+					122 button
+				123 splitter (disabled, settable, float) 315
+				124 container
+					125 scroll area
+						126 table
+							127 row (selectable)
+								128 text field (settable) Placeholder: EMPTY, Value: [[3, "Karl Smith/Joan Smith", "disconnected", 4500.00, "2016-01-04", 6000.00, 0.00, 4500.00, "2026-08-10", 1, 0, 0.00, "2026-09-04", "2026-09-14", false, "dcb567c16cbde27bc8e12cead7b4a5bf", {"175765": [4500.00, "2026-08-10", "2026-08-10"]}], [19, "Rosemarie Bennett", "active", 4000.00, "2016-01-05", 4000.00, 0.00, 8000.00, "2026-08-27", 2, 0, 0.00, "2026-09-05", "2026-09-15", false, "17713976d41aa8271069bd29daf2ccf7", {"434875": [4000.00, "2026-08-27", "2026-07-01"], "434877": [4000.00, "2026-08-27", "2026-08-01"]}], [23, "Everton Russell", "active", 4000.00, "2016-01-06", 4000.00, 0.00, 4000.00, "2026-08-19", 1, 0, 0.00, "2026-09-06", "2026-09-16", false, "10309ec73255ace07a661e06fb90eadc", {"432273": [4000.00, "2026-08-19", "2026-07-01"]}], [33, "William Gordon", "active", 4500.00, "2016-01-06", 0.00, -4500.00, 4500.00, "2026-08-27", 1, 0, 4500.00, null, null, false, "8a009161daf473a8f3c8f232ac5db126", {"434902": [4500.00, "2026-08-27", "2026-09-01"]}], [35, "Deta Honeygan", "active", 4000.00, "2016-01-06", 0.00, -4000.00, 8000.00, "2026-09-14", 2, 0, 4000.00, null, null, false, "040f70ecd8f1e45d42e953b38ea3e88f", {"199415": [4000.00, "2026-08-03", "2026-08-03"], "441580": [4000.00, "2026-09-14", "2026-09-01"]}], [36, "Floydeen Morgan", "active", 2500.00, "2016-01-07", 1500.00, -2500.00, 7500.00, "2026-08-27", 3, 0, 2500.00, "2026-09-07", "2026-09-17", false, "8a833fa834b8c19f95832114275a0fc2", {"434978": [2500.00, "2026-08-27", "2026-07-01"], "434979": [2500.00, "2026-08-27", "2026-08-01"], "434980": [2500.00, "2026-08-27", "2026-09-01"]}], [38, "Jennifer Williams", "active", 3500.00, "2016-01-09", 3500.00, 0.00, 6000.00, "2026-08-18", 3, 1000.00, 0.00, "2026-09-09", "2026-09-19", false, "23305d4a1e1dddbad3f3b3d3a34124a8", {"214689": [1000.00, "2026-08-18", null], "214690": [2500.00, "2026-08-18", "2026-06-16"], "214691": [2500.00, "2026-08-18", "2026-07-14"]}], [48, "Velma Walker", "active", 4500.00, "2016-02-13", 0.00, -4500.00, 9000.00, "2026-09-01", 2, 0, 4500.00, null, null, false, "2ff5f3a2186380afd36e5e86e2c1c4bc", {"258866": [4500.00, "2026-08-01", "2026-08-04"], "437117": [4500.00, "2026-09-01", "2026-09-01"]}], [50, "Patra Bolton", "active", 2500.00, "2016-04-14", 2500.00, 0.00, 5000.00, "2026-08-13", 2, 0, 0.00, "2026-09-14", "2026-09-24", false, "7f5b9e5142f9e4a1740fe1ecbe893510", {"267294": [2500.00, "2026-08-03", "2026-06-18"], "267295": [2500.00, "2026-08-13", "2026-07-16"]}], [51, "Isolyn Daley-Daleys Grove", "active", 4000.00, "2016-09-06", 4000.00, 0.00, 4000.00, "2026-08-11", 2, 0, 0.00, "2026-09-06", "2026-09-16", false, "3f1545811a23db473f80fa198ed2c926", {"272249": [2500.00, "2026-08-11", "2026-07-09"], "272326": [1500.00, "2026-08-11", "2026-08-11"]}], [56, "Arlene Knight", "active", 3500.00, "2016-10-11", 3500.00, 0.00, 3500.00, "2026-08-31", 1, 0, 0.00, "2026-09-11", "2026-09-21", false, "ee3eb0714c24e5f68e955a4ed7ecf848", {"436245": [3500.00, "2026-08-31", "2026-07-01"]}], [63, "Lavern Hepburn", "active", 5000.00, "2016-12-15", 5000.00, 0.00, 10000.00, "2026-09-07", 2, 0, 0.00, "2026-09-15", "2026-09-25", false, "b3b7838d534ab39aa2ddf6f8364be7b5", {"328729": [5000.00, "2026-08-17", "2026-07-15"], "439697": [5000.00, "2026-09-07", "2026-08-01"]}], [84, "Melissa Minott", "active", 2500.00, "2017-02-15", 0.00, -2500.00, 5000.00, "2026-08-14", 2, 0, 2500.00, null, null, false, "093203b4aa3d2461f30e0c72557c2838", {"393589": [2500.00, "2026-08-14", "2026-08-14"], "393590": [2500.00, "2026-08-14", "2026-09-09"]}], [90, "Tyrone Daley", "active", 2500.00, "2017-05-07", 2500.00, 0.00, 7500.00, "2026-08-27", 3, 0, 0.00, "2026-09-07", "2026-09-17", false, "df823e7b6e21c66b44a3a48d97a702ed", {"410802": [2500.00, "2026-08-03", "2026-06-24"], "434748": [2500.00, "2026-08-27", "2026-07-01"], "434750": [2500.00, "2026-08-27", "2026-08-01"]}], [101, "Kenneth Martin", "disconnected", 4000.00, "2017-07-02", 5500.00, -2500.00, 10000.00, "2026-09-01", 4, 0, 2500.00, "2026-09-02", "2026-09-12", false, "9d7d15ca465bad9a987edd10af845db5", {"2315": [2500.00, "2026-08-04", "2026-07-22"], "2316": [2500.00, "2026-08-04", "2026-06-18"], "437335": [2500.00, "2026-09-01", "2026-08-01"], "437337": [2500.00, "2026-09-01", "2026-09-01"]}], [103, "Samora Tate", "active", 4500.00, "2017-07-08", 2500.00, 0.00, 7000.00, "2026-09-02", 3, 0, 0.00, "2026-09-08", "2026-09-18", false, "ae387c477814aca01665f17b4cc85b06", {"433354": [3500.00, "2026-08-24", "2026-07-01"], "433355": [1500.00, "2026-08-24", "2026-08-01"], "437710": [2000.00, "2026-09-02", "2026-08-01"]}], [117, "Desmond Chambers", "active", 2500.00, "2017-10-07", 0.00, -2500.00, 7500.00, "2026-08-26", 3, 0, 2500.00, null, null, false, "7ab24bb5608934b1d2088fff5af30a24", {"34223": [2500.00, "2026-08-03", "2026-07-16"], "434720": [2500.00, "2026-08-26", "2026-08-01"], "434725": [2500.00, "2026-08-26", "2026-09-01"]}], [126, "Steve Thompson", "active", 2500.00, "2017-12-05", 2500.00, 0.00, 2500.00, "2026-08-19", 1, 0, 0.00, "2026-09-05", "2026-09-15", false, "b9439291201a6fa030a3a33e5003c458", {"432410": [2500.00, "2026-08-19", "2026-08-01"]}], [129, "Teslin Mitchell", "active", 2500.00, "2017-12-07", 0.00, -2500.00, 5000.00, "2026-08-28", 2, 0, 2500.00, null, null, false, "3023da4585e159e518af40b3262e64d2", {"435413": [2500.00, "2026-08-28", "2026-08-01"], "435419": [2500.00, "2026-08-28", "2026-09-01"]}], [130, "Celia Halcolm", "active", 2500.00, "2018-06-14", 2500.00, 0.00, 2500.00, "2026-08-19", 1, 0, 0.00, "2026-09-14", "2026-09-24", false, "1a35c7fd33046876e3c685c018905aa6", {"432390": [2500.00, "2026-08-19", "2026-07-01"]}], [139, "paula Bryan", "active", 2500.00, "2018-04-02", -2500.00, -5000.00, 5000.00, "2026-08-31", 2, 0, 5000.00, null, null, false, "a72ad586f1b2a737084aef9f724e4aee", {"436642": [2500.00, "2026-08-31", "2026-09-01"], "436644": [2500.00, "2026-08-31", "2026-10-01"]}], [145, "Karen Wheatley", "disconnected", 2500.00, "2018-04-03", 4000.00, 0.00, 3000.00, "2026-08-27", 3, 0, 0.00, "2026-09-03", "2026-09-13", false, "cccbbbdb93f06848e352b602d9b14d37", {"434752": [500.00, "2026-08-27", "2026-06-01"], "434753": [2000.00, "2026-08-27", "2026-07-01"], "434755": [500.00, "2026-08-27", "2026-07-01"]}], [152, "Elizabeth Johnson", "active", 3000.00, "2018-04-04", 0.00, -3000.00, 6000.00, "2026-08-29", 2, 0, 3000.00, null, null, false, "f052cef691e6062c79f6c756754ee748", {"77129": [3000.00, "2026-08-14", "2026-08-14"], "435990": [3000.00, "2026-08-29", "2026-09-01"]}], [156, "Sherone Roye", "active", 2500.00, "2018-04-02", -1000.00, -2500.00, 5000.00, "2026-09-14", 2, 0, 2500.00, null, null, false, "7eb434d6e0f43229aa4daef1528e7447", {"441674": [2500.00, "2026-09-14", "2026-08-01"], "441675": [2500.00, "2026-09-14", "2026-09-01"]}], [161, "Kamoya Gordon", "active", 2500.00, "2018-04-09", 2500.00, 0.00, 2500.00, "2026-08-07", 1, 0, 0.00, "2026-09-09", "2026-09-19", false, "7bf06992695c85fcabc64b8417ea4a6b", {"84385": [2500.00, "2026-08-07", "2026-07-27"]}], [177, "Michelle Blackwood", "active", 2500.00, "2018-04-02", -2500.00, -5000.00, 5000.00, "2026-09-09", 2, 0, 5000.00, null, null, false, "b5f39a685984198899f04cf438a8f90c", {"440124": [2500.00, "2026-09-09", "2026-09-01"], "440125": [2500.00, "2026-09-09", "2026-10-01"]}], [179, "Janice Bryan/Levor Williams", "active", 2500.00, "2018-04-12", 2500.00, 0.00, 2500.00, "2026-08-31", 1, 0, 0.00, "2026-09-12", "2026-09-22", false, "1269471dd1a58359a0ffafce1261ff7c", {"436279": [2500.00, "2026-08-31", "2026-07-01"]}], [187, "Gloria Thompson Smith", "active", 2500.00, "2018-05-15", 2500.00, 0.00, 5000.00, "2026-08-31", 2, 0, 0.00, "2026-09-15", "2026-09-25", false, "260d1844288f640be65552166e9b2d98", {"104189": [2500.00, "2026-08-17", "2026-06-16"], "437015": [2500.00, "2026-08-31", "2026-07-01"]}], [188, "Jermaine Mascoe", "disconnected", 2500.00, "2018-05-02", 4000.00, 0.00, 2500.00, "2026-08-08", 1, 0, 0.00, "2026-09-02", "2026-09-12", false, "9559ec03436100759e3b3708efcfa9a5", {"104970": [2500.00, "2026-08-08", "2026-07-22"]}], [190, "Vanessa Oldacre", "active", 2500.00, "2018-05-08", 2500.00, 0.00, 2500.00, "2026-08-18", 1, 0, 0.00, "2026-09-08", "2026-09-18", false, "bb1fac173db17653d19f253b329ce415", {"106411": [2500.00, "2026-08-18", "2026-08-18"]}], [191, "Glenrick Royal", "suspended", 3500.00, "2018-05-29", 1500.00, 0.00, 2500.00, "2026-09-05", 1, 0, 0.00, "2026-08-29", "2026-09-08", false, "eee96d571e413659274a58dd93360d25", {"439190": [2500.00, "2026-09-05", "2026-08-01"]}], [192, "Vivienne Mowatt", "active", 4000.00, "2018-06-12", 4000.00, 0.00, 4000.00, "2026-08-31", 1, 0, 0.00, "2026-09-12", "2026-09-22", false, "818b237d22062b357aa0a455a9c17c34", {"436931": [4000.00, "2026-08-31", "2026-07-01"]}], [193, "Tesha Dennis", "active", 2500.00, "2018-06-12", 2500.00, 0.00, 7500.00, "2026-09-02", 3, 0, 0.00, "2026-09-12", "2026-09-22", false, "4e2fc708a93707a2513c8606d89e108b", {"108558": [2500.00, "2026-08-04", "2026-06-17"], "437716": [2500.00, "2026-09-02", "2026-07-01"], "437718": [2500.00, "2026-09-02", "2026-08-01"]}], [195, "Sadike Hyman", "active", 2500.00, "2018-06-13", -2500.00, -5000.00, 5000.00, "2026-09-03", 2, 0, 5000.00, null, null, false, "64c7644a4dbf426b5e565ea699ea30da", {"438208": [2500.00, "2026-09-03", "2026-09-01"], "438209": [2500.00, "2026-09-03", "2026-10-01"]}], [196, "Shadona Gordon", "active", 4000.00, "2018-06-13", 4000.00, 0.00, 8000.00, "2026-09-05", 2, 0, 0.00, "2026-09-13", "2026-09-23", false, "6745e3f74aacd6aeb5eea99d31ff913f", {"110906": [4000.00, "2026-08-08", "2026-07-13"], "439299": [4000.00, "2026-09-05", "2026-08-01"]}], [198, "Rose Tomlinson", "active", 2500.00, "2018-06-12", 2500.00, 0.00, 2500.00, "2026-08-25", 1, 0, 0.00, "2026-09-12", "2026-09-22", false, "b6cabda3500a7e33e39f2038841d061e", {"433971": [2500.00, "2026-08-25", "2026-08-01"]}], [199, "David Dawkins", "active", 3500.00, "2018-06-14", 3500.00, 0.00, 2500.00, "2026-08-27", 1, 0, 0.00, "2026-09-14", "2026-09-24", false, "590dc9ce81a70ade657227a0dbfaf7be", {"435039": [2500.00, "2026-08-27", "2026-07-01"]}], [201, "Otis Griffiths", "active", 2500.00, "2018-06-14", 2500.00, 0.00, 2500.00, "2026-08-10", 1, 0, 0.00, "2026-09-14", "2026-09-24", false, "4f6a1cc74e38411affd3a5c848f9a248", {"114261": [2500.00, "2026-08-10", "2026-07-14"]}], [205, "Sonia Martin", "active", 2500.00, "2018-05-08", 0.00, -2500.00, 5000.00, "2026-08-03", 2, 0, 2500.00, null, null, false, "0ee2890bac89f806a6ac217db798376e", {"116952": [2500.00, "2026-08-03", "2026-08-03"], "116953": [2500.00, "2026-08-03", "2026-09-17"]}], [212, "Antoinette Gordon", "active", 2500.00, "2018-02-13", 2500.00, 0.00, 5000.00, "2026-08-25", 2, 0, 0.00, "2026-09-13", "2026-09-23", false, "c8fc42bdb26cbe29375304904ba9e018", {"434107": [2500.00, "2026-08-25", "2026-06-01"], "434108": [2500.00, "2026-08-25", "2026-07-01"]}], [219, "Khori Johnson", "active", 2500.00, "2018-07-04", 0.00, -2500.00, 7500.00, "2026-09-04", 3, 0, 2500.00, null, null, false, "92c017f3e73a10bec7e2b3eef36682ec", {"125891": [2500.00, "2026-08-03", "2026-07-08"], "125892": [2500.00, "2026-08-12", "2026-08-04"], "438711": [2500.00, "2026-09-04", "2026-09-01"]}], [220, "Latoya Nicholas", "active", 2500.00, "2018-07-05", 2500.00, 0.00, 5000.00, "2026-08-20", 2, 0, 0.00, "2026-09-05", "2026-09-15", false, "add3b0e669779ef50e807a9f742fd2c1", {"126684": [2500.00, "2026-08-04", "2026-06-18"], "432595": [2500.00, "2026-08-20", "2026-07-01"]}], [226, "Dawn Lewis", "active", 3000.00, "2018-08-07", 3000.00, 0.00, 2500.00, "2026-08-27", 1, 0, 0.00, "2026-09-07", "2026-09-17", false, "940a2cf525a461b194f4e788ccd87c32", {"435057": [2500.00, "2026-08-27", "2026-07-01"]}], [229, "Richard Williamson", "active", 7500.00, "2018-08-13", 7500.00, 0.00, 7500.00, "2026-08-25", 1, 0, 0.00, "2026-09-13", "2026-09-23", false, "cf743d2ade808b2cbd23a9972cd92183", {"434224": [7500.00, "2026-08-25", "2026-08-01"]}], [230, "Tivany Davy", "active", 3000.00, "2018-08-03", 0.00, -3000.00, 6000.00, "2026-09-09", 2, 0, 3000.00, null, null, false, "b7ae73ef1fcdf262f773f7fc04fa2483", {"133528": [3000.00, "2026-08-12", "2026-08-12"], "440297": [3000.00, "2026-09-09", "2026-09-01"]}], [237, "MARJORIE CRAWFORD", "active", 5000.00, "2018-08-01", 0.00, -5000.00, 10000.00, "2026-09-04", 2, 0, 5000.00, null, null, false, "9ffc6c0d33cca7dc3e58c3baeeec8cc9", {"138562": [5000.00, "2026-08-03", "2026-07-15"], "438736": [5000.00, "2026-09-04", "2026-09-01"]}], [239, "Veronica Peart Johnson", "active", 3500.00, "2018-09-06", 1000.00, 0.00, 5000.00, "2026-09-09", 2, 0, 0.00, "2026-09-06", "2026-09-16", false, "f10d2aa665116b3c9a3347b6f713069c", {"139922": [2500.00, "2026-08-12", "2026-07-15"], "440195": [2500.00, "2026-09-09", "2026-08-01"]}], [242, "Claudia Dunn", "active", 2500.00, "2018-09-10", 2500.00, 0.00, 5000.00, "2026-08-13", 2, 0, 0.00, "2026-09-10", "2026-09-20", false, "d19f5d160ab5f3f8289d65e8238d3e7c", {"141888": [2500.00, "2026-08-13", "2026-08-13"], "141889": [2500.00, "2026-08-13", "2026-07-15"]}], [247, "KIMBERLY SWABY", "active", 2500.00, "2018-09-12", 2500.00, 0.00, 2500.00, "2026-08-20", 1, 0, 0.00, "2026-09-12", "2026-09-22", false, "5ecccdad816ee428e1312cc3b2aab0eb", {"432547": [2500.00, "2026-08-20", "2026-08-01"]}], [249, "AUDREY MITCHELL", "active", 2500.00, "2018-09-12", 2500.00, 0.00, 5000.00, "2026-09-01", 2, 0, 0.00, "2026-09-12", "2026-09-22", false, "c2a0ff44a9bf6e2791510974ae964961", {"146044": [2500.00, "2026-08-03", "2026-07-18"], "437594": [2500.00, "2026-09-01", "2026-08-01"]}], [250, "Jean Surf", "active", 2500.00, "2018-09-12", 2500.00, 0.00, 3500.00, "2026-08-31", 2, 0, 0.00, "2026-09-12", "2026-09-22", false, "86f5736b8f5c8095cef6aa08bd9ca671", {"436309": [1000.00, "2026-08-31", "2026-06-01"], "436310": [2500.00, "2026-08-31", "2026-07-01"]}], [263, "Kenecia Stewart", "disconnected", 5000.00, "2018-10-04", 6500.00, 0.00, 10000.00, "2026-08-26", 2, 0, 0.00, "2026-09-04", "2026-09-14", false, "1c7c1844b71a28dccca2cb1762de3941", {"434439": [5000.00, "2026-08-26", "2026-06-01"], "434440": [5000.00, "2026-08-26", "2026-07-01"]}], [264, "Natalie Legg", "active", 2500.00, "2018-10-08", 2500.00, 0.00, 5000.00, "2026-08-29", 2, 0, 0.00, "2026-09-08", "2026-09-18", false, "2351ce722aee8b4f8b64584072a53a54", {"436029": [2500.00, "2026-08-29", "2026-06-01"], "436030": [2500.00, "2026-08-29", "2026-07-01"]}], [265, "Chantelle Dixon", "active", 2500.00, "2018-10-09", 2500.00, 0.00, 7500.00, "2026-08-24", 3, 0, 0.00, "2026-09-09", "2026-09-19", false, "ccaeb6abe2d9a53d5f06252f3f12ec12", {"156216": [2500.00, "2026-08-07", "2026-06-18"], "433579": [2500.00, "2026-08-24", "2026-07-01"], "433580": [2500.00, "2026-08-24", "2026-08-01"]}], [271, "IVAN JONES", "offline", 2500.00, "2018-10-16", 17500.00, 0.00, 7500.00, "2026-08-24", 3, 0, 0.00, "2026-02-16", "2026-02-26", false, "41a752fe50004775931a3bf266c9220c", {"433228": [2500.00, "2026-08-24", "2026-05-01"], "433229": [2500.00, "2026-08-24", "2026-06-01"], "433230": [2500.00, "2026-08-24", "2026-07-01"]}], [284, "Eton Williams", "disconnected", 2500.00, "2018-11-02", 1500.00, 0.00, 5000.00, "2026-08-25", 2, 0, 0.00, "2026-08-23", "2026-08-23", false, "7ee6178855cac959db6949669cc2bbe1", {"433798": [2500.00, "2026-08-25", "2026-07-01"], "433890": [2500.00, "2026-08-25", "2026-08-01"]}], [286, "Rohan Daley", "active", 2500.00, "2018-11-07", 0.00, -2500.00, 0.00, "2026-06-05", 0, 0, 2500.00, null, null, false, "1f38ec518c030ad48046c55b173de558", null], [289, "Natasha Dunn", "active", 3500.00, "2018-11-08", 3500.00, 0.00, 5500.00, "2026-08-12", 2, 0, 0.00, "2026-09-08", "2026-09-18", false, "88570e89a89dfc197b629430ae3eb603", {"170131": [3500.00, "2026-08-12", "2026-07-07"], "170133": [2000.00, "2026-08-12", "2026-06-09"]}], [293, "Sandra Coluqhoun", "active", 3000.00, "2018-11-12", 3000.00, 0.00, 6000.00, "2026-09-01", 2, 0, 0.00, "2026-09-12", "2026-09-22", false, "b1a73cc2e8de2e03f7bce6f3a3e77047", {"172775": [3000.00, "2026-08-03", "2026-07-17"], "437124": [3000.00, "2026-09-01", "2026-08-01"]}], [309, "Oral Porter", "active", 2500.00, "2018-12-13", 2500.00, 0.00, 7500.00, "2026-09-04", 3, 0, 0.00, "2026-09-13", "2026-09-23", false, "9b7c1e438d03239b03064a5101509af3", {"180051": [2500.00, "2026-08-04", "2026-06-24"], "437736": [2500.00, "2026-09-02", "2026-07-01"], "439002": [2500.00, "2026-09-04", "2026-08-01"]}], [322, "Shirly Allen", "active", 2500.00, "2019-01-02", 0.00, -2500.00, -129500.00, "2026-09-12", 4, -139000.00, 2500.00, null, null, false, "b42278ae5bc6d6fe914a0e31cd3fbe81", {"188227": [-139000.00, "2026-08-17", null], "188228": [500.00, "2026-08-10", "2026-06-09"], "188229": [4000.00, "2026-08-10", "2026-07-14"], "188230": [2500.00, "2026-08-17", "2026-08-17"], "441278": [2500.00, "2026-09-12", "2026-09-01"]}], [323, "Woodrow Cornwall", "disconnected", 2500.00, "2019-01-02", 4000.00, 0.00, 5000.00, "2026-08-26", 2, 0, 0.00, "2026-09-02", "2026-09-12", false, "cdc8e6347b34f704a3589034def22f17", {"434401": [2500.00, "2026-08-26", "2026-06-01"], "434402": [2500.00, "2026-08-26", "2026-07-01"]}], [325, "Jermaine Kitson", "active", 2500.00, "2019-01-07", 1000.00, 0.00, 6500.00, "2026-09-03", 3, 0, 0.00, "2026-09-07", "2026-09-17", false, "7021bd7826d386506c3332c5416fdfda", {"438128": [1500.00, "2026-09-03", "2026-06-01"], "438129": [2500.00, "2026-09-03", "2026-07-01"], "438131": [2500.00, "2026-09-03", "2026-08-01"]}], [327, "Shanni Johnson", "active", 4000.00, "2019-01-08", 4000.00, 0.00, 4000.00, "2026-08-08", 1, 0, 0.00, "2026-09-08", "2026-09-18", false, "630fe590ec9c3882afdf70a971ae4b26", {"191423": [4000.00, "2026-08-08", "2026-07-21"]}], [333, "Theobold Fearon", "active", 2500.00, "2019-01-23", -5000.00, -7500.00, 5000.00, "2026-09-04", 2, 0, 7500.00, null, null, false, "625dba867543f74b8071ccf367d28bbe", {"438758": [2500.00, "2026-09-04", "2026-10-01"], "438759": [2500.00, "2026-09-04", "2026-11-01"]}], [365, "Kaydie Beezer", "active", 2500.00, "2019-03-11", 2500.00, 0.00, 2500.00, "2026-08-20", 1, 0, 0.00, "2026-09-11", "2026-09-21", false, "e2a3ab24d5f20ebd2453bb184d1e4d7f", {"432503": [2500.00, "2026-08-20", "2026-07-01"]}], [367, "Christ Cathedral Community", "active", 5500.00, "2019-03-11", 5500.00, 0.00, 5500.00, "2026-08-10", 1, 0, 0.00, "2026-09-11", "2026-09-21", false, "b1818a843890dfe9c8dafb9d3cd2171c", {"208056": [5500.00, "2026-08-10", "2026-07-08"]}], [368, "Prince Beckett", "active", 4500.00, "2019-03-12", 4500.00, 0.00, 9000.00, "2026-09-03", 2, 0, 0.00, "2026-09-12", "2026-09-22", false, "57d902da74432ee53d034e22c0200a16", {"208413": [4500.00, "2026-08-03", "2026-07-24"], "438133": [4500.00, "2026-09-03", "2026-08-01"]}], [370, "Loletta Davidson", "active", 4000.00, "2019-03-13", 4000.00, 0.00, 4000.00, "2026-08-18", 1, 0, 0.00, "2026-09-13", "2026-09-23", false, "36f3434551d9cd10f274073478581ece", {"209597": [4000.00, "2026-08-18", "2026-07-09"]}], [373, "Charlene Campbell", "active", 2500.00, "2019-03-14", 2500.00, 0.00, 2500.00, "2026-08-17", 1, 0, 0.00, "2026-09-14", "2026-09-24", false, "ad1e3840cc480ba8ef8294b2a7341c34", {"211401": [2500.00, "2026-08-17", "2026-07-14"]}], [383, "Lorna Barrett", "disconnected", 3500.00, "2019-04-03", 5000.00, 0.00, 7500.00, "2026-08-31", 3, 0, 0.00, "2026-09-03", "2026-09-13", false, "6e74a42fb4bb3a2a7cb97af0b55f7b76", {"436380": [2500.00, "2026-08-31", "2026-05-01"], "436381": [2500.00, "2026-08-31", "2026-06-01"], "436382": [2500.00, "2026-08-31", "2026-07-01"]}], [384, "Michael Stewart", "disconnected", 2500.00, "2019-04-03", 4000.00, 0.00, 5000.00, "2026-08-25", 2, 0, 0.00, "2026-09-03", "2026-09-13", false, "97c7e8432cc8fdd16b12d95bdabb0d7a", {"432743": [2500.00, "2026-08-20", "2026-07-01"], "434248": [2500.00, "2026-08-25", "2026-08-01"]}], [385, "Lennox Brown Las", "disconnected", 4000.00, "2019-04-04", 5500.00, 0.00, 4000.00, "2026-08-28", 1, 0, 0.00, "2026-09-04", "2026-09-14", false, "1102b90c37b4c8127de4aec71e854830", {"435656": [4000.00, "2026-08-28", "2026-07-01"]}], [387, "Petrona Marshall", "active", 3500.00, "2019-03-21", 0.00, -10500.00, 74500.00, "2026-08-10", 4, 64000.00, 10500.00, null, null, false, "4db73c61920afba1c75e4fa75d7d31d9", {"217372": [3500.00, "2026-08-10", "2026-11-19"], "217373": [64000.00, "2026-08-10", null], "217374": [3500.00, "2026-08-10", "2026-09-10"], "217375": [3500.00, "2026-08-10", "2026-10-13"]}], [396, "Michelle Bolton", "active", 2500.00, "2019-05-07", 2500.00, 0.00, 5000.00, "2026-08-12", 2, 0, 0.00, "2026-09-07", "2026-09-17", false, "7a120fa4bd745dd8ca448249100a3fe5", {"220973": [2500.00, "2026-08-12", "2026-06-16"], "220974": [2500.00, "2026-08-12", "2026-07-14"]}], [403, "Jenneffer/ Lynford Martin", "active", 5000.00, "2019-05-03", 0.00, -5000.00, 10000.00, "2026-09-04", 2, 0, 5000.00, null, null, false, "75d2d9160d1824ed609513d24c061fdc", {"224295": [5000.00, "2026-08-04", "2026-08-04"], "438994": [5000.00, "2026-09-04", "2026-09-01"]}], [405, "Wray Williams", "disconnected", 2500.00, "2019-05-03", 4000.00, 0.00, 5000.00, "2026-08-14", 2, 0, 0.00, "2026-09-03", "2026-09-13", false, "1c4271b857e49a02ee0fc7c8b21400b5", {"225012": [2500.00, "2026-08-14", "2026-07-14"], "225013": [2500.00, "2026-08-14", "2026-06-16"]}], [408, "Marjarie Whyte Wilks", "active", 2500.00, "2019-05-10", 2500.00, 0.00, 5000.00, "2026-08-29", 2, 0, 0.00, "2026-09-10", "2026-09-20", false, "3d16d479be41857c8a75da1d732e4738", {"436131": [2500.00, "2026-08-29", "2026-07-01"], "436132": [2500.00, "2026-08-29", "2026-08-01"]}], [409, "Angella Thomas", "active", 3500.00, "2019-05-10", 0.00, -3500.00, 3500.00, "2026-08-25", 1, 0, 3500.00, null, null, false, "3a681de6f0d38bce66857c6a137880a3", {"434066": [3500.00, "2026-08-25", "2026-09-01"]}], [410, "Glen Griffiths", "active", 5000.00, "2019-05-13", 0.00, -5000.00, 40000.00, "2026-09-12", 3, 30000.00, 5000.00, null, null, false, "f6b657263737c6901e5d4f08db3dd501", {"227992": [5000.00, "2026-08-15", "2026-08-15"], "227993": [30000.00, "2026-08-15", null], "441308": [5000.00, "2026-09-12", "2026-09-01"]}], [411, "Yanique Wright", "active", 2500.00, "2019-05-14", -5000.00, -7500.00, 5000.00, "2026-09-03", 2, 0, 7500.00, null, null, false, "2a3ff5fa083476ef5f6d9abe50181e6f", {"438287": [2500.00, "2026-09-03", "2026-10-01"], "438288": [2500.00, "2026-09-03", "2026-11-01"]}], [422, "Steve Baker", "active", 3500.00, "2019-06-11", 0.00, -3500.00, 3500.00, "2026-08-25", 1, 0, 3500.00, null, null, false, "e670deaa7fc6a424ae48d79377bcb12d", {"434067": [3500.00, "2026-08-25", "2026-09-01"]}], [426, "Beverley Smikle", "active", 3000.00, "2019-06-15", 3000.00, 0.00, 3000.00, "2026-08-20", 1, 0, 0.00, "2026-09-15", "2026-09-25", false, "d34acc690fd521974148303f1fb1b2d8", {"432637": [3000.00, "2026-08-20", "2026-07-01"]}], [434, "Lauren Mooyin", "active", 2500.00, "2019-06-01", 0.00, -2500.00, 5000.00, "2026-09-07", 2, 0, 2500.00, null, null, false, "7628b9df57fecdd20afdb316e30b5d36", {"432280": [2500.00, "2026-08-19", "2026-08-01"], "439554": [2500.00, "2026-09-07", "2026-09-01"]}], [440, "Jerry Griffiths", "disconnected", 2500.00, "2019-07-04", 4000.00, 0.00, 5000.00, "2026-08-27", 2, 0, 0.00, "2026-09-04", "2026-09-14", false, "eb0ee2ea6c1c31ff89ca9395b1e0f47c", {"435017": [2500.00, "2026-08-27", "2026-07-01"], "435018": [2500.00, "2026-08-27", "2026-08-01"]}], [443, "Hector Morgan", "disconnected", 4500.00, "2019-07-04", 6000.00, 0.00, 4500.00, "2026-08-17", 1, 0, 0.00, "2026-09-04", "2026-09-14", false, "c3a7e9ea20e5893351d14cdacae7618b", {"244492": [4500.00, "2026-08-17", "2026-07-15"]}], [444, "Garfield Morgan", "active", 4500.00, "2019-07-05", 4500.00, 0.00, 4500.00, "2026-08-22", 1, 0, 0.00, "2026-09-05", "2026-09-15", false, "050513b456733e1cd37eadd185d2a20b", {"433072": [4500.00, "2026-08-22", "2026-07-01"]}], [448, "Rosemarie Thompson Collins", "active", 5000.00, "2019-07-10", 5000.00, 0.00, 10000.00, "2026-08-26", 2, 0, 0.00, "2026-09-10", "2026-09-20", false, "1e43c332443a06516ac921d6b3d53374", {"434665": [5000.00, "2026-08-26", "2026-07-01"], "434666": [5000.00, "2026-08-26", "2026-08-01"]}], [450, "Demar Daley", "active", 2500.00, "2019-07-11", 2500.00, 0.00, 2500.00, "2026-08-11", 1, 0, 0.00, "2026-09-11", "2026-09-21", false, "d931b50d24da4a54105934dd509f1a65", {"248007": [2500.00, "2026-08-11", "2026-07-06"]}], [451, "Damion Bramwell", "active", 2500.00, "2019-07-10", 0.00, -2500.00, 5000.00, "2026-09-09", 2, 0, 2500.00, null, null, false, "df3b7cb0ec0704864fa86be276e6b716", {"248369": [2500.00, "2026-08-10", "2026-08-10"], "440400": [2500.00, "2026-09-09", "2026-09-01"]}], [454, "James Sconce", "active", 3500.00, "2019-07-08", 3500.00, 0.00, 7000.00, "2026-08-26", 2, 0, 0.00, "2026-09-08", "2026-09-18", false, "bb2cd25de034ee2680407f64c3c58ecb", {"434505": [3500.00, "2026-08-26", "2026-06-01"], "434506": [3500.00, "2026-08-26", "2026-07-01"]}], [459, "Aldeen Snaith", "active", 2500.00, "2019-07-12", 2500.00, 0.00, 2500.00, "2026-08-15", 1, 0, 0.00, "2026-09-12", "2026-09-22", false, "0bbdfd1c74d6c07d8afe501872aaccb0", {"249623": [2500.00, "2026-08-15", "2026-07-09"]}], [462, "Teisha Williamson", "active", 5500.00, "2019-07-13", 0.00, -5500.00, 11000.00, "2026-09-04", 2, 0, 5500.00, null, null, false, "68967a08d049a8f168e59bcb18c7573a", {"250609": [5500.00, "2026-08-05", "2026-08-05"], "438885": [5500.00, "2026-09-04", "2026-09-01"]}], [463, "Stacey Ann Baker", "active", 4500.00, "2019-05-10", 4500.00, 0.00, 4000.00, "2026-08-31", 1, 0, 0.00, "2026-09-10", "2026-09-20", false, "996c0b71879debfeef6e0d607902db31", {"436328": [4000.00, "2026-08-31", "2026-07-01"]}], [474, "Sandra Chambers Wright", "active", 4000.00, "2019-07-22", 0.00, -4000.00, 0.00, "2026-07-25", 0, 0, 4000.00, null, null, false, "d0e1120a278b046dc6f6ce3aee0375af", null], [488, "Kerry Ann Dixon Brissett", "active", 5500.00, "2019-07-11", 5500.00, 0.00, 5500.00, "2026-08-31", 1, 0, 0.00, "2026-09-11", "2026-09-21", false, "32eef2db58d5d2e73082f7d6cfc5ad00", {"436322": [5500.00, "2026-08-31", "2026-07-01"]}], [498, "Chuthild Spencer", "active", 5000.00, "2019-07-26", 0.00, -4000.00, 0.00, "2026-07-15", 0, 0, 4000.00, null, null, false, "cfcf96753c6bdec55b3c2af17caa55d0", null], [505, "Sharone Francis Knight", "active", 2500.00, "2019-07-30", 0.00, -2500.00, 5000.00, "2026-08-01", 2, 0, 2500.00, null, null, false, "7aa2eeb9f835d41726ac70ab501cad3b", {"269939": [2500.00, "2026-08-01", "2026-08-03"], "269940": [2500.00, "2026-08-01", "2026-09-17"]}], [506, "Glenmore Smith", "disconnected", 3500.00, "2019-08-01", 5000.00, 0.00, 3500.00, "2026-09-12", 2, 0, 0.00, "2026-09-01", "2026-09-11", false, "3c9132b58b7113d68955dddbd897c511", {"441457": [1000.00, "2026-09-12", "2026-07-01"], "441459": [2500.00, "2026-09-12", "2026-08-01"]}], [512, "Jennel Martin", "active", 2500.00, "2019-08-02", 0.00, -2500.00, 5000.00, "2026-09-07", 2, 0, 2500.00, null, null, false, "6320e3d6edaee0348bccb91dcf812afc", {"434005": [2500.00, "2026-08-25", "2026-08-01"], "439723": [2500.00, "2026-09-07", "2026-09-01"]}]]
+							129 sort button payload
+						130 button Expand the columns to fit the content
+					131 text 1 row 550 ms
+					132 button Export...
+					133 toggle button Help: Search within result, Value: off
+					134 toggle button Help: Pin to keep the result tab, Value: off
+					135 radio button Description: Data, Help: Show result data, Value: 1
+					136 radio button Description: Message, Help: Show result message, Value: 0
+					137 radio button Description: Chart, Value: 0
+		138 splitter (disabled, settable, float) 582
+		139 scroll area Secondary Actions: Scroll Up, Scroll Down
+			140 text entry area -- 2026-09-15 00:25:02.1200
+SELECT
+  pg_total_relation_size(relid) AS total_size,
+  pg_table_size(relid) AS data_size,
+  pg_indexes_size(relid) AS index_size,
+  obj_description(relid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_statio_user_tables
+WHERE
+  schemaname = 'public'
+  AND relname = 'olts'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_proc') AS comment
+FROM
+  pg_catalog.pg_proc p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE
+  n.nspname = 'public'
+ AND p.proname = 'olts'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_class p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.relnamespace
+WHERE
+  n.nspname = 'public'
+  AND p.relname = 'olts'
+  AND p.relkind = 'v';
+
+-- 2026-09-15 00:25:02.7350
+SELECT * FROM "public"."olts" ORDER BY "olt_id" LIMIT 300 OFFSET 0;
+
+-- 2026-09-15 00:25:02.8290
+select reltuples::int8 as count from pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace where nspname='public'AND relname='olts';
+
+-- 2026-09-15 00:25:07.1100
+select pg_get_functiondef(19570)AS create_function;
+
+-- 2026-09-15 00:25:07.2590
+SELECT
+  pg_total_relation_size(relid) AS total_size,
+  pg_table_size(relid) AS data_size,
+  pg_indexes_size(relid) AS index_size,
+  obj_description(relid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_statio_user_tables
+WHERE
+  schemaname = 'public'
+  AND relname = 'strict_word_similarity_dist_op'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_proc') AS comment
+FROM
+  pg_catalog.pg_proc p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE
+  n.nspname = 'public'
+ AND p.proname = 'strict_word_similarity_dist_op'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_class p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.relnamespace
+WHERE
+  n.nspname = 'public'
+  AND p.relname = 'strict_word_similarity_dist_op'
+  AND p.relkind = 'v';
+
+-- 2026-09-15 00:25:08.3970
+SELECT
+  pg_total_relation_size(relid) AS total_size,
+  pg_table_size(relid) AS data_size,
+  pg_indexes_size(relid) AS index_size,
+  obj_description(relid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_statio_user_tables
+WHERE
+  schemaname = 'public'
+  AND relname = 'applications'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_proc') AS comment
+FROM
+  pg_catalog.pg_proc p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE
+  n.nspname = 'public'
+ AND p.proname = 'applications'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_class p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.relnamespace
+WHERE
+  n.nspname = 'public'
+  AND p.relname = 'applications'
+  AND p.relkind = 'v';
+
+-- 2026-09-15 00:25:09.2240
+SELECT * FROM "public"."applications" ORDER BY "application_id" LIMIT 300 OFFSET 0;
+
+-- 2026-09-15 00:25:09.3600
+select reltuples::int8 as count from pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace where nspname='public'AND relname='applications';
+
+-- 2026-09-15 00:25:09.3600
+SELECT COUNT(*) as count FROM "public"."applications";
+
+-- 2026-09-15 00:32:03.9240
+-- Name-only lookups: find the exact customer_id (names collide a lot in this data)
+SELECT 'find-vanessa' AS q, customer_id, name, status, monthly_fee
+FROM public.customers WHERE name ILIKE '%vanessa%' AND name ILIKE '%campbell%';
+
+-- 2026-09-15 00:32:04.0730
+SELECT 'find-janet' AS q, customer_id, name, status, monthly_fee
+FROM public.customers WHERE name ILIKE '%janet%' AND (name ILIKE '%reid%' OR name ILIKE '%hyman%');
+
+-- 2026-09-15 00:32:04.1540
+SELECT 'find-lilleth' AS q, customer_id, name, status, monthly_fee
+FROM public.customers WHERE name ILIKE '%lilleth%' OR (name ILIKE '%scott%' AND name ILIKE '%lil%');
+
+-- 2026-09-15 00:32:04.2350
+SELECT 'find-cheryl' AS q, customer_id, name, status, monthly_fee
+FROM public.customers WHERE name ILIKE '%cheryl%' AND name ILIKE '%hanson%';
+
+-- 2026-09-15 00:32:04.3620
+-- Everyone with a known ID: balance + ledger totals
+WITH t(customer_id) AS (VALUES (11308),(14954),(9818),(12061),(13856),(8429))
+SELECT 'balance' AS q, c.customer_id, c.name, c.status, c.monthly_fee,
+       b.balance, b.outstanding_balance, b.credit_balance
+FROM public.customers c JOIN public.customer_billing_status b USING (customer_id)
+WHERE c.customer_id IN (SELECT customer_id FROM t) ORDER BY c.customer_id;
+
+-- 2026-09-15 00:32:04.4460
+WITH t(customer_id) AS (VALUES (11308),(14954),(9818),(12061),(13856),(8429))
+SELECT 'totals' AS q, e.customer_id, e.entry_type, count(*), sum(e.amount) AS total
+FROM public.account_ledger_entries e WHERE e.customer_id IN (SELECT customer_id FROM t)
+GROUP BY e.customer_id, e.entry_type ORDER BY e.customer_id, e.entry_type;
+
+-- 2026-09-15 00:32:04.5980
+-- Annett Miller: find the October payment that should say September
+SELECT 'annett-payments' AS q, payment_id, COALESCE(payment_type, legacy_payment_type) AS type,
+       amount_paid, month_paid, payment_date, (voided_at IS NOT NULL) AS voided
+FROM public.payments WHERE customer_id = 14954 ORDER BY payment_date;
+
+-- 2026-09-15 00:35:29.7090
+WITH t(customer_id) AS (VALUES (10290),(3729),(9193),(3696))
+SELECT c.customer_id, c.name, c.status, c.monthly_fee,
+       b.balance, b.outstanding_balance, b.credit_balance
+FROM public.customers c JOIN public.customer_billing_status b USING (customer_id)
+WHERE c.customer_id IN (SELECT customer_id FROM t) ORDER BY c.customer_id;
+
+-- 2026-09-15 00:42:11.8510
+-- ============================================================================
+-- Balance corrections, batch 2026-09-15.
+--
+-- Same mechanism as zero-credits-2026-09.sql: one 'adjustment' entry per
+-- customer moves the balance to an exact target. Most here are "clear the
+-- credit" (target 0.00); two are "should have a credit of 2,500" - Trace
+-- Thomas and Jason Burrel currently owe nothing and have no credit, so this
+-- CREATES a 2,500 credit for them rather than correcting an existing one.
+--
+-- NOT INCLUDED: Annett Miller (14954) - she has a -5,000 credit but only a
+-- month-label fix was requested for her; see fix-annett-miller-14954-2026-09.sql.
+--
+-- Plain SQL. TablePlus "Run All" or psql. Run on BOTH databases.
+-- LAST LINE IS `ROLLBACK` - rehearsal. Read every printed row, back up,
+-- change ROLLBACK -> COMMIT, run again.
+--
+--   docker exec -it spcl-backup sh /opt/spcl-deploy/backup.sh   # before COMMIT
+-- ============================================================================
+
+BEGIN;
+
+-- 2026-09-15 00:42:11.9350
+CREATE TEMP TABLE actor ON COMMIT DROP AS
+SELECT e.employee_id, e.first_name || ' ' || e.last_name AS actor_name
+FROM public.employees e WHERE e.employee_id = 2;
+
+-- 2026-09-15 00:42:12.0150
+DO $g$
+DECLARE n INTEGER;
+BEGIN
+    SELECT count(*) INTO n FROM actor;
+    IF n <> 1 THEN RAISE EXCEPTION 'employee_id 2 matched % rows, expected 1. Nothing changed.', n; END IF;
+END $g$;
+
+-- 2026-09-15 00:42:12.0990
+-- ----------------------------------------------------------------------------
+-- THE ONLY BLOCK YOU EDIT.
+--   expected_balance_before - NULL to skip the check
+--   target_balance          - 0.00 clears a credit; negative leaves a smaller
+--                             credit; here also used to CREATE a credit from 0
+-- ----------------------------------------------------------------------------
+CREATE TEMP TABLE credit_fixes ON COMMIT DROP AS
+SELECT * FROM (VALUES
+    (8429,  0.00::NUMERIC,     -2500.00::NUMERIC),  -- Trace Thomas: create 2,500 credit
+    (9818,  -2500.00::NUMERIC,     0.00::NUMERIC),  -- Garfield Kelly: clear credit
+    (11308, -1500.00::NUMERIC,     0.00::NUMERIC),  -- Camoya Mason: zero the credit (was 1,500, not 2,500)
+    (12061, 0.00::NUMERIC,     -2500.00::NUMERIC),  -- Jason Burrel: create 2,500 credit
+    (13856, -3000.00::NUMERIC,     0.00::NUMERIC),  -- Natalee Grant Williams: clear credit (was 3,000)
+    (3696,  -2500.00::NUMERIC,     0.00::NUMERIC),  -- Cheryl Hanson: clear credit
+    (9193,  -2500.00::NUMERIC,     0.00::NUMERIC),  -- Lilleth Scott: clear credit
+    (10290, -2500.00::NUMERIC,     0.00::NUMERIC),  -- Vanessa Thomas Campbell: clear credit
+    (3729,  -5000.00::NUMERIC, -2500.00::NUMERIC)   -- Janet Rose-marie Reid-Hyman: 5,000 credit -> keep only 2,500
+) AS v(customer_id, expected_balance_before, target_balance);
+
+-- 2026-09-15 00:42:12.2620
+-- ----------------------------------------------------------------------------
+-- Resolve current balances and validate every row before touching anything.
+-- ----------------------------------------------------------------------------
+CREATE TEMP TABLE credit_plan ON COMMIT DROP AS
+SELECT f.customer_id,
+       f.expected_balance_before,
+       f.target_balance,
+       c.name,
+       b.balance AS balance_before,
+       (f.target_balance - b.balance)::NUMERIC(14,2) AS adjustment_amount
+FROM credit_fixes f
+LEFT JOIN public.customers c               ON c.customer_id = f.customer_id
+LEFT JOIN public.customer_billing_status b ON b.customer_id = f.customer_id;
+
+-- 2026-09-15 00:42:12.3420
+DO $g$
+DECLARE r RECORD;
+    problems INTEGER := 0;
+BEGIN
+    FOR r IN SELECT * FROM credit_plan LOOP
+        IF r.name IS NULL THEN
+            RAISE WARNING 'customer % not found', r.customer_id; problems := problems + 1; CONTINUE;
+        END IF;
+        IF r.balance_before IS NULL THEN
+            RAISE WARNING 'customer % (%) has no billing status row', r.customer_id, r.name;
+            problems := problems + 1; CONTINUE;
+        END IF;
+        IF r.expected_balance_before IS NOT NULL AND r.balance_before <> r.expected_balance_before THEN
+            RAISE WARNING 'customer % (%) balance is % but you expected % - skipping',
+                r.customer_id, r.name, r.balance_before, r.expected_balance_before;
+            problems := problems + 1; CONTINUE;
+        END IF;
+    END LOOP;
+    IF problems > 0 THEN
+        RAISE EXCEPTION '% row(s) failed validation - see warnings. Nothing changed.', problems;
+    END IF;
+END $g$;
+
+-- 2026-09-15 00:42:12.4220
+SELECT 'ABOUT TO ADJUST' AS check, customer_id, name, balance_before,
+       adjustment_amount AS adjustment_to_post, target_balance
+FROM credit_plan ORDER BY customer_id;
+
+-- 2026-09-15 00:42:12.5080
+INSERT INTO public.account_ledger_entries (
+    customer_id, entry_type, amount, effective_date, description,
+    created_by_employee_id, reason, is_verified, source_key
+)
+SELECT p.customer_id, 'adjustment', p.adjustment_amount,
+       (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+       'Correction: balance adjusted to J$' || p.target_balance::TEXT || ' at management request',
+       2,
+       'Balance moved from ' || p.balance_before::TEXT || ' to ' || p.target_balance::TEXT || ' at management request.',
+       TRUE,
+       'fix-2026-09-15:balance-correction:' || p.customer_id::TEXT
+FROM credit_plan p
+WHERE p.adjustment_amount <> 0
+ON CONFLICT (source_key) DO NOTHING;
+
+-- 2026-09-15 00:42:12.6230
+DO $g$
+DECLARE r RECORD;
+BEGIN
+    FOR r IN
+        SELECT p.customer_id, p.name, p.target_balance, b.balance
+        FROM credit_plan p JOIN public.customer_billing_status b USING (customer_id)
+    LOOP
+        IF r.balance <> r.target_balance THEN
+            RAISE EXCEPTION 'customer % (%) balance is % after adjustment, expected %. Nothing committed.',
+                r.customer_id, r.name, r.balance, r.target_balance;
+        END IF;
+    END LOOP;
+END $g$;
+
+-- 2026-09-15 00:42:12.7900
+INSERT INTO public.audit_logs (
+    employee_id, actor_name, action, entity_type, entity_id,
+    field_name, old_value, new_value, reason, occurred_at, source_key
+)
+SELECT (SELECT employee_id FROM actor), (SELECT actor_name FROM actor),
+       'Adjusted account balance', 'customer', p.customer_id::TEXT,
+       'balance', p.balance_before::TEXT, p.target_balance::TEXT,
+       'Balance corrected to J$' || p.target_balance::TEXT || ' at management request.',
+       CURRENT_TIMESTAMP, 'fix-2026-09-15:balance-correction:' || p.customer_id::TEXT
+FROM credit_plan p
+WHERE p.adjustment_amount <> 0
+ON CONFLICT (source_key) DO NOTHING;
+
+-- 2026-09-15 00:42:12.9070
+SELECT 'AFTER' AS check, p.customer_id, p.name, b.balance, b.outstanding_balance, b.credit_balance
+FROM credit_plan p JOIN public.customer_billing_status b USING (customer_id)
+ORDER BY p.customer_id;
+
+-- 2026-09-15 00:42:12.9880
+-- ----------------------------------------------------------------------------
+-- ROLLBACK = rehearsal.  COMMIT = for real (back up first, run on BOTH DBs).
+-- ----------------------------------------------------------------------------
+ROLLBACK;
+
+-- 2026-09-15 00:42:44.2430
+-- ============================================================================
+-- Balance corrections, batch 2026-09-15.
+--
+-- Same mechanism as zero-credits-2026-09.sql: one 'adjustment' entry per
+-- customer moves the balance to an exact target. Most here are "clear the
+-- credit" (target 0.00); two are "should have a credit of 2,500" - Trace
+-- Thomas and Jason Burrel currently owe nothing and have no credit, so this
+-- CREATES a 2,500 credit for them rather than correcting an existing one.
+--
+-- NOT INCLUDED: Annett Miller (14954) - she has a -5,000 credit but only a
+-- month-label fix was requested for her; see fix-annett-miller-14954-2026-09.sql.
+--
+-- Plain SQL. TablePlus "Run All" or psql. Run on BOTH databases.
+-- LAST LINE IS `ROLLBACK` - rehearsal. Read every printed row, back up,
+-- change ROLLBACK -> COMMIT, run again.
+--
+--   docker exec -it spcl-backup sh /opt/spcl-deploy/backup.sh   # before COMMIT
+-- ============================================================================
+
+BEGIN;
+
+-- 2026-09-15 00:42:44.3360
+CREATE TEMP TABLE actor ON COMMIT DROP AS
+SELECT e.employee_id, e.first_name || ' ' || e.last_name AS actor_name
+FROM public.employees e WHERE e.employee_id = 2;
+
+-- 2026-09-15 00:42:44.4290
+DO $g$
+DECLARE n INTEGER;
+BEGIN
+    SELECT count(*) INTO n FROM actor;
+    IF n <> 1 THEN RAISE EXCEPTION 'employee_id 2 matched % rows, expected 1. Nothing changed.', n; END IF;
+END $g$;
+
+-- 2026-09-15 00:42:44.5200
+-- ----------------------------------------------------------------------------
+-- THE ONLY BLOCK YOU EDIT.
+--   expected_balance_before - NULL to skip the check
+--   target_balance          - 0.00 clears a credit; negative leaves a smaller
+--                             credit; here also used to CREATE a credit from 0
+-- ----------------------------------------------------------------------------
+CREATE TEMP TABLE credit_fixes ON COMMIT DROP AS
+SELECT * FROM (VALUES
+    (8429,  0.00::NUMERIC,     -2500.00::NUMERIC),  -- Trace Thomas: create 2,500 credit
+    (9818,  -2500.00::NUMERIC,     0.00::NUMERIC),  -- Garfield Kelly: clear credit
+    (11308, -1500.00::NUMERIC,     0.00::NUMERIC),  -- Camoya Mason: zero the credit (was 1,500, not 2,500)
+    (12061, 0.00::NUMERIC,     -2500.00::NUMERIC),  -- Jason Burrel: create 2,500 credit
+    (13856, -3000.00::NUMERIC,     0.00::NUMERIC),  -- Natalee Grant Williams: clear credit (was 3,000)
+    (3696,  -2500.00::NUMERIC,     0.00::NUMERIC),  -- Cheryl Hanson: clear credit
+    (9193,  -2500.00::NUMERIC,     0.00::NUMERIC),  -- Lilleth Scott: clear credit
+    (10290, -2500.00::NUMERIC,     0.00::NUMERIC),  -- Vanessa Thomas Campbell: clear credit
+    (3729,  -5000.00::NUMERIC, -2500.00::NUMERIC)   -- Janet Rose-marie Reid-Hyman: 5,000 credit -> keep only 2,500
+) AS v(customer_id, expected_balance_before, target_balance);
+
+-- 2026-09-15 00:42:44.6510
+-- ----------------------------------------------------------------------------
+-- Resolve current balances and validate every row before touching anything.
+-- ----------------------------------------------------------------------------
+CREATE TEMP TABLE credit_plan ON COMMIT DROP AS
+SELECT f.customer_id,
+       f.expected_balance_before,
+       f.target_balance,
+       c.name,
+       b.balance AS balance_before,
+       (f.target_balance - b.balance)::NUMERIC(14,2) AS adjustment_amount
+FROM credit_fixes f
+LEFT JOIN public.customers c               ON c.customer_id = f.customer_id
+LEFT JOIN public.customer_billing_status b ON b.customer_id = f.customer_id;
+
+-- 2026-09-15 00:42:44.7740
+DO $g$
+DECLARE r RECORD;
+    problems INTEGER := 0;
+BEGIN
+    FOR r IN SELECT * FROM credit_plan LOOP
+        IF r.name IS NULL THEN
+            RAISE WARNING 'customer % not found', r.customer_id; problems := problems + 1; CONTINUE;
+        END IF;
+        IF r.balance_before IS NULL THEN
+            RAISE WARNING 'customer % (%) has no billing status row', r.customer_id, r.name;
+            problems := problems + 1; CONTINUE;
+        END IF;
+        IF r.expected_balance_before IS NOT NULL AND r.balance_before <> r.expected_balance_before THEN
+            RAISE WARNING 'customer % (%) balance is % but you expected % - skipping',
+                r.customer_id, r.name, r.balance_before, r.expected_balance_before;
+            problems := problems + 1; CONTINUE;
+        END IF;
+    END LOOP;
+    IF problems > 0 THEN
+        RAISE EXCEPTION '% row(s) failed validation - see warnings. Nothing changed.', problems;
+    END IF;
+END $g$;
+
+-- 2026-09-15 00:42:44.8690
+SELECT 'ABOUT TO ADJUST' AS check, customer_id, name, balance_before,
+       adjustment_amount AS adjustment_to_post, target_balance
+FROM credit_plan ORDER BY customer_id;
+
+-- 2026-09-15 00:42:44.9660
+INSERT INTO public.account_ledger_entries (
+    customer_id, entry_type, amount, effective_date, description,
+    created_by_employee_id, reason, is_verified, source_key
+)
+SELECT p.customer_id, 'adjustment', p.adjustment_amount,
+       (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+       'Correction: balance adjusted to J$' || p.target_balance::TEXT || ' at management request',
+       2,
+       'Balance moved from ' || p.balance_before::TEXT || ' to ' || p.target_balance::TEXT || ' at management request.',
+       TRUE,
+       'fix-2026-09-15:balance-correction:' || p.customer_id::TEXT
+FROM credit_plan p
+WHERE p.adjustment_amount <> 0
+ON CONFLICT (source_key) DO NOTHING;
+
+-- 2026-09-15 00:42:45.1090
+DO $g$
+DECLARE r RECORD;
+BEGIN
+    FOR r IN
+        SELECT p.customer_id, p.name, p.target_balance, b.balance
+        FROM credit_plan p JOIN public.customer_billing_status b USING (customer_id)
+    LOOP
+        IF r.balance <> r.target_balance THEN
+            RAISE EXCEPTION 'customer % (%) balance is % after adjustment, expected %. Nothing committed.',
+                r.customer_id, r.name, r.balance, r.target_balance;
+        END IF;
+    END LOOP;
+END $g$;
+
+-- 2026-09-15 00:42:45.2940
+INSERT INTO public.audit_logs (
+    employee_id, actor_name, action, entity_type, entity_id,
+    field_name, old_value, new_value, reason, occurred_at, source_key
+)
+SELECT (SELECT employee_id FROM actor), (SELECT actor_name FROM actor),
+       'Adjusted account balance', 'customer', p.customer_id::TEXT,
+       'balance', p.balance_before::TEXT, p.target_balance::TEXT,
+       'Balance corrected to J$' || p.target_balance::TEXT || ' at management request.',
+       CURRENT_TIMESTAMP, 'fix-2026-09-15:balance-correction:' || p.customer_id::TEXT
+FROM credit_plan p
+WHERE p.adjustment_amount <> 0
+ON CONFLICT (source_key) DO NOTHING;
+
+-- 2026-09-15 00:42:45.4250
+SELECT 'AFTER' AS check, p.customer_id, p.name, b.balance, b.outstanding_balance, b.credit_balance
+FROM credit_plan p JOIN public.customer_billing_status b USING (customer_id)
+ORDER BY p.customer_id;
+
+-- 2026-09-15 00:42:45.5200
+-- ----------------------------------------------------------------------------
+-- ROLLBACK = rehearsal.  COMMIT = for real (back up first, run on BOTH DBs).
+-- ----------------------------------------------------------------------------
+COMMIT;
+
+-- 2026-09-15 00:43:02.6810
+-- ============================================================================
+-- Annett Miller (customer 14954): one of two October-tagged payments should
+-- say September instead.
+--
+-- She has TWO identical payments - same amount, same month_paid, same
+-- payment_date - both tagged October 2026:
+--   441835  Monthly Fee  J$2,500  month_paid 2026-10-01  paid 2026-09-14
+--   441840  Monthly Fee  J$2,500  month_paid 2026-10-01  paid 2026-09-14
+-- This relabels 441835 to September 2026 (2026-09-01, the app's 1st-of-month
+-- convention), leaving 441840 as October. Purely a label - month_paid is not
+-- part of any balance calculation, so this does not touch her balance.
+--
+-- NOTE: her account separately carries a -5,000.00 credit (not requested to
+-- be touched here - see zero-credits-2026-09-15.sql if that needs fixing too).
+--
+-- Plain SQL. TablePlus "Run All" or psql. Run on BOTH databases.
+-- LAST LINE IS `ROLLBACK` - rehearsal. Read the printed rows, back up,
+-- change ROLLBACK -> COMMIT, run again.
+-- ============================================================================
+
+BEGIN;
+
+-- 2026-09-15 00:43:02.7910
+CREATE TEMP TABLE actor ON COMMIT DROP AS
+SELECT e.employee_id, e.first_name || ' ' || e.last_name AS actor_name
+FROM public.employees e WHERE e.employee_id = 2;
+
+-- 2026-09-15 00:43:02.8830
+DO $g$
+DECLARE n INTEGER;
+BEGIN
+    SELECT count(*) INTO n FROM actor;
+    IF n <> 1 THEN RAISE EXCEPTION 'employee_id 2 matched % rows, expected 1. Nothing changed.', n; END IF;
+END $g$;
+
+-- 2026-09-15 00:43:02.9730
+-- Confirm both October payments exist exactly as expected before touching either.
+DO $g$
+DECLARE n INTEGER;
+BEGIN
+    SELECT count(*) INTO n FROM public.payments
+    WHERE payment_id IN (441835, 441840)
+      AND customer_id = 14954
+      AND amount_paid = 2500.00
+      AND month_paid = DATE '2026-10-01'
+      AND COALESCE(payment_type, legacy_payment_type) = 'Monthly Fee'
+      AND voided_at IS NULL;
+    IF n <> 2 THEN
+        RAISE EXCEPTION 'Expected both 441835 and 441840 to match (14954 / J$2,500 / Oct 2026 / not voided), found %. Nothing changed.', n;
+    END IF;
+END $g$;
+
+-- 2026-09-15 00:43:03.1210
+SELECT 'BEFORE' AS check, payment_id, amount_paid, month_paid, payment_date
+FROM public.payments WHERE payment_id IN (441835, 441840) ORDER BY payment_id;
+
+-- 2026-09-15 00:43:03.2100
+UPDATE public.payments
+SET month_paid = DATE '2026-09-01'
+WHERE payment_id = 441835 AND customer_id = 14954;
+
+-- 2026-09-15 00:43:03.3110
+INSERT INTO public.audit_logs (
+    employee_id, actor_name, action, entity_type, entity_id,
+    field_name, old_value, new_value, reason, occurred_at, source_key
+)
+SELECT (SELECT employee_id FROM actor), (SELECT actor_name FROM actor),
+       'Corrected payment month', 'payment', '441835',
+       'month_paid', '2026-10-01', '2026-09-01',
+       'One of two identically-tagged October payments corrected to September at management request.',
+       CURRENT_TIMESTAMP, 'fix-2026-09-15:annett-14954-month:441835'
+ON CONFLICT (source_key) DO NOTHING;
+
+-- 2026-09-15 00:43:03.4040
+SELECT 'AFTER' AS check, payment_id, amount_paid, month_paid, payment_date
+FROM public.payments WHERE payment_id IN (441835, 441840) ORDER BY payment_id;
+
+-- 2026-09-15 00:43:03.4960
+-- ----------------------------------------------------------------------------
+-- ROLLBACK = rehearsal.  COMMIT = for real (back up first, run on BOTH DBs).
+-- ----------------------------------------------------------------------------
+ROLLBACK;
+
+-- 2026-09-15 00:43:50.5700
+-- ============================================================================
+-- Annett Miller (customer 14954): one of two October-tagged payments should
+-- say September instead.
+--
+-- She has TWO identical payments - same amount, same month_paid, same
+-- payment_date - both tagged October 2026:
+--   441835  Monthly Fee  J$2,500  month_paid 2026-10-01  paid 2026-09-14
+--   441840  Monthly Fee  J$2,500  month_paid 2026-10-01  paid 2026-09-14
+-- This relabels 441835 to September 2026 (2026-09-01, the app's 1st-of-month
+-- convention), leaving 441840 as October. Purely a label - month_paid is not
+-- part of any balance calculation, so this does not touch her balance.
+--
+-- NOTE: her account separately carries a -5,000.00 credit (not requested to
+-- be touched here - see zero-credits-2026-09-15.sql if that needs fixing too).
+--
+-- Plain SQL. TablePlus "Run All" or psql. Run on BOTH databases.
+-- LAST LINE IS `ROLLBACK` - rehearsal. Read the printed rows, back up,
+-- change ROLLBACK -> COMMIT, run again.
+-- ============================================================================
+
+BEGIN;
+
+-- 2026-09-15 00:43:50.6620
+CREATE TEMP TABLE actor ON COMMIT DROP AS
+SELECT e.employee_id, e.first_name || ' ' || e.last_name AS actor_name
+FROM public.employees e WHERE e.employee_id = 2;
+
+-- 2026-09-15 00:43:50.8310
+DO $g$
+DECLARE n INTEGER;
+BEGIN
+    SELECT count(*) INTO n FROM actor;
+    IF n <> 1 THEN RAISE EXCEPTION 'employee_id 2 matched % rows, expected 1. Nothing changed.', n; END IF;
+END $g$;
+
+-- 2026-09-15 00:43:50.9200
+-- Confirm both October payments exist exactly as expected before touching either.
+DO $g$
+DECLARE n INTEGER;
+BEGIN
+    SELECT count(*) INTO n FROM public.payments
+    WHERE payment_id IN (441835, 441840)
+      AND customer_id = 14954
+      AND amount_paid = 2500.00
+      AND month_paid = DATE '2026-10-01'
+      AND COALESCE(payment_type, legacy_payment_type) = 'Monthly Fee'
+      AND voided_at IS NULL;
+    IF n <> 2 THEN
+        RAISE EXCEPTION 'Expected both 441835 and 441840 to match (14954 / J$2,500 / Oct 2026 / not voided), found %. Nothing changed.', n;
+    END IF;
+END $g$;
+
+-- 2026-09-15 00:43:51.0170
+SELECT 'BEFORE' AS check, payment_id, amount_paid, month_paid, payment_date
+FROM public.payments WHERE payment_id IN (441835, 441840) ORDER BY payment_id;
+
+-- 2026-09-15 00:43:51.1070
+UPDATE public.payments
+SET month_paid = DATE '2026-09-01'
+WHERE payment_id = 441835 AND customer_id = 14954;
+
+-- 2026-09-15 00:43:51.1990
+INSERT INTO public.audit_logs (
+    employee_id, actor_name, action, entity_type, entity_id,
+    field_name, old_value, new_value, reason, occurred_at, source_key
+)
+SELECT (SELECT employee_id FROM actor), (SELECT actor_name FROM actor),
+       'Corrected payment month', 'payment', '441835',
+       'month_paid', '2026-10-01', '2026-09-01',
+       'One of two identically-tagged October payments corrected to September at management request.',
+       CURRENT_TIMESTAMP, 'fix-2026-09-15:annett-14954-month:441835'
+ON CONFLICT (source_key) DO NOTHING;
+
+-- 2026-09-15 00:43:51.3560
+SELECT 'AFTER' AS check, payment_id, amount_paid, month_paid, payment_date
+FROM public.payments WHERE payment_id IN (441835, 441840) ORDER BY payment_id;
+
+-- 2026-09-15 00:43:51.4480
+-- ----------------------------------------------------------------------------
+-- ROLLBACK = rehearsal.  COMMIT = for real (back up first, run on BOTH DBs).
+-- ----------------------------------------------------------------------------
+COMMIT;
+
+-- 2026-09-15 01:05:18.6080
+select pg_get_functiondef(17693)AS create_function;
+
+-- 2026-09-15 01:05:21.5660
+select pg_get_functiondef(17667)AS create_function;
+
+-- 2026-09-15 01:05:21.6600
+SELECT
+  pg_total_relation_size(relid) AS total_size,
+  pg_table_size(relid) AS data_size,
+  pg_indexes_size(relid) AS index_size,
+  obj_description(relid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_statio_user_tables
+WHERE
+  schemaname = 'public'
+  AND relname = 'decrypt'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_proc') AS comment
+FROM
+  pg_catalog.pg_proc p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE
+  n.nspname = 'public'
+ AND p.proname = 'decrypt'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_class p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.relnamespace
+WHERE
+  n.nspname = 'public'
+  AND p.relname = 'decrypt'
+  AND p.relkind = 'v';
+
+-- 2026-09-15 01:05:22.4160
+select pg_get_functiondef(17659)AS create_function;
+
+-- 2026-09-15 01:05:22.5070
+SELECT
+  pg_total_relation_size(relid) AS total_size,
+  pg_table_size(relid) AS data_size,
+  pg_indexes_size(relid) AS index_size,
+  obj_description(relid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_statio_user_tables
+WHERE
+  schemaname = 'public'
+  AND relname = 'digest'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_proc') AS comment
+FROM
+  pg_catalog.pg_proc p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE
+  n.nspname = 'public'
+ AND p.proname = 'digest'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_class p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.relnamespace
+WHERE
+  n.nspname = 'public'
+  AND p.relname = 'digest'
+  AND p.relkind = 'v';
+
+-- 2026-09-15 01:05:23.5170
+select pg_get_functiondef(17669)AS create_function;
+
+-- 2026-09-15 01:05:23.6660
+SELECT
+  pg_total_relation_size(relid) AS total_size,
+  pg_table_size(relid) AS data_size,
+  pg_indexes_size(relid) AS index_size,
+  obj_description(relid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_statio_user_tables
+WHERE
+  schemaname = 'public'
+  AND relname = 'decrypt_iv'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_proc') AS comment
+FROM
+  pg_catalog.pg_proc p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE
+  n.nspname = 'public'
+ AND p.proname = 'decrypt_iv'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_class p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.relnamespace
+WHERE
+  n.nspname = 'public'
+  AND p.relname = 'decrypt_iv'
+  AND p.relkind = 'v';
+
+-- 2026-09-15 01:05:25.9890
+select pg_get_viewdef('"public"."customer_billing_status"'::regclass, true) as create_statement;
+
+-- 2026-09-15 01:05:26.0800
+SELECT
+  pg_total_relation_size(relid) AS total_size,
+  pg_table_size(relid) AS data_size,
+  pg_indexes_size(relid) AS index_size,
+  obj_description(relid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_statio_user_tables
+WHERE
+  schemaname = 'public'
+  AND relname = 'customer_billing_status'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_proc') AS comment
+FROM
+  pg_catalog.pg_proc p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE
+  n.nspname = 'public'
+ AND p.proname = 'customer_billing_status'
+UNION
+SELECT
+  NULL AS total_size,
+  NULL AS data_size,
+  NULL AS index_size,
+  obj_description(p.oid, 'pg_class') AS comment
+FROM
+  pg_catalog.pg_class p
+  LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.relnamespace
+WHERE
+  n.nspname = 'public'
+  AND p.relname = 'customer_billing_status'
+  AND p.relkind = 'v';
+
+-- 2026-09-15 01:05:26.6360
+SELECT * FROM "public"."customer_billing_status" LIMIT 300 OFFSET 0;
+
+-- 2026-09-15 01:05:26.8100
+select reltuples::int8 as count from pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace where nspname='public'AND relname='customer_billing_status';
+
+-- 2026-09-15 01:25:58.9170
+-- PostgreSQL / TablePlus: run the entire file. No persistent changes.
+-- Confirmed window: discount APPROVALS Aug 18 through Sep 1 inclusive, Jamaica time.
+-- This finds evidence, not proof that every discount needs another correction.
+-- Management policy: confirmed paid-up accounts have their full debt cleared;
+-- disconnected accounts then enter pending_reconnection.
+BEGIN;
+
+-- 2026-09-15 01:25:59.0120
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+-- 2026-09-15 01:25:59.1890
+CREATE TEMP TABLE credit_audit_window ON COMMIT DROP AS
+SELECT TIMESTAMPTZ '2026-08-18 00:00:00-05' AS starts_at,
+       TIMESTAMPTZ '2026-09-02 00:00:00-05' AS ends_at;
+
+-- 2026-09-15 01:25:59.2980
+CREATE TEMP TABLE discount_cohort ON COMMIT DROP AS
+SELECT w.customer_id, MIN(w.reviewed_at) AS first_discount_at,
+       SUM(w.amount) AS discount_total,
+       ARRAY_AGG(w.waiver_request_id ORDER BY w.reviewed_at) AS discount_ids
+FROM public.waiver_requests w CROSS JOIN credit_audit_window x
+JOIN public.account_ledger_entries l
+  ON l.account_ledger_entry_id = w.waiver_ledger_entry_id
+ AND l.customer_id = w.customer_id
+WHERE w.status = 'approved' AND NOT w.is_credit
+  AND w.reviewed_at >= x.starts_at AND w.reviewed_at < x.ends_at
+  AND l.entry_type = 'waiver' AND l.amount < 0
+GROUP BY w.customer_id;
+
+-- 2026-09-15 01:26:06.9550
+CREATE TEMP TABLE receipt_evidence ON COMMIT DROP AS
+SELECT p.customer_id, p.payment_id, p.payment_date, p.recorded_at,
+       p.month_paid, p.amount_paid, p.note,
+       COALESCE(l.ledger_deduction, 0) AS ledger_deduction,
+       GREATEST(p.amount_paid - COALESCE(l.ledger_deduction, 0), 0) AS receipt_gap,
+       COALESCE(l.other_linked_entries, 0) AS other_linked_entries,
+       p.recorded_at >= d.first_discount_at AS recorded_after_discount
+FROM public.payments p JOIN discount_cohort d USING (customer_id)
+CROSS JOIN credit_audit_window x
+LEFT JOIN LATERAL (
+  SELECT -SUM(e.amount) FILTER (WHERE e.entry_type = 'monthly_payment') AS ledger_deduction,
+         COUNT(*) FILTER (WHERE e.entry_type <> 'monthly_payment') AS other_linked_entries
+  FROM public.account_ledger_entries e WHERE e.payment_id = p.payment_id
+) l ON TRUE
+WHERE COALESCE(p.payment_type, p.legacy_payment_type) = 'Monthly Fee'
+  AND p.voided_at IS NULL
+  AND (p.payment_date >= (x.starts_at AT TIME ZONE 'America/Jamaica')::DATE
+       OR p.recorded_at >= x.starts_at);
+
+-- 2026-09-15 01:26:08.0290
+-- 1. ALL affected accounts, including those with no debt yet or future credit.
+-- Six distinct month labels are supporting evidence, not six fully paid bills.
+SELECT c.customer_id, c.name, c.status, c.monthly_fee, c.activation_date,
+       public.spcl_anniversary_date(c.activation_date, DATE '2026-09-01') AS september_due_date,
+       CASE WHEN EXTRACT(DAY FROM c.activation_date) <= 15
+            THEN 'August (user rule; verify receipt month)'
+            ELSE 'September (user rule; verify receipt month)' END AS expected_september_bill_label,
+       b.balance, b.outstanding_balance, b.credit_balance,
+       b.outstanding_balance AS proposed_debt_to_clear_if_confirmed_paid_up,
+       LEAST(b.balance, 0) AS balance_after_clearing_debt,
+       b.credit_balance AS existing_credit_preserved,
+       CASE WHEN c.status = 'disconnected' THEN 'pending_reconnection'
+            ELSE c.status END AS proposed_status_after_correction,
+       b.oldest_unpaid_due_date, b.grace_end_date,
+       b.eligible_for_disconnection, b.is_on_hold, b.ready_for_reconnection,
+       b.unverified_entries, d.discount_total, d.discount_ids,
+       COALESCE(g.gap_total, 0) AS receipt_gap_to_investigate,
+       COALESCE(h.month_labels, 0) AS distinct_month_labels_march_through_august,
+       h.latest_month_label,
+       COALESCE(a.later_corrections, '[]'::JSONB) AS later_credits_adjustments_or_voids,
+       EXISTS (SELECT 1 FROM public.account_ledger_entries done
+         WHERE done.source_key = 'discount-missing-credit-2026-08-18:' || d.customer_id::TEXT
+       ) AS this_correction_already_applied
+FROM discount_cohort d JOIN public.customers c USING (customer_id)
+JOIN public.customer_billing_status b USING (customer_id)
+LEFT JOIN LATERAL (
+  SELECT SUM(receipt_gap) AS gap_total FROM receipt_evidence r
+  WHERE r.customer_id = d.customer_id
+) g ON TRUE
+LEFT JOIN LATERAL (
+  SELECT COUNT(DISTINCT DATE_TRUNC('month', p.month_paid)) FILTER (
+           WHERE p.month_paid >= DATE '2026-03-01' AND p.month_paid < DATE '2026-09-01') AS month_labels,
+         MAX(p.month_paid) AS latest_month_label
+  FROM public.payments p WHERE p.customer_id = d.customer_id
+    AND p.voided_at IS NULL
+    AND COALESCE(p.payment_type, p.legacy_payment_type) = 'Monthly Fee'
+) h ON TRUE
+LEFT JOIN LATERAL (
+  SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id', l.account_ledger_entry_id,
+           'amount', l.amount, 'type', l.entry_type, 'reason', l.reason,
+           'source_key', l.source_key, 'created_at', l.created_at)
+           ORDER BY l.created_at, l.account_ledger_entry_id) AS later_corrections
+  FROM public.account_ledger_entries l
+  WHERE l.customer_id = d.customer_id AND l.created_at >= d.first_discount_at
+    AND l.entry_type IN ('waiver', 'adjustment', 'payment_void')
+) a ON TRUE
+ORDER BY b.eligible_for_disconnection DESC NULLS LAST,
+         COALESCE(g.gap_total, 0) DESC, c.customer_id;
+
+-- 2026-09-15 01:26:08.2380
+-- 2. Receipts versus actual ledger deductions. A gap may already have been
+-- repaired by an UNLINKED adjustment/credit: inspect outputs 1 and 4 first.
+SELECT r.*, c.name FROM receipt_evidence r
+JOIN public.customers c USING (customer_id)
+ORDER BY r.receipt_gap DESC, r.customer_id, r.payment_date, r.payment_id;
+
+-- 2026-09-15 01:26:08.8820
+-- 3. Payment history: actual dates, amounts and months, not guessed allocation.
+SELECT p.customer_id, p.payment_id, p.payment_date, p.recorded_at,
+       p.month_paid, p.amount_paid, p.voided_at, p.note
+FROM public.payments p JOIN discount_cohort d USING (customer_id)
+WHERE COALESCE(p.payment_type, p.legacy_payment_type) = 'Monthly Fee'
+  AND (p.payment_date >= DATE '2026-01-01' OR p.month_paid >= DATE '2026-01-01')
+ORDER BY p.customer_id, p.payment_date, p.payment_id;
+
+-- 2026-09-15 01:26:10.1190
+-- 4. Complete ledger, including opening balance and previous manual fixes.
+SELECT l.customer_id, l.account_ledger_entry_id, l.entry_type, l.amount,
+       l.effective_date, l.due_date, l.grace_end_date, l.created_at,
+       l.payment_id, l.description, l.reason, l.source_key,
+       SUM(l.amount) OVER (PARTITION BY l.customer_id
+         ORDER BY l.created_at, l.account_ledger_entry_id) AS running_posted_balance
+FROM public.account_ledger_entries l JOIN discount_cohort d USING (customer_id)
+ORDER BY l.customer_id, l.created_at, l.account_ledger_entry_id;
+
+-- 2026-09-15 01:26:10.5500
+-- 5. Actual status changes: compare disconnections with payment/grace dates.
+SELECT h.* FROM public.account_status_history h
+JOIN discount_cohort d USING (customer_id)
+WHERE h.effective_date >= DATE '2026-08-18'
+ORDER BY h.customer_id, h.effective_date, h.changed_at;
+
+-- 2026-09-15 01:26:10.7740
+ROLLBACK;
+
+-- 2026-09-15 01:29:24.5410
+-- Run AFTER reviewing audit-discount-missing-credits-2026.sql.
+-- Management instruction: clear the ENTIRE outstanding balance for affected
+-- accounts confirmed paid up to date from the previous six months' history.
+-- Discount approval window: Aug 18 through Sep 1 inclusive, Jamaica time.
+-- Select verified IDs after reviewing receipts, covered months and prior fixes.
+-- Six month labels or six receipts alone do not establish full payment.
+-- This creates a reversible balance waiver; existing credits are preserved.
+-- Disconnected accounts with cleared balances move to pending_reconnection,
+-- with status history, audit records, and pending request resolution.
+-- Configured reconnection automation may process them after COMMIT.
+-- Defaults to ROLLBACK. Review BEFORE/AFTER; change final line to COMMIT to save.
+BEGIN;
+
+-- 2026-09-15 01:29:24.6330
+SET LOCAL lock_timeout = '10s';
+
+-- 2026-09-15 01:29:24.7260
+LOCK TABLE public.customers, public.payments, public.account_ledger_entries,
+           public.waiver_requests, public.account_status_history,
+           public.reconnection_requests IN SHARE ROW EXCLUSIVE MODE;
+
+-- 2026-09-15 01:29:24.8210
+CREATE TEMP TABLE credit_actor (employee_id BIGINT PRIMARY KEY) ON COMMIT DROP;
+
+-- 2026-09-15 01:29:24.9560
+-- Enter the administrator recording these credits:
+-- INSERT INTO credit_actor VALUES (2);
+
+CREATE TEMP TABLE reviewed_accounts (
+  customer_id INTEGER PRIMARY KEY,
+  expected_balance NUMERIC(14,2) NOT NULL,
+  evidence TEXT NOT NULL CHECK (LENGTH(TRIM(evidence)) BETWEEN 3 AND 500)
+) ON COMMIT DROP;
+
+-- 2026-09-15 01:29:25.0490
+-- Populate with affected IDs, audit balances and supporting receipt/charge IDs:
+-- INSERT INTO reviewed_accounts VALUES
+--   (<customer_id>, <balance_from_audit>, '<receipt evidence: paid up to date; clear erroneous debt>');
+
+CREATE TEMP TABLE reviewed_credits ON COMMIT DROP AS
+SELECT r.*, GREATEST(b.balance, 0)::NUMERIC(14,2) AS credit_to_add,
+       c.status AS status_before
+FROM reviewed_accounts r LEFT JOIN public.customers c USING (customer_id)
+LEFT JOIN public.customer_billing_status b USING (customer_id);
+
+-- 2026-09-15 01:29:25.2360
+DO $$
+BEGIN
+  IF (SELECT COUNT(*) FROM credit_actor a JOIN public.employees e USING (employee_id)
+      WHERE e.role = 'admin') <> 1 THEN
+    RAISE EXCEPTION 'Enter one valid admin employee_id in credit_actor.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM reviewed_credits) THEN
+    RAISE EXCEPTION 'No affected accounts entered. Run the audit first.';
+  END IF;
+  IF EXISTS (SELECT 1 FROM reviewed_credits
+             WHERE status_before NOT IN ('active', 'disconnected', 'pending_reconnection')) THEN
+    RAISE EXCEPTION 'An account is closed, suspended, offline or otherwise outside this correction workflow. Review separately.';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM reviewed_credits r
+    LEFT JOIN public.customer_billing_status b USING (customer_id)
+    WHERE b.customer_id IS NULL OR b.balance IS DISTINCT FROM r.expected_balance
+  ) THEN
+    RAISE EXCEPTION 'An account is missing or its balance changed. Re-audit before applying.';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM reviewed_credits r WHERE NOT EXISTS (
+      SELECT 1 FROM public.waiver_requests w
+      JOIN public.account_ledger_entries l
+        ON l.account_ledger_entry_id = w.waiver_ledger_entry_id
+       AND l.customer_id = w.customer_id
+      WHERE w.customer_id = r.customer_id AND w.status = 'approved'
+        AND NOT w.is_credit AND l.entry_type = 'waiver' AND l.amount < 0
+        AND w.reviewed_at >= TIMESTAMPTZ '2026-08-18 00:00:00-05'
+        AND w.reviewed_at < TIMESTAMPTZ '2026-09-02 00:00:00-05'
+    )
+  ) THEN
+    RAISE EXCEPTION 'A reviewed customer does not have an approved discount in the audit window.';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM reviewed_credits r JOIN public.account_ledger_entries l
+      ON l.source_key = 'discount-missing-credit-2026-08-18:' || r.customer_id::TEXT
+  ) THEN
+    RAISE EXCEPTION 'A credit in this batch was already applied. No duplicate credits posted.';
+  END IF;
+END $$;
+
+-- 2026-09-15 01:29:25.3300
+SELECT 'BEFORE' AS stage, c.name, r.*, b.eligible_for_disconnection
+FROM reviewed_credits r JOIN public.customers c USING (customer_id)
+JOIN public.customer_billing_status b USING (customer_id);
+
+-- 2026-09-15 01:29:25.4800
+INSERT INTO public.account_ledger_entries (
+  customer_id, entry_type, amount, effective_date, description,
+  created_by_employee_id, reason, is_verified, source_key
+)
+SELECT r.customer_id, 'waiver', -r.credit_to_add,
+       (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+       'Billing correction: cleared erroneous outstanding balance', a.employee_id, r.evidence, TRUE,
+       'discount-missing-credit-2026-08-18:' || r.customer_id::TEXT
+FROM reviewed_credits r CROSS JOIN credit_actor a
+WHERE r.credit_to_add > 0;
+
+-- 2026-09-15 01:29:25.5740
+INSERT INTO public.waiver_requests (
+  customer_id, amount, reason, status, requested_by_employee_id,
+  reviewed_by_employee_id, reviewed_at, review_note, waiver_ledger_entry_id, is_credit
+)
+SELECT r.customer_id, r.credit_to_add, r.evidence, 'approved',
+       a.employee_id, a.employee_id, CURRENT_TIMESTAMP,
+       'Paid up to date verified; erroneous outstanding balance cleared.', l.account_ledger_entry_id, FALSE
+FROM reviewed_credits r CROSS JOIN credit_actor a
+JOIN public.account_ledger_entries l
+  ON l.source_key = 'discount-missing-credit-2026-08-18:' || r.customer_id::TEXT;
+
+-- 2026-09-15 01:29:25.6680
+INSERT INTO public.audit_logs (
+  employee_id, actor_name, action, entity_type, entity_id, field_name,
+  old_value, new_value, reason, source_key
+)
+SELECT a.employee_id, CONCAT_WS(' ', e.first_name, e.last_name),
+       'Cleared erroneous debt after payment reconciliation',
+       'customer', r.customer_id::TEXT, 'balance', r.expected_balance::TEXT,
+       (r.expected_balance - r.credit_to_add)::TEXT, r.evidence,
+       'discount-missing-credit-2026-08-18:' || r.customer_id::TEXT
+FROM reviewed_credits r CROSS JOIN credit_actor a
+JOIN public.employees e USING (employee_id)
+WHERE r.credit_to_add > 0;
+
+-- 2026-09-15 01:29:25.7610
+-- Follow the app's approved-waiver reconnection workflow.
+CREATE TEMP TABLE queued_reconnections ON COMMIT DROP AS
+WITH moved AS (
+  UPDATE public.customers c SET status = 'pending_reconnection'
+  FROM reviewed_credits r, public.customer_billing_status b
+  WHERE c.customer_id = r.customer_id AND b.customer_id = c.customer_id
+    AND c.status = 'disconnected' AND b.ready_for_reconnection
+  RETURNING c.customer_id
+), recorded AS (
+  INSERT INTO public.account_status_history (
+    customer_id, from_status, to_status, reason, changed_by_employee_id, source_key
+  )
+  SELECT m.customer_id, 'disconnected', 'pending_reconnection',
+         'Billing correction: balance cleared; awaiting reconnection', a.employee_id,
+         'discount-missing-credit-2026-08-18:reconnect:' || m.customer_id::TEXT
+  FROM moved m CROSS JOIN credit_actor a
+  RETURNING customer_id, account_status_history_id
+)
+SELECT * FROM recorded;
+
+-- 2026-09-15 01:29:25.8560
+UPDATE public.reconnection_requests r
+SET status = 'approved', reviewed_at = CURRENT_TIMESTAMP,
+    reviewed_by_employee_id = (SELECT employee_id FROM credit_actor),
+    review_note = 'Billing correction cleared the balance; queued for reconnection.',
+    account_status_history_id = q.account_status_history_id
+FROM queued_reconnections q
+WHERE r.customer_id = q.customer_id AND r.status = 'pending';
+
+-- 2026-09-15 01:29:26.0040
+INSERT INTO public.audit_logs (
+  employee_id, actor_name, action, entity_type, entity_id, field_name,
+  old_value, new_value, reason, source_key
+)
+SELECT a.employee_id, CONCAT_WS(' ', e.first_name, e.last_name),
+       'Queued reconnection after billing correction', 'customer', q.customer_id::TEXT,
+       'status', 'disconnected', 'pending_reconnection',
+       'Billing correction: balance cleared; awaiting reconnection',
+       'discount-missing-credit-2026-08-18:reconnect:' || q.customer_id::TEXT
+FROM queued_reconnections q CROSS JOIN credit_actor a
+JOIN public.employees e USING (employee_id);
+
+-- 2026-09-15 01:29:26.0970
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM reviewed_credits r JOIN public.customer_billing_status b USING (customer_id)
+    WHERE b.balance <> r.expected_balance - r.credit_to_add
+  ) THEN
+    RAISE EXCEPTION 'Credit verification failed; transaction must be rolled back.';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM reviewed_credits r JOIN public.customers c USING (customer_id)
+    WHERE r.status_before IN ('disconnected', 'pending_reconnection')
+      AND c.status <> 'pending_reconnection'
+  ) THEN
+    RAISE EXCEPTION 'A cleared disconnected account was not queued; transaction must be rolled back.';
+  END IF;
+END $$;
+
+-- 2026-09-15 01:29:26.1910
+SELECT 'AFTER' AS stage, c.name, b.customer_id, b.balance, b.outstanding_balance,
+       b.credit_balance, b.oldest_unpaid_due_date, b.grace_end_date,
+       b.eligible_for_disconnection, b.ready_for_reconnection, c.status,
+       CASE WHEN c.status = 'pending_reconnection'
+            THEN 'Queued for reconnection; configured automation may process after COMMIT'
+            ELSE 'Balance corrected; account remains active' END AS follow_up
+FROM reviewed_credits r JOIN public.customers c USING (customer_id)
+JOIN public.customer_billing_status b USING (customer_id);
+
+-- 2026-09-15 01:29:26.2860
+ROLLBACK;
+
+-- 2026-09-15 01:31:16.5240
+-- PostgreSQL / TablePlus: run the entire file. No persistent changes.
+-- Confirmed window: discount APPROVALS Aug 18 through Sep 1 inclusive, Jamaica time.
+-- This finds evidence, not proof that every discount needs another correction.
+-- Management policy: confirmed paid-up accounts have their full debt cleared;
+-- disconnected accounts then enter pending_reconnection.
+BEGIN;
+
+-- 2026-09-15 01:31:16.6290
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+-- 2026-09-15 01:31:16.7220
+CREATE TEMP TABLE credit_audit_window ON COMMIT DROP AS
+SELECT TIMESTAMPTZ '2026-08-18 00:00:00-05' AS starts_at,
+       TIMESTAMPTZ '2026-09-02 00:00:00-05' AS ends_at;
+
+-- 2026-09-15 01:31:16.8280
+CREATE TEMP TABLE discount_cohort ON COMMIT DROP AS
+SELECT w.customer_id, MIN(w.reviewed_at) AS first_discount_at,
+       SUM(w.amount) AS discount_total,
+       ARRAY_AGG(w.waiver_request_id ORDER BY w.reviewed_at) AS discount_ids
+FROM public.waiver_requests w CROSS JOIN credit_audit_window x
+JOIN public.account_ledger_entries l
+  ON l.account_ledger_entry_id = w.waiver_ledger_entry_id
+ AND l.customer_id = w.customer_id
+WHERE w.status = 'approved' AND NOT w.is_credit
+  AND w.reviewed_at >= x.starts_at AND w.reviewed_at < x.ends_at
+  AND l.entry_type = 'waiver' AND l.amount < 0
+GROUP BY w.customer_id;
+
+-- 2026-09-15 01:31:16.9600
+-- Candidate count, not a confirmed adjustment count. Review payment evidence
+-- before adding customer IDs to the correction script.
+SELECT COUNT(*) AS accounts_with_discounts_in_window,
+       COUNT(*) FILTER (WHERE b.outstanding_balance > 0) AS accounts_currently_owing,
+       COUNT(*) FILTER (WHERE b.outstanding_balance > 0
+         AND c.status IN ('active', 'disconnected', 'pending_reconnection')
+         AND NOT EXISTS (SELECT 1 FROM public.account_ledger_entries done
+           WHERE done.source_key = 'discount-missing-credit-2026-08-18:' || d.customer_id::TEXT)
+       ) AS owing_accounts_to_review,
+       COUNT(*) FILTER (WHERE c.status = 'disconnected') AS disconnected_accounts_to_review
+FROM discount_cohort d JOIN public.customers c USING (customer_id)
+JOIN public.customer_billing_status b USING (customer_id);
+
+-- 2026-09-15 01:31:24.6590
+CREATE TEMP TABLE receipt_evidence ON COMMIT DROP AS
+SELECT p.customer_id, p.payment_id, p.payment_date, p.recorded_at,
+       p.month_paid, p.amount_paid, p.note,
+       COALESCE(l.ledger_deduction, 0) AS ledger_deduction,
+       GREATEST(p.amount_paid - COALESCE(l.ledger_deduction, 0), 0) AS receipt_gap,
+       COALESCE(l.other_linked_entries, 0) AS other_linked_entries,
+       p.recorded_at >= d.first_discount_at AS recorded_after_discount
+FROM public.payments p JOIN discount_cohort d USING (customer_id)
+CROSS JOIN credit_audit_window x
+LEFT JOIN LATERAL (
+  SELECT -SUM(e.amount) FILTER (WHERE e.entry_type = 'monthly_payment') AS ledger_deduction,
+         COUNT(*) FILTER (WHERE e.entry_type <> 'monthly_payment') AS other_linked_entries
+  FROM public.account_ledger_entries e WHERE e.payment_id = p.payment_id
+) l ON TRUE
+WHERE COALESCE(p.payment_type, p.legacy_payment_type) = 'Monthly Fee'
+  AND p.voided_at IS NULL
+  AND (p.payment_date >= (x.starts_at AT TIME ZONE 'America/Jamaica')::DATE
+       OR p.recorded_at >= x.starts_at);
+
+-- 2026-09-15 01:31:55.8440
+-- 1. ALL affected accounts, including those with no debt yet or future credit.
+-- Six distinct month labels are supporting evidence, not six fully paid bills.
+SELECT c.customer_id, c.name, c.status, c.monthly_fee, c.activation_date,
+       public.spcl_anniversary_date(c.activation_date, DATE '2026-09-01') AS september_due_date,
+       CASE WHEN EXTRACT(DAY FROM c.activation_date) <= 15
+            THEN 'August (user rule; verify receipt month)'
+            ELSE 'September (user rule; verify receipt month)' END AS expected_september_bill_label,
+       b.balance, b.outstanding_balance, b.credit_balance,
+       b.outstanding_balance AS proposed_debt_to_clear_if_confirmed_paid_up,
+       LEAST(b.balance, 0) AS balance_after_clearing_debt,
+       b.credit_balance AS existing_credit_preserved,
+       CASE WHEN c.status = 'disconnected' THEN 'pending_reconnection'
+            ELSE c.status END AS proposed_status_after_correction,
+       b.oldest_unpaid_due_date, b.grace_end_date,
+       b.eligible_for_disconnection, b.is_on_hold, b.ready_for_reconnection,
+       b.unverified_entries, d.discount_total, d.discount_ids,
+       COALESCE(g.gap_total, 0) AS receipt_gap_to_investigate,
+       COALESCE(h.month_labels, 0) AS distinct_month_labels_march_through_august,
+       h.latest_month_label,
+       COALESCE(a.later_corrections, '[]'::JSONB) AS later_credits_adjustments_or_voids,
+       EXISTS (SELECT 1 FROM public.account_ledger_entries done
+         WHERE done.source_key = 'discount-missing-credit-2026-08-18:' || d.customer_id::TEXT
+       ) AS this_correction_already_applied
+FROM discount_cohort d JOIN public.customers c USING (customer_id)
+JOIN public.customer_billing_status b USING (customer_id)
+LEFT JOIN LATERAL (
+  SELECT SUM(receipt_gap) AS gap_total FROM receipt_evidence r
+  WHERE r.customer_id = d.customer_id
+) g ON TRUE
+LEFT JOIN LATERAL (
+  SELECT COUNT(DISTINCT DATE_TRUNC('month', p.month_paid)) FILTER (
+           WHERE p.month_paid >= DATE '2026-03-01' AND p.month_paid < DATE '2026-09-01') AS month_labels,
+         MAX(p.month_paid) AS latest_month_label
+  FROM public.payments p WHERE p.customer_id = d.customer_id
+    AND p.voided_at IS NULL
+    AND COALESCE(p.payment_type, p.legacy_payment_type) = 'Monthly Fee'
+) h ON TRUE
+LEFT JOIN LATERAL (
+  SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id', l.account_ledger_entry_id,
+           'amount', l.amount, 'type', l.entry_type, 'reason', l.reason,
+           'source_key', l.source_key, 'created_at', l.created_at)
+           ORDER BY l.created_at, l.account_ledger_entry_id) AS later_corrections
+  FROM public.account_ledger_entries l
+  WHERE l.customer_id = d.customer_id AND l.created_at >= d.first_discount_at
+    AND l.entry_type IN ('waiver', 'adjustment', 'payment_void')
+) a ON TRUE
+ORDER BY b.eligible_for_disconnection DESC NULLS LAST,
+         COALESCE(g.gap_total, 0) DESC, c.customer_id;
+
+-- 2026-09-15 01:31:56.5790
+-- 2. Receipts versus actual ledger deductions. A gap may already have been
+-- repaired by an UNLINKED adjustment/credit: inspect outputs 1 and 4 first.
+SELECT r.*, c.name FROM receipt_evidence r
+JOIN public.customers c USING (customer_id)
+ORDER BY r.receipt_gap DESC, r.customer_id, r.payment_date, r.payment_id;
+
+-- 2026-09-15 01:31:58.2650
+-- 3. Payment history: actual dates, amounts and months, not guessed allocation.
+SELECT p.customer_id, p.payment_id, p.payment_date, p.recorded_at,
+       p.month_paid, p.amount_paid, p.voided_at, p.note
+FROM public.payments p JOIN discount_cohort d USING (customer_id)
+WHERE COALESCE(p.payment_type, p.legacy_payment_type) = 'Monthly Fee'
+  AND (p.payment_date >= DATE '2026-01-01' OR p.month_paid >= DATE '2026-01-01')
+ORDER BY p.customer_id, p.payment_date, p.payment_id;
+
+-- 2026-09-15 01:31:59.9780
+-- 4. Complete ledger, including opening balance and previous manual fixes.
+SELECT l.customer_id, l.account_ledger_entry_id, l.entry_type, l.amount,
+       l.effective_date, l.due_date, l.grace_end_date, l.created_at,
+       l.payment_id, l.description, l.reason, l.source_key,
+       SUM(l.amount) OVER (PARTITION BY l.customer_id
+         ORDER BY l.created_at, l.account_ledger_entry_id) AS running_posted_balance
+FROM public.account_ledger_entries l JOIN discount_cohort d USING (customer_id)
+ORDER BY l.customer_id, l.created_at, l.account_ledger_entry_id;
+
+-- 2026-09-15 01:32:00.5700
+-- 5. Actual status changes: compare disconnections with payment/grace dates.
+SELECT h.* FROM public.account_status_history h
+JOIN discount_cohort d USING (customer_id)
+WHERE h.effective_date >= DATE '2026-08-18'
+ORDER BY h.customer_id, h.effective_date, h.changed_at;
+
+-- 2026-09-15 01:32:00.6740
+ROLLBACK;
+
+-- 2026-09-15 01:39:57.7810
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(19473,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=19473 AND attname=column_name WHERE table_name='customer_account_groups'AND table_schema='public';
+
+-- 2026-09-15 01:39:58.5950
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18172,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18172 AND attname=column_name WHERE table_name='customer_billing_start'AND table_schema='public';
+
+-- 2026-09-15 01:39:58.8230
+SELECT ordinal_position,column_name,udt_name AS data_type FROM information_schema.columns WHERE table_name='customer_billing_status'AND table_schema='public';
+
+-- 2026-09-15 01:39:59.6440
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18854,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18854 AND attname=column_name WHERE table_name='customer_email_notification_runs'AND table_schema='public';
+
+-- 2026-09-15 01:40:00.4100
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18876,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18876 AND attname=column_name WHERE table_name='customer_email_notifications'AND table_schema='public';
+
+-- 2026-09-15 01:40:01.3380
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(19120,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=19120 AND attname=column_name WHERE table_name='customer_merge_plan'AND table_schema='public';
+
+-- 2026-09-15 01:40:02.2690
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18233,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18233 AND attname=column_name WHERE table_name='customer_notes'AND table_schema='public';
+
+-- 2026-09-15 01:40:02.8940
+SELECT ordinal_position,column_name,udt_name AS data_type FROM information_schema.columns WHERE table_name='customer_offline_monthly_charge_review'AND table_schema='public';
+
+-- 2026-09-15 01:40:03.7360
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18333,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18333 AND attname=column_name WHERE table_name='customer_ont_assignments'AND table_schema='public';
+
+-- 2026-09-15 01:40:04.4720
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16466,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16466 AND attname=column_name WHERE table_name='customer_rate_history'AND table_schema='public';
+
+-- 2026-09-15 01:40:05.1160
+SELECT ordinal_position,column_name,udt_name AS data_type FROM information_schema.columns WHERE table_name='customer_suspension_episodes'AND table_schema='public';
+
+-- 2026-09-15 01:40:05.8320
+SELECT ordinal_position,column_name,udt_name AS data_type FROM information_schema.columns WHERE table_name='customer_suspension_status'AND table_schema='public';
+
+-- 2026-09-15 01:40:06.0540
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16441,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16441 AND attname=column_name WHERE table_name='customers'AND table_schema='public';
+
+-- 2026-09-15 01:40:07.9520
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(17915,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=17915 AND attname=column_name WHERE table_name='cutover_snapshot'AND table_schema='public';
+
+-- 2026-09-15 01:40:08.5880
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16449,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16449 AND attname=column_name WHERE table_name='disconnection_holds'AND table_schema='public';
+
+-- 2026-09-15 01:40:09.3170
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16477,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16477 AND attname=column_name WHERE table_name='employees'AND table_schema='public';
+
+-- 2026-09-15 01:40:09.9500
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18151,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18151 AND attname=column_name WHERE table_name='legacy_balance_rebuild'AND table_schema='public';
+
+-- 2026-09-15 01:40:10.6080
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16487,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16487 AND attname=column_name WHERE table_name='locations'AND table_schema='public';
+
+-- 2026-09-15 01:40:11.4100
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(17726,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=17726 AND attname=column_name WHERE table_name='login_sessions'AND table_schema='public';
+
+-- 2026-09-15 01:40:12.0540
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18466,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18466 AND attname=column_name WHERE table_name='olt_action_attempts'AND table_schema='public';
+
+-- 2026-09-15 01:40:12.7810
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18533,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18533 AND attname=column_name WHERE table_name='olt_automation_run_items'AND table_schema='public';
+
+-- 2026-09-15 01:40:13.5110
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18507,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18507 AND attname=column_name WHERE table_name='olt_automation_runs'AND table_schema='public';
+
+-- 2026-09-15 01:40:14.2390
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18726,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18726 AND attname=column_name WHERE table_name='olt_automation_save_jobs'AND table_schema='public';
+
+-- 2026-09-15 01:40:14.8870
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18765,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18765 AND attname=column_name WHERE table_name='olt_reconnection_automation_jobs'AND table_schema='public';
+
+-- 2026-09-15 01:40:15.6100
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18307,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18307 AND attname=column_name WHERE table_name='olts'AND table_schema='public';
+
+-- 2026-09-15 01:40:16.2450
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16496,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16496 AND attname=column_name WHERE table_name='packages'AND table_schema='public';
+
+-- 2026-09-15 01:40:16.4680
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16505,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16505 AND attname=column_name WHERE table_name='payments'AND table_schema='public';
+
+-- 2026-09-15 01:40:17.0700
+SELECT ordinal_position,column_name,udt_name AS data_type FROM information_schema.columns WHERE table_name='pole_box_usage'AND table_schema='public';
+
+-- 2026-09-15 01:40:17.8030
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16513,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16513 AND attname=column_name WHERE table_name='pole_boxes'AND table_schema='public';
+
+-- 2026-09-15 01:40:18.4560
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(18277,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=18277 AND attname=column_name WHERE table_name='receipt_email_deliveries'AND table_schema='public';
+
+-- 2026-09-15 01:40:19.2720
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16531,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16531 AND attname=column_name WHERE table_name='reconnection_requests'AND table_schema='public';
+
+-- 2026-09-15 01:40:19.9050
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(17599,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=17599 AND attname=column_name WHERE table_name='schema_migrations'AND table_schema='public';
+
+-- 2026-09-15 01:40:20.6390
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16544,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16544 AND attname=column_name WHERE table_name='service_ticket_history'AND table_schema='public';
+
+-- 2026-09-15 01:40:21.3700
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16553,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16553 AND attname=column_name WHERE table_name='service_tickets'AND table_schema='public';
+
+-- 2026-09-15 01:40:22.1090
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(19075,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=19075 AND attname=column_name WHERE table_name='suspension_terms'AND table_schema='public';
+
+-- 2026-09-15 01:40:22.7450
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(19608,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=19608 AND attname=column_name WHERE table_name='technician_phone_access'AND table_schema='public';
+
+-- 2026-09-15 01:40:23.5690
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(19664,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=19664 AND attname=column_name WHERE table_name='technician_queue_state'AND table_schema='public';
+
+-- 2026-09-15 01:40:24.2150
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16568,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16568 AND attname=column_name WHERE table_name='user_sessions'AND table_schema='public';
+
+-- 2026-09-15 01:40:25.0410
+SELECT ordinal_position,column_name,udt_name AS data_type,format_type(atttypid, atttypmod) as format_type,numeric_precision,datetime_precision,numeric_scale,character_maximum_length AS data_length,is_nullable,column_name as check,column_name as check_constraint,column_default,column_name AS foreign_key,pg_catalog.col_description(16573,ordinal_position) as comment FROM information_schema.columns JOIN pg_attribute pa ON attrelid=16573 AND attname=column_name WHERE table_name='waiver_requests'AND table_schema='public';
+
+-- 2026-09-15 01:46:48.4240
+SELECT current_database(), current_user, (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::date AS today, (SELECT COUNT(*) FROM public.customers) AS customers;
+
+-- 2026-09-15 01:48:20.3280
+-- Read-only complete reconciliation evidence. Export result as JSON/CSV.
+WITH payload AS (
+SELECT 'accounts' AS kind, JSONB_AGG(JSONB_BUILD_ARRAY(c.customer_id, c.name,
+ c.status, c.monthly_fee, c.activation_date, c.hidden_from_app,
+ b.balance, b.oldest_unpaid_due_date, b.grace_end_date, b.is_on_hold,
+ b.eligible_for_disconnection, c.reactivation_date, c.deactivation_date)) AS data
+FROM public.customers c JOIN public.customer_billing_status b USING(customer_id)
+UNION ALL
+SELECT 'payments', JSONB_AGG(JSONB_BUILD_ARRAY(payment_id, customer_id, amount_paid,
+ payment_date, month_paid, recorded_at, voided_at, legacy_payment_id, note))
+FROM public.payments
+WHERE COALESCE(payment_type, legacy_payment_type) = 'Monthly Fee'
+ AND (payment_date >= DATE '2026-01-01' OR month_paid >= DATE '2026-01-01')
+UNION ALL
+SELECT 'ledger', JSONB_AGG(JSONB_BUILD_ARRAY(account_ledger_entry_id, customer_id,
+ entry_type, amount, effective_date, due_date, grace_end_date, payment_id,
+ source_key, reason, created_at)) FROM public.account_ledger_entries
+UNION ALL
+SELECT 'rates', JSONB_AGG(JSONB_BUILD_ARRAY(customer_id, effective_date, monthly_fee,
+ customer_rate_history_id)) FROM public.customer_rate_history
+UNION ALL
+SELECT 'history', JSONB_AGG(JSONB_BUILD_ARRAY(customer_id, from_status, to_status,
+ effective_date, changed_at, account_status_history_id, reason))
+FROM public.account_status_history
+UNION ALL
+SELECT 'meta', JSONB_BUILD_OBJECT('database',current_database(),'user',current_user,
+ 'snapshot_at',CURRENT_TIMESTAMP,'as_of',(CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE)
+)
+SELECT kind, data FROM payload;
+
+-- 2026-09-15 01:53:54.8680
+-- Management's broadened one-time relief rule, all accounts.
+-- Recent payment activity: positive NET Monthly Fee receipts since Aug 1.
+-- Future paid months use the stated rule: due days 1-15 bill the previous
+-- month; due days 16-31 bill the same month. Existing credit is never removed.
+-- Read-only. This is management relief, not a claim every balance is invalid.
+WITH settings AS (
+ SELECT DATE '2026-09-15' AS as_of, DATE '2026-08-01' AS recent_start
+), payments AS (
+ SELECT p.customer_id,
+   SUM(p.amount_paid) FILTER (WHERE p.payment_date >= s.recent_start
+     AND p.payment_date <= s.as_of) AS recent_net_paid,
+   MAX(p.payment_date) FILTER (WHERE p.amount_paid > 0 AND p.payment_date <= s.as_of) AS last_paid,
+   COUNT(*) FILTER (WHERE p.amount_paid > 0 AND p.payment_date >= s.recent_start
+     AND p.payment_date <= s.as_of) AS recent_receipts,
+   SUM(p.amount_paid) FILTER (WHERE p.month_paid IS NULL AND p.payment_date >= s.recent_start
+     AND p.payment_date <= s.as_of) AS recent_unlabelled,
+   SUM(p.amount_paid) FILTER (WHERE p.payment_date <= s.as_of AND c.activation_date IS NOT NULL
+     AND public.spcl_anniversary_date(c.activation_date,
+       (DATE_TRUNC('month', p.month_paid) + CASE WHEN EXTRACT(DAY FROM c.activation_date) <= 15
+         THEN INTERVAL '1 month' ELSE INTERVAL '0 months' END)::DATE) > s.as_of) AS future_paid,
+   JSONB_OBJECT_AGG(p.payment_id::TEXT, JSONB_BUILD_ARRAY(p.amount_paid,p.payment_date,p.month_paid))
+     FILTER (WHERE p.payment_date >= s.recent_start AND p.payment_date <= s.as_of) AS recent_evidence
+ FROM public.payments p JOIN public.customers c USING (customer_id) CROSS JOIN settings s
+ WHERE p.voided_at IS NULL AND COALESCE(p.payment_type,p.legacy_payment_type) = 'Monthly Fee'
+ GROUP BY p.customer_id
+), plan AS (
+ SELECT c.customer_id, c.name, c.status, c.monthly_fee, c.activation_date,
+   c.hidden_from_app, b.balance, b.oldest_unpaid_due_date, b.grace_end_date,
+   COALESCE(p.recent_net_paid,0)::NUMERIC(14,2) AS recent_net_paid,
+   p.last_paid, p.recent_receipts, COALESCE(p.recent_unlabelled,0) AS recent_unlabelled,
+   GREATEST(COALESCE(p.future_paid,0),0)::NUMERIC(14,2) AS future_paid,
+   CASE WHEN COALESCE(p.recent_net_paid,0) > 0 OR COALESCE(p.future_paid,0) > 0
+     THEN LEAST(b.balance,-GREATEST(COALESCE(p.future_paid,0),0))
+     ELSE b.balance END::NUMERIC(14,2) AS target_balance,
+   p.recent_evidence
+ FROM public.customers c JOIN public.customer_billing_status b USING(customer_id)
+ LEFT JOIN payments p USING(customer_id)
+)
+SELECT status, hidden_from_app, COUNT(*) AS accounts,
+ COUNT(*) FILTER(WHERE recent_net_paid>0) AS recent_payers,
+ COUNT(*) FILTER(WHERE balance>target_balance) AS corrections,
+ COALESCE(SUM(balance-target_balance) FILTER(WHERE balance>target_balance),0) AS credit_to_post,
+ COALESCE(SUM(GREATEST(balance,0)) FILTER(WHERE balance>target_balance),0) AS debt_to_clear,
+ COUNT(*) FILTER(WHERE balance>target_balance AND target_balance<0) AS future_credit_accounts,
+ COUNT(*) FILTER(WHERE balance>target_balance AND recent_unlabelled<>0) AS unlabelled_payment_accounts,
+ COUNT(*) FILTER(WHERE status='disconnected' AND (recent_net_paid>0 OR future_paid>0)) AS reconnection_candidates
+FROM plan GROUP BY status, hidden_from_app ORDER BY status,hidden_from_app;
+
+-- 2026-09-15 01:55:37.2030
+CREATE TEMP TABLE spcl_reconciliation_20260915_snapshot AS
+-- Management's broadened one-time relief rule, all accounts.
+-- Recent payment activity: positive NET Monthly Fee receipts since Aug 1.
+-- Future paid months use the stated rule: due days 1-15 bill the previous
+-- month; due days 16-31 bill the same month. Existing credit is never removed.
+-- Read-only. This is management relief, not a claim every balance is invalid.
+WITH settings AS (
+ SELECT DATE '2026-09-15' AS as_of, DATE '2026-08-01' AS recent_start
+), payments AS (
+ SELECT p.customer_id,
+   SUM(p.amount_paid) FILTER (WHERE p.payment_date >= s.recent_start
+     AND p.payment_date <= s.as_of) AS recent_net_paid,
+   MAX(p.payment_date) FILTER (WHERE p.amount_paid > 0 AND p.payment_date <= s.as_of) AS last_paid,
+   COUNT(*) FILTER (WHERE p.amount_paid > 0 AND p.payment_date >= s.recent_start
+     AND p.payment_date <= s.as_of) AS recent_receipts,
+   SUM(p.amount_paid) FILTER (WHERE p.month_paid IS NULL AND p.payment_date >= s.recent_start
+     AND p.payment_date <= s.as_of) AS recent_unlabelled,
+   SUM(p.amount_paid) FILTER (WHERE p.payment_date <= s.as_of AND c.activation_date IS NOT NULL
+     AND public.spcl_anniversary_date(c.activation_date,
+       (DATE_TRUNC('month', p.month_paid) + CASE WHEN EXTRACT(DAY FROM c.activation_date) <= 15
+         THEN INTERVAL '1 month' ELSE INTERVAL '0 months' END)::DATE) > s.as_of) AS future_paid,
+   MD5(STRING_AGG(CONCAT_WS(':',p.payment_id,p.amount_paid,p.payment_date,p.month_paid),
+       ',' ORDER BY p.payment_id)) AS payment_fingerprint,
+   JSONB_OBJECT_AGG(p.payment_id::TEXT, JSONB_BUILD_ARRAY(p.amount_paid,p.payment_date,p.month_paid))
+     FILTER (WHERE p.payment_date >= s.recent_start AND p.payment_date <= s.as_of) AS recent_evidence
+ FROM public.payments p JOIN public.customers c USING (customer_id) CROSS JOIN settings s
+ WHERE p.voided_at IS NULL AND COALESCE(p.payment_type,p.legacy_payment_type) = 'Monthly Fee'
+ GROUP BY p.customer_id
+), plan AS (
+ SELECT c.customer_id, c.name, c.status, c.monthly_fee, c.activation_date,
+   c.hidden_from_app, b.balance, b.oldest_unpaid_due_date, b.grace_end_date,
+   COALESCE(p.recent_net_paid,0)::NUMERIC(14,2) AS recent_net_paid,
+   p.last_paid, p.recent_receipts, COALESCE(p.recent_unlabelled,0) AS recent_unlabelled,
+   GREATEST(COALESCE(p.future_paid,0)-COALESCE(f.posted_future_charges,0),0)::NUMERIC(14,2) AS future_paid,
+   CASE WHEN COALESCE(p.recent_net_paid,0) > 0 OR COALESCE(p.future_paid,0) > 0
+     THEN LEAST(b.balance,-GREATEST(COALESCE(p.future_paid,0)-COALESCE(f.posted_future_charges,0),0))
+     ELSE b.balance END::NUMERIC(14,2) AS target_balance,
+   p.recent_evidence, p.payment_fingerprint,
+   COALESCE(f.posted_future_charges,0) AS posted_future_charges
+ FROM public.customers c JOIN public.customer_billing_status b USING(customer_id)
+ LEFT JOIN payments p USING(customer_id)
+ LEFT JOIN LATERAL (
+   SELECT SUM(e.amount) AS posted_future_charges
+   FROM public.account_ledger_entries e CROSS JOIN settings s
+   WHERE e.customer_id=c.customer_id AND e.entry_type='monthly_charge'
+     AND e.amount>0 AND e.due_date>s.as_of
+ ) f ON TRUE
+)
+SELECT * FROM plan;
+
+-- 2026-09-15 01:56:18.3320
+SELECT jsonb_agg(jsonb_build_array(customer_id,name,status,monthly_fee,activation_date,balance,target_balance,recent_net_paid,last_paid,recent_receipts,recent_unlabelled,future_paid,oldest_unpaid_due_date,grace_end_date,hidden_from_app,payment_fingerprint,recent_evidence)) AS payload FROM (SELECT * FROM spcl_reconciliation_20260915_snapshot WHERE balance>target_balance OR (status='disconnected' AND (recent_net_paid>0 OR future_paid>0)) ORDER BY customer_id LIMIT 100 OFFSET 0) p
+			141 scroll bar (settable, float) 1
+				142 value indicator (settable, float) 1
+				143 increment arrow button
+				144 decrement arrow button
+				145 increment page button
+				146 decrement page button
+		147 button Clear the console
+		148 checkbox Enable syntax highlighting, Value: 0
+		149 splitter (disabled, settable, float) 1198
+	150 toolbar
+		151 button Description: Left, Secondary Actions: Move next, Remove from toolbar
+		152 button Description: Connection, Secondary Actions: Move previous, Move next, Remove from toolbar
+		153 container Commit
+		154 button Description: Safe Mode, Secondary Actions: Move previous, Move next, Remove from toolbar
+		155 button Description: Database, Secondary Actions: Move previous, Move next, Remove from toolbar
+		156 button Description: SQL File, Secondary Actions: Move previous, Move next, Remove from toolbar
+		157 container Secondary Actions: Move previous, Move next, Remove from toolbar
+			158 button Description: Status, Help: Connection info
+			159 text Description: Status, Help: Network stats, Value: LOCAL | PostgreSQL 17.11 : SSH : SPCL_PROD_WRITE : spcl_db : SQL Query 0 B/s
+		160 button Description: License, Secondary Actions: Move previous, Move next, Remove from toolbar
+		161 button Description: Reload, Secondary Actions: Move previous, Move next, Remove from toolbar
+		162 button Description: Metrics, Secondary Actions: Move previous, Move next, Remove from toolbar
+		163 button Description: Command, Secondary Actions: Move previous, Move next, Remove from toolbar
+		164 container Panels
+			165 button Toggle console log (⌘⌃C)
+			166 button Toggle Row Detail (Space)
+167 menu bar
+	168 TablePlus
+	169 File
+	170 Edit
+	171 View
+	172 Tools
+	173 Connection
+	174 Plugins
+	175 Navigate
+	176 Window
+	177 Help
+
+Selected text: ```
+SELECT jsonb_agg(jsonb_build_array(customer_id,name,status,monthly_fee,activation_date,balance,target_balance,recent_net_paid,last_paid,recent_receipts,recent_unlabelled,future_paid,oldest_unpaid_due_date,grace_end_date,hidden_from_app,payment_fingerprint,recent_evidence)) AS payload FROM (SELECT * FROM spcl_reconciliation_20260915_snapshot WHERE balance>target_balance OR (status='disconnected' AND (recent_net_paid>0 OR future_paid>0)) ORDER BY customer_id LIMIT 100 OFFSET 0) p
+```
+
+Note: Pay special attention to the content selected by the user. If the user asks a question or refers to the content they are looking at on-screen, they might be referring to the selected content (but they might be referring to something else that's visible, too).

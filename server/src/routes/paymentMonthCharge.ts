@@ -17,7 +17,8 @@
  *
  *   2. A cut-off month normally requires a warning. An explicit cashier
  *      override accepts the payment without inventing a service charge.
- *      The payment route caps past-month deductions at the outstanding balance.
+ *      The full accepted receipt remains a ledger credit, including any excess
+ *      over the outstanding balance.
  *
  * Called inside the payment transaction, before the payment is written, so a
  * refusal costs nothing and a raised charge commits with the payment or not
@@ -195,17 +196,15 @@ export async function ensureMonthlyChargeForPayment(
 }
 
 /** Decimal strings stay exact even for the largest accepted receipt amounts. */
-export function paymentBalanceDeduction(amount: string, balance: string, isPastMonthlyPayment: boolean): string {
+export function paymentBalanceDeduction(amount: string, _balance: string, _isPastMonthlyPayment: boolean): string {
   const cents = (value: string) => {
     const negative = value.startsWith("-");
     const [whole, fraction = ""] = value.replace(/^-/, "").split(".");
     const result = BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
     return negative ? -result : result;
   };
-  let applied = cents(amount);
-  if (isPastMonthlyPayment) {
-    const outstanding = cents(balance);
-    applied = outstanding <= 0n ? 0n : applied < outstanding ? applied : outstanding;
-  }
+  // A month label cannot discard money collected. Discounts may have already
+  // cleared the debt; the rest of the receipt must remain as account credit.
+  const applied = cents(amount);
   return `${applied / 100n}.${String(applied % 100n).padStart(2, "0")}`;
 }

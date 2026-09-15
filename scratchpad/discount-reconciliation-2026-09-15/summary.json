@@ -1,0 +1,15 @@
+{
+  "discount_accounts": 1138,
+  "owing_accounts": 607,
+  "owing_accounts_in_scope": 605,
+  "six_month_payment_screen": 85,
+  "initial_proposed_batch": 54,
+  "debt_to_clear": "151750.00",
+  "statuses": {
+    "active": 48,
+    "disconnected": 6
+  },
+  "six_month_screen_exceptions": 31,
+  "other_accounts_to_review": 520,
+  "basis": "March-August 2026 month labels each total at least the current fee, excluding voids. Initial batch excludes negative receipts, positive ledger adjustments, higher historical charges, and due days after 15. This is a conservative screen, not verification of historical rates."
+}

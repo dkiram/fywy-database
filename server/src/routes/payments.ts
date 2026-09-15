@@ -383,8 +383,8 @@ paymentsRouter.post(
         );`
       );
 
-      // Serialize payments for this customer and cap past-month deductions
-      // using the latest ledger balance, after generating charges due today.
+      // Read the current allocation context after generating charges due today.
+      // The full receipt is credited even when a discount already cleared debt.
       const allocation = await client.query(
         `SELECT COALESCE(SUM(amount), 0)::TEXT AS balance,
           ($2 || '-01')::DATE < DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE AS is_past

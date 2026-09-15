@@ -82,6 +82,7 @@ const [voidRefreshKey, setVoidRefreshKey] = useState(0);
   }, [customerId]);
 
   useEffect(() => {
+    const controller = new AbortController();
     // Any applied filter, page change, or successful new payment refreshes the ledger.
     const loadPayments = async () => {
       if (!customerId) {
@@ -113,7 +114,8 @@ if (toDate) {
 }
 
 const response = await apiFetch(
-  `/api/customers/${customerId}/payments?${params.toString()}`
+  `/api/customers/${customerId}/payments?${params.toString()}`,
+  { signal: controller.signal }
 );
         if (!response.ok) {
           throw new Error("Payment request failed");
@@ -121,17 +123,20 @@ const response = await apiFetch(
 
         const data: PaymentsResponse = await response.json();
 
+        if (controller.signal.aborted) return;
         setPayments(data.payments);
         setPagination(data.pagination);
       } catch (error) {
+        if (controller.signal.aborted) return;
         console.error(error);
         setError("Could not load payment history.");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
     loadPayments();
+    return () => controller.abort();
   }, [
   customerId,
   page,

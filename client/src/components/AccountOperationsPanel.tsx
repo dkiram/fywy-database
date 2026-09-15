@@ -1,5 +1,5 @@
 /** Shows one customer's status timeline and the actions allowed for their current state. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { EmployeeRole } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
 
@@ -232,62 +232,61 @@ function AccountOperationsPanel({
     employeeRole === "head_office" ||
     employeeRole === "branch";
 
+  const accountRequest = useRef<AbortController | null>(null);
+
   // Replace the old placeholder activity list with persisted status history.
   const loadAccountData = useCallback(async () => {
+      accountRequest.current?.abort();
+      const controller = new AbortController();
+      accountRequest.current = controller;
+      const options = { signal: controller.signal };
       try {
         setLoading(true);
         setError("");
-        const [historyResponse, billingResponse, waiverResponse, reconnectionResponse, capabilityResponse, suspensionResponse] = await Promise.all([
-          apiFetch(`/api/customers/${customerId}/account-history`),
-          apiFetch(`/api/customers/${customerId}/billing-status`),
+        const [historyResponse, billingResponse, waiverResponse, reconnectionResponse, capabilityResponse] = await Promise.all([
+          apiFetch(`/api/customers/${customerId}/account-history`, options),
+          apiFetch(`/api/customers/${customerId}/billing-status`, options),
           canRequestDiscount
-            ? apiFetch(`/api/customers/${customerId}/waiver-requests`)
+            ? apiFetch(`/api/customers/${customerId}/waiver-requests`, options)
             : Promise.resolve(null),
-          apiFetch(`/api/customers/${customerId}/reconnection-requests`),
-          apiFetch(`/api/customers/${customerId}/account-action-capabilities`),
-          apiFetch(`/api/customers/${customerId}/suspension`),
+          apiFetch(`/api/customers/${customerId}/reconnection-requests`, options),
+          apiFetch(`/api/customers/${customerId}/account-action-capabilities`, options),
         ]);
-        const [historyData, billingData, waiverData, reconnectionData, capabilityData, suspensionData] = await Promise.all([
+        const [historyData, billingData, waiverData, reconnectionData, capabilityData] = await Promise.all([
           historyResponse.json(),
           billingResponse.json(),
           waiverResponse ? waiverResponse.json() : Promise.resolve({ waiverRequests: [] }),
           reconnectionResponse.json(),
           capabilityResponse.json(),
-          // Tolerant on purpose: an un-restarted server answers this route
-          // with an HTML 404 page, and .json() would reject on it.
-          suspensionResponse.json().catch(() => null),
         ]);
-        // The suspension quote is deliberately NOT in this list. It is an
-        // extra detail on one card, and the whole panel - the status
-        // timeline, the balance, every service-control button - must not go
-        // dark because that one lookup failed. It failed exactly this way
-        // before migration 067 was applied: the view did not exist yet, the
-        // endpoint returned 500, and Account Operations refused to load at
-        // all on every customer.
+        // A missing suspension quote must not disable the other account actions.
         if (!historyResponse.ok || !billingResponse.ok || (waiverResponse && !waiverResponse.ok) || !reconnectionResponse.ok || !capabilityResponse.ok) {
           throw new Error(historyData.error || billingData.error || waiverData.error || reconnectionData.error || capabilityData.error || "Could not load account information.");
         }
+        if (controller.signal.aborted) return;
         setHistory(historyData.statusHistory);
         setBilling(billingData.billing);
         setLedger(billingData.ledger);
         setWaiverRequests(waiverData.waiverRequests);
         setReconnectionRequests(reconnectionData.reconnectionRequests);
         setOltAccountActions(capabilityData.oltAccountActions);
-        setSuspension(
-          suspensionResponse.ok ? (suspensionData?.suspension ?? null) : null
-        );
+        setSuspension(billingData.suspension ?? null);
       } catch (loadError) {
+        if (controller.signal.aborted) return;
         setError(
           loadError instanceof Error
             ? loadError.message
             : "Could not load account history."
         );
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
   }, [canRequestDiscount, customerId]);
 
-  useEffect(() => { loadAccountData(); }, [loadAccountData]);
+  useEffect(() => {
+    loadAccountData();
+    return () => accountRequest.current?.abort();
+  }, [loadAccountData]);
 
   // All three action dialogs submit through the same path. The API returns the
   // updated customer snapshot plus the history row committed with it.

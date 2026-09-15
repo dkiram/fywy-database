@@ -1,0 +1,17 @@
+{
+  "accounts_scanned": 11327,
+  "financial_corrections": 2636,
+  "total_adjustment": "9347080.00",
+  "debt_cleared": "7087180.00",
+  "queue_for_reconnection": 392,
+  "status_counts": {
+    "disconnected": 382,
+    "active": 2244,
+    "suspended": 6,
+    "offline": 1,
+    "terminated": 3
+  },
+  "future_credit_accounts": 687,
+  "unlabelled_recent_payment_accounts": 71,
+  "policy": "PROPOSED, awaiting management clarification: positive net monthly receipts since August 1 qualify for full debt relief; future payments retain credit under the due-day mapping."
+}

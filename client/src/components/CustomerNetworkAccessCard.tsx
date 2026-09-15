@@ -185,13 +185,14 @@ export default function CustomerNetworkAccessCard({
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     async function load() {
       try {
         setLoading(true);
         setError("");
         const [assignmentResponse, oltsResponse] = await Promise.all([
-          apiFetch(`/api/customers/${customerId}/network-access`),
-          apiFetch("/api/olts"),
+          apiFetch(`/api/customers/${customerId}/network-access`, { signal: controller.signal }),
+          apiFetch("/api/olts", { signal: controller.signal }),
         ]);
         const assignmentData = await assignmentResponse.json();
         const oltsData = await oltsResponse.json();
@@ -217,6 +218,7 @@ export default function CustomerNetworkAccessCard({
     load();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [customerId]);
 

@@ -1,0 +1,181 @@
+The following is a diff from the previous accessibility tree for Window: "SPCL_PROD_WRITE : spcl_db - PostgreSQL 17.11" with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 478-479
++					487 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
++						488 table
++							489 row (selectable)
++								490 text field (settable) Value: active, Placeholder: EMPTY
++								491 text field (settable) Value: FALSE, Placeholder: EMPTY
++								492 text field (settable) Value: 7924, Placeholder: EMPTY
++								493 text field (settable) Value: 6784, Placeholder: EMPTY
++								494 text field (settable) Value: 2244, Placeholder: EMPTY
++								495 text field (settable) Value: 7377130.00, Placeholder: EMPTY
++								496 text field (settable) Value: 5144230.00, Placeholder: EMPTY
++								497 text field (settable) Value: 678, Placeholder: EMPTY
++								498 text field (settable) Value: 58, Placeholder: EMPTY
++								499 text field (settable) Value: 0, Placeholder: EMPTY
++							500 row (selectable)
++								501 text field (settable) Value: active, Placeholder: EMPTY
++								502 text field (settable) Value: TRUE, Placeholder: EMPTY
++								503 text field (settable) Value: 5, Placeholder: EMPTY
++								504 text field (settable) Value: 0, Placeholder: EMPTY
++								505 text field (settable) Value: 0, Placeholder: EMPTY
++								506 text field (settable) Value: 0, Placeholder: EMPTY
++								507 text field (settable) Value: 0, Placeholder: EMPTY
++								508 text field (settable) Value: 0, Placeholder: EMPTY
++								509 text field (settable) Value: 0, Placeholder: EMPTY
++								510 text field (settable) Value: 0, Placeholder: EMPTY
++							511 row (selectable)
++								512 text field (settable) Value: closed, Placeholder: EMPTY
++								513 text field (settable) Value: FALSE, Placeholder: EMPTY
++								514 text field (settable) Value: 5, Placeholder: EMPTY
++								515 text field (settable) Value: 0, Placeholder: EMPTY
++								516 text field (settable) Value: 0, Placeholder: EMPTY
++								517 text field (settable) Value: 0, Placeholder: EMPTY
++								518 text field (settable) Value: 0, Placeholder: EMPTY
++								519 text field (settable) Value: 0, Placeholder: EMPTY
++								520 text field (settable) Value: 0, Placeholder: EMPTY
++								521 text field (settable) Value: 0, Placeholder: EMPTY
++							522 row (selectable)
++								523 text field (settable) Value: disconnected, Placeholder: EMPTY
++								524 text field (settable) Value: FALSE, Placeholder: EMPTY
++								525 text field (settable) Value: 3210, Placeholder: EMPTY
++								526 text field (settable) Value: 390, Placeholder: EMPTY
++								527 text field (settable) Value: 382, Placeholder: EMPTY
++								528 text field (settable) Value: 1941450.00, Placeholder: EMPTY
++								529 text field (settable) Value: 1914950.00, Placeholder: EMPTY
++								530 text field (settable) Value: 8, Placeholder: EMPTY
++								531 text field (settable) Value: 13, Placeholder: EMPTY
++								532 text field (settable) Value: 392, Placeholder: EMPTY
++							533 row (selectable)
++								534 text field (settable) Value: disconnected, Placeholder: EMPTY
++								535 text field (settable) Value: TRUE, Placeholder: EMPTY
++								536 text field (settable) Value: 25, Placeholder: EMPTY
++								537 text field (settable) Value: 0, Placeholder: EMPTY
++								538 text field (settable) Value: 0, Placeholder: EMPTY
++								539 text field (settable) Value: 0, Placeholder: EMPTY
++								540 text field (settable) Value: 0, Placeholder: EMPTY
++								541 text field (settable) Value: 0, Placeholder: EMPTY
++								542 text field (settable) Value: 0, Placeholder: EMPTY
++								543 text field (settable) Value: 0, Placeholder: EMPTY
++							544 row (selectable)
++								545 text field (settable) Value: offline, Placeholder: EMPTY
++								546 text field (settable) Value: FALSE, Placeholder: EMPTY
++								547 text field (settable) Value: 74, Placeholder: EMPTY
++								548 text field (settable) Value: 4, Placeholder: EMPTY
++								549 text field (settable) Value: 1, Placeholder: EMPTY
++								550 text field (settable) Value: 17500.00, Placeholder: EMPTY
++								551 text field (settable) Value: 17500.00, Placeholder: EMPTY
++								552 text field (settable) Value: 0, Placeholder: EMPTY
++								553 text field (settable) Value: 0, Placeholder: EMPTY
++								554 text field (settable) Value: 0, Placeholder: EMPTY
++							555 row (selectable)
++								556 text field (settable) Value: pending_reconnection, Placeholder: EMPTY
++								557 text field (settable) Value: FALSE, Placeholder: EMPTY
++								558 text field (settable) Value: 1, Placeholder: EMPTY
++								559 text field (settable) Value: 1, Placeholder: EMPTY
++								560 text field (settable) Value: 0, Placeholder: EMPTY
++								561 text field (settable) Value: 0, Placeholder: EMPTY
++								562 text field (settable) Value: 0, Placeholder: EMPTY
++								563 text field (settable) Value: 0, Placeholder: EMPTY
++								564 text field (settable) Value: 0, Placeholder: EMPTY
++								565 text field (settable) Value: 0, Placeholder: EMPTY
++							566 row (selectable)
++								567 text field (settable) Value: suspended, Placeholder: EMPTY
++								568 text field (settable) Value: FALSE, Placeholder: EMPTY
++								569 text field (settable) Value: 12, Placeholder: EMPTY
++								570 text field (settable) Value: 9, Placeholder: EMPTY
++								571 text field (settable) Value: 6, Placeholder: EMPTY
++								572 text field (settable) Value: 4000.00, Placeholder: EMPTY
++								573 text field (settable) Value: 3500.00, Placeholder: EMPTY
++								574 text field (settable) Value: 1, Placeholder: EMPTY
++								575 text field (settable) Value: 0, Placeholder: EMPTY
++								576 text field (settable) Value: 0, Placeholder: EMPTY
++							577 row (selectable)
++								578 text field (settable) Value: terminated, Placeholder: EMPTY
++								579 text field (settable) Value: FALSE, Placeholder: EMPTY
++								580 text field (settable) Value: 71, Placeholder: EMPTY
++								581 text field (settable) Value: 10, Placeholder: EMPTY
++								582 text field (settable) Value: 3, Placeholder: EMPTY
++								583 text field (settable) Value: 7000.00, Placeholder: EMPTY
++								584 text field (settable) Value: 7000.00, Placeholder: EMPTY
++								585 text field (settable) Value: 0, Placeholder: EMPTY
++								586 text field (settable) Value: 0, Placeholder: EMPTY
++								587 text field (settable) Value: 0, Placeholder: EMPTY
++							588 container
++								589 sort button status
++								590 sort button hidden_from_app
++								591 sort button accounts
++								592 sort button recent_payers
++								593 sort button corrections
++								594 sort button credit_to_post
++								595 sort button debt_to_clear
++								596 sort button future_credit_accounts
++								597 sort button unlabelled_payment_accounts
++								598 sort button reconnection_candidates
++						599 scroll bar (settable, float) 0
++							600 value indicator (settable, float) 0
++							601 increment arrow button
++							602 decrement arrow button
++							603 increment page button
++							604 decrement page button
++						605 scroll bar (settable, float) 0
++							606 value indicator (settable, float) 0
++							607 increment arrow button
++							608 decrement arrow button
++							609 increment page button
++							610 decrement page button
++						611 button Expand the columns to fit the content
+~					484 radio button Description: Data, Help: Show result data, Value: 1
+~					485 radio button Description: Message, Help: Show result message, Value: 0
+Selected text: ```
+-- Management's broadened one-time relief rule, all accounts.
+-- Recent payment activity: positive NET Monthly Fee receipts since Aug 1.
+-- Future paid months use the stated rule: due days 1-15 bill the previous
+-- month; due days 16-31 bill the same month. Existing credit is never removed.
+-- Read-only. This is management relief, not a claim every balance is invalid.
+WITH settings AS (
+ SELECT DATE '2026-09-15' AS as_of, DATE '2026-08-01' AS recent_start
+), payments AS (
+ SELECT p.customer_id,
+   SUM(p.amount_paid) FILTER (WHERE p.payment_date >= s.recent_start
+     AND p.payment_date <= s.as_of) AS recent_net_paid,
+   MAX(p.payment_date) FILTER (WHERE p.amount_paid > 0 AND p.payment_date <= s.as_of) AS last_paid,
+   COUNT(*) FILTER (WHERE p.amount_paid > 0 AND p.payment_date >= s.recent_start
+     AND p.payment_date <= s.as_of) AS recent_receipts,
+   SUM(p.amount_paid) FILTER (WHERE p.month_paid IS NULL AND p.payment_date >= s.recent_start
+     AND p.payment_date <= s.as_of) AS recent_unlabelled,
+   SUM(p.amount_paid) FILTER (WHERE p.payment_date <= s.as_of AND c.activation_date IS NOT NULL
+     AND public.spcl_anniversary_date(c.activation_date,
+       (DATE_TRUNC('month', p.month_paid) + CASE WHEN EXTRACT(DAY FROM c.activation_date) <= 15
+         THEN INTERVAL '1 month' ELSE INTERVAL '0 months' END)::DATE) > s.as_of) AS future_paid,
+   JSONB_OBJECT_AGG(p.payment_id::TEXT, JSONB_BUILD_ARRAY(p.amount_paid,p.payment_date,p.month_paid))
+     FILTER (WHERE p.payment_date >= s.recent_start AND p.payment_date <= s.as_of) AS recent_evidence
+ FROM public.payments p JOIN public.customers c USING (customer_id) CROSS JOIN settings s
+ WHERE p.voided_at IS NULL AND COALESCE(p.payment_type,p.legacy_payment_type) = 'Monthly Fee'
+ GROUP BY p.customer_id
+), plan AS (
+ SELECT c.customer_id, c.name, c.status, c.monthly_fee, c.activation_date,
+   c.hidden_from_app, b.balance, b.oldest_unpaid_due_date, b.grace_end_date,
+   COALESCE(p.recent_net_paid,0)::NUMERIC(14,2) AS recent_net_paid,
+   p.last_paid, p.recent_receipts, COALESCE(p.recent_unlabelled,0) AS recent_unlabelled,
+   GREATEST(COALESCE(p.future_paid,0),0)::NUMERIC(14,2) AS future_paid,
+   CASE WHEN COALESCE(p.recent_net_paid,0) > 0 OR COALESCE(p.future_paid,0) > 0
+     THEN LEAST(b.balance,-GREATEST(COALESCE(p.future_paid,0),0))
+     ELSE b.balance END::NUMERIC(14,2) AS target_balance,
+   p.recent_evidence
+ FROM public.customers c JOIN public.customer_billing_status b USING(customer_id)
+ LEFT JOIN payments p USING(customer_id)
+)
+SELECT status, hidden_from_app, COUNT(*) AS accounts,
+ COUNT(*) FILTER(WHERE recent_net_paid>0) AS recent_payers,
+ COUNT(*) FILTER(WHERE balance>target_balance) AS corrections,
+ COALESCE(SUM(balance-target_balance) FILTER(WHERE balance>target_balance),0) AS credit_to_post,
+ COALESCE(SUM(GREATEST(balance,0)) FILTER(WHERE balance>target_balance),0) AS debt_to_clear,
+ COUNT(*) FILTER(WHERE balance>target_balance AND target_balance<0) AS future_credit_accounts,
+ COUNT(*) FILTER(WHERE balance>target_balance AND recent_unlabelled<>0) AS unlabelled_payment_accounts,
+ COUNT(*) FILTER(WHERE status='disconnected' AND (recent_net_paid>0 OR future_paid>0)) AS reconnection_candidates
+FROM plan GROUP BY status, hidden_from_app ORDER BY status,hidden_from_app;
+
+```
+
+Note: Pay special attention to the content selected by the user. If the user asks a question or refers to the content they are looking at on-screen, they might be referring to the selected content (but they might be referring to something else that's visible, too).

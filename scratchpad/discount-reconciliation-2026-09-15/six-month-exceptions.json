@@ -1,0 +1,861 @@
+[
+  {
+    "customer_id": 13154,
+    "name": "Masreen Meridith",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-04",
+    "payment_ids": [
+      55746,
+      55741,
+      55743,
+      55744,
+      435412,
+      435414
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 2939,
+    "name": "Simone Chisholm",
+    "status": "active",
+    "balance": "1000.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-11",
+    "payment_ids": [
+      173370,
+      173376,
+      173371,
+      173372,
+      173374,
+      173395,
+      173396,
+      441981,
+      441982
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 249,
+    "name": "AUDREY MITCHELL",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-12",
+    "payment_ids": [
+      146131,
+      146124,
+      146125,
+      146126,
+      146044,
+      437594
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 571,
+    "name": "Christopher Ellington",
+    "status": "disconnected",
+    "balance": "1500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-03",
+    "payment_ids": [
+      301750,
+      301757,
+      301756,
+      301751,
+      301768,
+      301769,
+      435112,
+      435114,
+      441795
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 786,
+    "name": "Lettice Elaine Morgan",
+    "status": "disconnected",
+    "balance": "5500.00",
+    "monthly_fee": "4000.00",
+    "month_totals": {
+      "2026-03": "4000.00",
+      "2026-04": "4000.00",
+      "2026-05": "4000.00",
+      "2026-06": "4000.00",
+      "2026-07": "4000.00",
+      "2026-08": "4000.00"
+    },
+    "september_due_date": "2026-09-02",
+    "payment_ids": [
+      378721,
+      378722,
+      378720,
+      378723,
+      435358,
+      435359
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 2015,
+    "name": "Samantha Alicia Brown/Philip Woodley",
+    "status": "disconnected",
+    "balance": "4000.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-04",
+    "payment_ids": [
+      114706,
+      114707,
+      114708,
+      114705,
+      114694,
+      114695,
+      434553
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 2153,
+    "name": "Ezra Reynolds",
+    "status": "active",
+    "balance": "5000.00",
+    "monthly_fee": "5000.00",
+    "month_totals": {
+      "2026-03": "5000.00",
+      "2026-04": "5000.00",
+      "2026-05": "5000.00",
+      "2026-06": "5000.00",
+      "2026-07": "5000.00",
+      "2026-08": "5000.00"
+    },
+    "september_due_date": "2026-09-15",
+    "payment_ids": [
+      123717,
+      123719,
+      123721,
+      123722,
+      437671,
+      437673
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation",
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 2552,
+    "name": "Odette Wright",
+    "status": "active",
+    "balance": "3000.00",
+    "monthly_fee": "3000.00",
+    "month_totals": {
+      "2026-03": "3500.00",
+      "2026-04": "3500.00",
+      "2026-05": "3500.00",
+      "2026-06": "3500.00",
+      "2026-07": "3000.00",
+      "2026-08": "3000.00"
+    },
+    "september_due_date": "2026-09-13",
+    "payment_ids": [
+      150335,
+      150336,
+      150289,
+      150290,
+      436668,
+      436670
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 2827,
+    "name": "Clifton Williams",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-15",
+    "payment_ids": [
+      166871,
+      166931,
+      166932,
+      166928,
+      166933,
+      166929,
+      166917,
+      440341
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 3140,
+    "name": "Samishia Ellington",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-12",
+    "payment_ids": [
+      183317,
+      183335,
+      183334,
+      183281,
+      432564,
+      439928
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 3321,
+    "name": "Cassandra Powell-Reid",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-15",
+    "payment_ids": [
+      193817,
+      193818,
+      193820,
+      193819,
+      437301,
+      440011
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 3635,
+    "name": "Ronique Williams",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-11",
+    "payment_ids": [
+      205977,
+      205965,
+      205967,
+      205966,
+      206019,
+      440190
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 3664,
+    "name": "Mexcior Graham",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-14",
+    "payment_ids": [
+      207601,
+      207630,
+      207632,
+      207631,
+      432276,
+      440609
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 3904,
+    "name": "Melissa Williams",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-13",
+    "payment_ids": [
+      219283,
+      219282,
+      219280,
+      219279,
+      219284,
+      436532
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation",
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 5630,
+    "name": "Lindon Rattray",
+    "status": "disconnected",
+    "balance": "4000.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-03",
+    "payment_ids": [
+      298392,
+      298394,
+      298393,
+      298395,
+      435479,
+      435480
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 5632,
+    "name": "Damion Williamson",
+    "status": "active",
+    "balance": "1500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-11",
+    "payment_ids": [
+      298466,
+      298467,
+      298465,
+      298468,
+      439142,
+      439143
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation",
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 5797,
+    "name": "Gilbert White",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "3000.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-14",
+    "payment_ids": [
+      305298,
+      305343,
+      305344,
+      305345,
+      305341,
+      436833,
+      436834
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 6791,
+    "name": "Keliah Bailey",
+    "status": "disconnected",
+    "balance": "4000.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-03",
+    "payment_ids": [
+      349514,
+      349515,
+      349506,
+      349531,
+      434862,
+      434863
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 7529,
+    "name": "Rosheda Lindsay",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-09",
+    "payment_ids": [
+      372839,
+      372840,
+      372841,
+      372838,
+      372830,
+      436082,
+      436083
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation",
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 8192,
+    "name": "Tajay Reid",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-05",
+    "payment_ids": [
+      386481,
+      386482,
+      386483,
+      386484,
+      434104,
+      434105
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 9025,
+    "name": "Kirk White",
+    "status": "active",
+    "balance": "5000.00",
+    "monthly_fee": "5000.00",
+    "month_totals": {
+      "2026-03": "5000.00",
+      "2026-04": "5000.00",
+      "2026-05": "5000.00",
+      "2026-06": "5000.00",
+      "2026-07": "5000.00",
+      "2026-08": "5000.00"
+    },
+    "september_due_date": "2026-09-10",
+    "payment_ids": [
+      411538,
+      411532,
+      411533,
+      411534,
+      435672,
+      435673
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 10138,
+    "name": "Sorman Blair",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-15",
+    "payment_ids": [
+      3192,
+      3193,
+      3195,
+      3198,
+      3191,
+      437098,
+      438174
+    ],
+    "flags": [
+      "Ledger monthly charge exceeds current monthly fee",
+      "Nonvoid negative monthly receipt; resolve allocation",
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 10344,
+    "name": "Norma Reid",
+    "status": "active",
+    "balance": "4000.00",
+    "monthly_fee": "4000.00",
+    "month_totals": {
+      "2026-03": "4000.00",
+      "2026-04": "4000.00",
+      "2026-05": "4000.00",
+      "2026-06": "4000.00",
+      "2026-07": "4000.00",
+      "2026-08": "4000.00"
+    },
+    "september_due_date": "2026-09-05",
+    "payment_ids": [
+      7744,
+      7745,
+      7741,
+      7742,
+      435254,
+      435255
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 12168,
+    "name": "Wilbert Jackson",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-15",
+    "payment_ids": [
+      42060,
+      42065,
+      42062,
+      42061,
+      42066,
+      437143
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 12875,
+    "name": "Jazanie Lewis",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-06",
+    "payment_ids": [
+      52202,
+      52205,
+      52206,
+      52208,
+      52204,
+      52207,
+      435694,
+      435695
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 12876,
+    "name": "Nekesia Lewis",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-06",
+    "payment_ids": [
+      52209,
+      52214,
+      52211,
+      52212,
+      52217,
+      437409
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 12913,
+    "name": "Carla Hollingsworth",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-11",
+    "payment_ids": [
+      52877,
+      52878,
+      52879,
+      52880,
+      52874,
+      439774
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 13149,
+    "name": "Samantha Morgan",
+    "status": "disconnected",
+    "balance": "4000.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-03",
+    "payment_ids": [
+      55631,
+      55627,
+      55632,
+      55626,
+      55628,
+      436902
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 13180,
+    "name": "Leisia Griffiths",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-06",
+    "payment_ids": [
+      56032,
+      56027,
+      56029,
+      56030,
+      435317,
+      435319
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation"
+    ]
+  },
+  {
+    "customer_id": 13220,
+    "name": "Barrington Douglas Bennett",
+    "status": "active",
+    "balance": "2500.00",
+    "monthly_fee": "2500.00",
+    "month_totals": {
+      "2026-03": "2500.00",
+      "2026-04": "2500.00",
+      "2026-05": "2500.00",
+      "2026-06": "2500.00",
+      "2026-07": "2500.00",
+      "2026-08": "2500.00"
+    },
+    "september_due_date": "2026-09-11",
+    "payment_ids": [
+      56549,
+      56552,
+      56554,
+      56550,
+      56551,
+      438617,
+      438618
+    ],
+    "flags": [
+      "Nonvoid negative monthly receipt; resolve allocation",
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  },
+  {
+    "customer_id": 14663,
+    "name": "Marcus Rattery",
+    "status": "active",
+    "balance": "3000.00",
+    "monthly_fee": "3000.00",
+    "month_totals": {
+      "2026-03": "5000.00",
+      "2026-04": "5000.00",
+      "2026-05": "5000.00",
+      "2026-06": "5000.00",
+      "2026-07": "3000.00",
+      "2026-08": "3000.00"
+    },
+    "september_due_date": "2026-09-11",
+    "payment_ids": [
+      291516,
+      291512,
+      291514,
+      72190,
+      437040,
+      440750
+    ],
+    "flags": [
+      "Existing positive adjustment; resolve reason before clearing"
+    ]
+  }
+]

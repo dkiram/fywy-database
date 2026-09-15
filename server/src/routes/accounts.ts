@@ -1499,11 +1499,12 @@ accountsRouter.get(
 
     try {
       await pool.query(
-        `SELECT public.spcl_generate_monthly_charges(
-          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
-        );`
+        `SELECT public.spcl_generate_customer_monthly_charges(
+          $1::INTEGER, (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+        );`,
+        [customerId]
       );
-      const [statusResult, ledgerResult] = await Promise.all([
+      const [statusResult, ledgerResult, suspensionResult] = await Promise.all([
         pool.query(
           `
           SELECT
@@ -1517,10 +1518,20 @@ accountsRouter.get(
             -- the customer actually paid for is the honest "no service since"
             -- date, regardless of when staff recorded the offline status.
             last_paid.no_service_since
-          FROM public.customer_billing_status billing
+          FROM public.spcl_customer_billing_status($1::INTEGER) billing
           JOIN public.customers c USING (customer_id)
-          LEFT JOIN public.customer_offline_monthly_charge_review review
-            USING (customer_id)
+          LEFT JOIN LATERAL (
+            SELECT COUNT(*)::INTEGER AS charge_count,
+              SUM(ledger.amount)::NUMERIC(14,2) AS charge_amount,
+              MIN(COALESCE(ledger.due_date, ledger.effective_date)) AS first_charge_date,
+              MAX(COALESCE(ledger.due_date, ledger.effective_date)) AS last_charge_date
+            FROM public.account_ledger_entries ledger
+            WHERE ledger.customer_id = billing.customer_id
+              AND ledger.entry_type = 'monthly_charge'
+              AND NOT public.spcl_customer_service_active_on(
+                ledger.customer_id, COALESCE(ledger.due_date, ledger.effective_date)
+              )
+          ) review ON TRUE
           LEFT JOIN LATERAL (
             SELECT MAX(p.payment_date) AS no_service_since
             FROM public.payments p
@@ -1542,12 +1553,21 @@ accountsRouter.get(
           `,
           [customerId]
         ),
+        // Charge generation above already includes this customer's suspension
+        // fees. Read the quote afterwards instead of launching a second job.
+        pool.query(
+          `SELECT * FROM public.spcl_customer_suspension_status($1::INTEGER);`,
+          [customerId]
+        ).catch((error) => {
+          console.error("Could not load customer suspension quote:", error);
+          return { rows: [] };
+        }),
       ]);
 
       if (statusResult.rows.length === 0) {
         return res.status(404).json({ error: "Customer not found." });
       }
-      res.json({ billing: statusResult.rows[0], ledger: ledgerResult.rows });
+      res.json({ billing: statusResult.rows[0], ledger: ledgerResult.rows, suspension: suspensionResult.rows[0] ?? null });
     } catch (error) {
       console.error("Could not load customer billing status:", error);
       res.status(500).json({ error: "Could not load customer billing status." });
@@ -2539,9 +2559,10 @@ accountsRouter.get(
       // The holding charges have to be up to date or the quoted total is
       // short by however many anniversaries have passed since the last run.
       await pool.query(
-        `SELECT public.spcl_generate_suspension_charges(
-          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
-        );`
+        `SELECT public.spcl_generate_customer_suspension_charges(
+          $1::INTEGER, (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
+        );`,
+        [customerId]
       );
       const result = await pool.query(
         `SELECT
@@ -2555,7 +2576,7 @@ accountsRouter.get(
            suspension_monthly_fee,
            suspension_charges_to_date,
            total_due_to_reconnect
-         FROM public.customer_suspension_status
+         FROM public.spcl_customer_suspension_status($1::INTEGER)
          WHERE customer_id = $1;`,
         [customerId]
       );

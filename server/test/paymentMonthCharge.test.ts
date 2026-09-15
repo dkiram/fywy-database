@@ -137,13 +137,13 @@ test('explicit override accepts cut-off months without raising a charge', async 
   }
 });
 
-test('past monthly payments only deduct outstanding debt, never creating credit', () => {
+test('past monthly receipts retain all money after debt has been discounted or cleared', () => {
   assert.equal(paymentBalanceDeduction('2500', '4000.00', true), '2500.00');
-  assert.equal(paymentBalanceDeduction('2500', '1000.25', true), '1000.25');
-  assert.equal(paymentBalanceDeduction('2500', '0.00', true), '0.00');
-  assert.equal(paymentBalanceDeduction('2500', '-500.00', true), '0.00');
+  assert.equal(paymentBalanceDeduction('2500', '1000.25', true), '2500.00');
+  assert.equal(paymentBalanceDeduction('2500', '0.00', true), '2500.00');
+  assert.equal(paymentBalanceDeduction('2500', '-500.00', true), '2500.00');
   assert.equal(paymentBalanceDeduction('0.01', '0.02', true), '0.01');
-  assert.equal(paymentBalanceDeduction('999999999998.99', '999999999998.98', true), '999999999998.98');
+  assert.equal(paymentBalanceDeduction('999999999998.99', '999999999998.98', true), '999999999998.99');
 });
 
 test('advance payments retain their full deduction, clearing debt before creating credit', () => {
