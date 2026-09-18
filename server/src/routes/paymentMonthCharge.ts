@@ -67,35 +67,37 @@ export async function ensureMonthlyChargeForPayment(
   client: PoolClient,
   input: MonthChargeInput,
 ): Promise<MonthChargeOutcome> {
-  // One round trip answers everything: is the month in the past, was the
-  // account on or off that month (judged on the anniversary date inside it,
-  // exactly as the generator does), is it already billed, and at what rate.
+  // The receipt labels the service month. Due days 1–15 bill that service in
+  // the following month; days 16–31 bill it in the same month. Use the mapped
+  // anniversary for charge identity, service history and rates everywhere.
   const lookup = await client.query(
     `
     WITH me AS (
       SELECT c.customer_id,
              c.activation_date,
              ($2 || '-01')::DATE AS month_start,
-             DATE_TRUNC('month', (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE)::DATE AS this_month
+             (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE AS today
       FROM public.customers c
       WHERE c.customer_id = $1
     ),
     due AS (
       SELECT me.*,
              CASE WHEN me.activation_date IS NULL THEN NULL
-                  ELSE public.spcl_anniversary_date(me.activation_date, me.month_start)
+                  ELSE public.spcl_anniversary_date(me.activation_date,
+                    (me.month_start + CASE WHEN EXTRACT(DAY FROM me.activation_date)<=15
+                      THEN INTERVAL '1 month' ELSE INTERVAL '0 months' END)::DATE)
              END AS due_date
       FROM me
     )
     SELECT
       d.month_start::TEXT AS month_start,
       d.due_date::TEXT AS due_date,
-      d.month_start < d.this_month AS is_past,
+      d.due_date <= d.today AS is_past,
       EXISTS (
         SELECT 1 FROM public.account_ledger_entries ch
         WHERE ch.customer_id = d.customer_id
           AND ch.entry_type = 'monthly_charge'
-          AND DATE_TRUNC('month', COALESCE(ch.due_date, ch.effective_date)) = d.month_start
+          AND COALESCE(ch.due_date, ch.effective_date) = d.due_date
       ) AS has_charge,
       CASE WHEN d.due_date IS NULL THEN NULL
            ELSE public.spcl_customer_service_active_on(d.customer_id, d.due_date)
@@ -155,7 +157,8 @@ export async function ensureMonthlyChargeForPayment(
   // to align the payment with. Legacy edge case, left as before.
   if (row.service_on === null || row.due_date === null) return { kind: "ok", reason: "no_activation_date" };
 
-  // This month or later: the generator raises it on the anniversary.
+  // A service month can be in the past while its mapped bill is not due yet.
+  // Leave that future charge to the generator so advance payments stay credit.
   if (!row.is_past) return { kind: "ok", reason: "not_past" };
 
   if (row.customer_rate_history_id === null || row.monthly_fee === null || Number(row.monthly_fee) <= 0) {

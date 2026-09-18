@@ -70,6 +70,24 @@ test('this month or later is left to the generator', async () => {
   assert.equal(inserts.length, 0);
 });
 
+test('August receipt on an early-month account uses its already posted September bill', async () => {
+  const { client, inserts } = fakeClient({ ...baseRow,
+    month_start: '2026-08-01', due_date: '2026-09-09', has_charge: true,
+  });
+  const outcome = await ensureMonthlyChargeForPayment(client, { ...input, customerId: 2525, monthPaid: '2026-08' });
+  assert.deepEqual(outcome, { kind: 'ok', reason: 'already_charged' });
+  assert.equal(inserts.length, 0);
+});
+
+test('a prior service month whose mapped bill is not due keeps the receipt as advance credit', async () => {
+  const { client, inserts } = fakeClient({ ...baseRow,
+    month_start: '2026-08-01', due_date: '2026-09-09', is_past: false,
+  });
+  const outcome = await ensureMonthlyChargeForPayment(client, { ...input, monthPaid: '2026-08' });
+  assert.deepEqual(outcome, { kind: 'ok', reason: 'not_past' });
+  assert.equal(inserts.length, 0);
+});
+
 test('a month the customer was disconnected is refused, whether past or current', async () => {
   for (const isPast of [true, false]) {
     const { client, inserts } = fakeClient({ ...baseRow, is_past: isPast, service_on: false, status_then: 'disconnected' });
