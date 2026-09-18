@@ -1,0 +1,38 @@
+{
+  "already_reversed": {
+    "accounts": 1,
+    "proposed_adjustment": 0.0,
+    "possible_restoration": 5000.0
+  },
+  "covered_by_receipts": {
+    "accounts": 618,
+    "proposed_adjustment": 0.0,
+    "possible_restoration": 0.0
+  },
+  "proposed_restore": {
+    "accounts": 933,
+    "proposed_adjustment": 2723330.0,
+    "possible_restoration": 2723330.0
+  },
+  "review_due_allocation": {
+    "accounts": 1,
+    "proposed_adjustment": 0.0,
+    "possible_restoration": 1000.0
+  },
+  "review_later_charges": {
+    "accounts": 2,
+    "proposed_adjustment": 0.0,
+    "possible_restoration": 5000.0
+  },
+  "review_unlabelled_receipts": {
+    "accounts": 27,
+    "proposed_adjustment": 0.0,
+    "possible_restoration": 67000.0
+  },
+  "due_september_15_proposals": {
+    "accounts": 108,
+    "amount": 318100.0
+  },
+  "proposals_with_later_payments": 50,
+  "proposals_ending_nonpositive": 50
+}

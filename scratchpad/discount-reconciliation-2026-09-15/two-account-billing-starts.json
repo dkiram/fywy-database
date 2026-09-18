@@ -1,0 +1,79 @@
+{
+  "tag": "billing-start-two",
+  "audit": [
+    {
+      "action": "Verified customer OLT information",
+      "reason": "Read-only live OLT verification",
+      "entity_id": "14754",
+      "new_value": "{\"customer_ont_assignment_id\":\"9812\",\"customer_id\":14754,\"olt_id\":\"4\",\"olt_name\":\"Mandeville\",\"management_ip\":\"192.168.1.4\",\"frame_number\":0,\"slot_number\":2,\"pon_port_number\":10,\"ont_id\":38,\"ont_serial\":\"485754439909EEA6\",\"ont_description_override\":null,\"description_override_reason\":null,\"description_overridden_at\":null,\"customer_name\":\"Delano Wilson\",\"customer_status\":\"active\",\"source\":\"manual\",\"mapping_status\":\"verified\",\"verified_at\":\"2026-09-05T19:10:05.804Z\",\"active_from\":\"2026-09-01T19:28:52.752Z\",\"updated_at\":\"2026-09-05T19:10:05.804Z\",\"verified_by_first_name\":\"Kimone\",\"verified_by_last_name\":\"Dunn\",\"liveControlFlag\":\"active\",\"liveRunState\":\"online\",\"mismatchReasons\":[],\"reconciledAttemptIds\":[],\"clearedAccountAttempts\":[]}",
+      "old_value": "{\"customer_ont_assignment_id\":\"9812\",\"customer_id\":14754,\"olt_id\":\"4\",\"olt_name\":\"Mandeville\",\"management_ip\":\"192.168.1.4\",\"frame_number\":0,\"slot_number\":2,\"pon_port_number\":10,\"ont_id\":38,\"ont_serial\":null,\"ont_description_override\":null,\"description_override_reason\":null,\"description_overridden_at\":null,\"customer_name\":\"Delano Wilson\",\"customer_status\":\"active\",\"source\":\"manual\",\"mapping_status\":\"unverified\",\"verified_at\":null,\"active_from\":\"2026-09-01T19:28:52.752Z\",\"updated_at\":\"2026-09-01T19:28:52.752Z\",\"verified_by_first_name\":null,\"verified_by_last_name\":null}",
+      "field_name": "network_access",
+      "employee_id": 12,
+      "occurred_at": "2026-09-05T14:10:05.80427-05:00"
+    },
+    {
+      "action": "Added customer OLT information",
+      "reason": null,
+      "entity_id": "14754",
+      "new_value": "{\"customer_ont_assignment_id\":\"9812\",\"customer_id\":14754,\"olt_id\":\"4\",\"olt_name\":\"Mandeville\",\"management_ip\":\"192.168.1.4\",\"frame_number\":0,\"slot_number\":2,\"pon_port_number\":10,\"ont_id\":38,\"ont_serial\":null,\"ont_description_override\":null,\"description_override_reason\":null,\"description_overridden_at\":null,\"customer_name\":\"Delano Wilson\",\"customer_status\":\"active\",\"source\":\"manual\",\"mapping_status\":\"unverified\",\"verified_at\":null,\"active_from\":\"2026-09-01T19:28:52.752Z\",\"updated_at\":\"2026-09-01T19:28:52.752Z\",\"verified_by_first_name\":null,\"verified_by_last_name\":null}",
+      "old_value": null,
+      "field_name": "network_access",
+      "employee_id": 12,
+      "occurred_at": "2026-09-01T14:28:52.75275-05:00"
+    },
+    {
+      "action": "Merged duplicate customer record",
+      "reason": "Same name and shared telephone; duplicate was disconnected. History moved to the active record, outstanding balance not carried over.",
+      "entity_id": "14754",
+      "new_value": "14754",
+      "old_value": "4706",
+      "field_name": "customer_id",
+      "employee_id": null,
+      "occurred_at": "2026-08-30T12:29:50.799974-05:00"
+    },
+    {
+      "action": "Bulk verified customer OLT information",
+      "reason": "Exact live location, serial, and customer description match",
+      "entity_id": "1155",
+      "new_value": "{\"assignmentId\":\"327\",\"mappingStatus\":\"verified\",\"location\":\"0/11/13/78\",\"liveControlFlag\":\"active\",\"liveRunState\":\"online\"}",
+      "old_value": "{\"assignmentId\":\"327\",\"mappingStatus\":\"unverified\",\"location\":\"0/11/13/78\"}",
+      "field_name": "network_access",
+      "employee_id": null,
+      "occurred_at": "2026-08-22T19:55:04.706585-05:00"
+    },
+    {
+      "action": "Added customer OLT information",
+      "reason": "Exact U2000 description-to-customer-name match; pending live OLT verification",
+      "entity_id": "1155",
+      "new_value": "{\"customerOntAssignmentId\" : 327, \"oltName\" : \"NEWPORT\", \"frameNumber\" : 0, \"slotNumber\" : 11, \"ponPortNumber\" : 13, \"ontId\" : 78, \"source\" : \"u2000_import\", \"mappingStatus\" : \"unverified\"}",
+      "old_value": null,
+      "field_name": "network_access",
+      "employee_id": null,
+      "occurred_at": "2026-08-21T17:00:53.168165-05:00"
+    }
+  ],
+  "schedules": [
+    {
+      "note": "Latest Access \"Month Paid For\", advanced 52 month(s) for 130000.00 of catch-up payments that were never allocated to a month",
+      "basis": "month_paid",
+      "updated_at": "2026-08-19T10:04:25.497088-05:00",
+      "customer_id": 14754,
+      "paid_through": "2026-11-19",
+      "billing_start_date": "2026-11-05",
+      "rate_verified_from": "2025-08-18",
+      "unallocated_credit": 130000,
+      "months_from_unallocated": 52
+    },
+    {
+      "note": "Latest Access \"Month Paid For\" on a legacy monthly payment",
+      "basis": "month_paid",
+      "updated_at": "2026-08-19T10:04:25.497088-05:00",
+      "customer_id": 1155,
+      "paid_through": "2026-07-30",
+      "billing_start_date": "2026-07-22",
+      "rate_verified_from": "2025-08-18",
+      "unallocated_credit": 0,
+      "months_from_unallocated": 0
+    }
+  ]
+}

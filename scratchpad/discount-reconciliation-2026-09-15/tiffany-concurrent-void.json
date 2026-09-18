@@ -1,0 +1,31 @@
+{
+  "ledger": [
+    [
+      1215548,
+      "monthly_payment",
+      -2500,
+      "2026-09-15T15:33:43.650643-05:00",
+      23,
+      "Full receipt credited; any amount beyond outstanding debt remains as credit.",
+      "payment:442398"
+    ],
+    [
+      1220684,
+      "payment_void",
+      2500,
+      "2026-09-15T17:44:16.155487-05:00",
+      2,
+      "requested by head office",
+      "payment-void:442398"
+    ]
+  ],
+  "payment": {
+    "voided_at": "2026-09-15T17:44:16.155487-05:00",
+    "month_paid": "2026-09-01",
+    "payment_id": 442398,
+    "amount_paid": 2500,
+    "customer_id": 15092,
+    "void_reason": "requested by head office",
+    "voided_by_employee_id": 2
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "tag": "tonight-eligibility",
+  "fixed_counts": {
+    "total": 959,
+    "active": 959,
+    "eligible_now": 0,
+    "clear_or_credit": 79,
+    "future_grace_unpaid": 834,
+    "grace_ends_today_unpaid": 46
+  },
+  "recent_reconnections": [
+    {
+      "date": "2026-09-14",
+      "succeeded": 148
+    },
+    {
+      "date": "2026-09-15",
+      "succeeded": 414
+    }
+  ],
+  "last_disconnection_runs": [
+    {
+      "status": "completed",
+      "started_at": "2026-09-15T00:01:27.508825-05:00",
+      "billing_date": "2026-09-15",
+      "completed_at": "2026-09-15T00:50:34.229785-05:00",
+      "failed_count": 6,
+      "skipped_count": 41,
+      "selected_count": 167,
+      "disconnected_count": 120,
+      "olt_automation_run_id": 28
+    },
+    {
+      "status": "completed",
+      "started_at": "2026-09-14T00:00:16.462422-05:00",
+      "billing_date": "2026-09-14",
+      "completed_at": "2026-09-14T01:30:11.556186-05:00",
+      "failed_count": 6,
+      "skipped_count": 44,
+      "selected_count": 267,
+      "disconnected_count": 217,
+      "olt_automation_run_id": 27
+    },
+    {
+      "status": "completed",
+      "started_at": "2026-09-12T00:05:00.690608-05:00",
+      "billing_date": "2026-09-12",
+      "completed_at": "2026-09-12T00:48:42.480021-05:00",
+      "failed_count": 6,
+      "skipped_count": 37,
+      "selected_count": 144,
+      "disconnected_count": 101,
+      "olt_automation_run_id": 26
+    },
+    {
+      "status": "completed",
+      "started_at": "2026-09-11T00:04:00.707342-05:00",
+      "billing_date": "2026-09-11",
+      "completed_at": "2026-09-11T00:17:31.464234-05:00",
+      "failed_count": 4,
+      "skipped_count": 38,
+      "selected_count": 79,
+      "disconnected_count": 37,
+      "olt_automation_run_id": 25
+    }
+  ],
+  "recent_reconnects_with_debt": [
+    [
+      11525,
+      "Stephen Dyer-Tate",
+      "active",
+      3500,
+      "2026-08-17",
+      true
+    ],
+    [
+      12932,
+      "Denisha Orr",
+      "active",
+      8500,
+      "2026-09-25",
+      false
+    ]
+  ]
+}

@@ -1,0 +1,3770 @@
+[
+  {
+    "name": "Gwendolyn Robinson",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        236767,
+        2500,
+        "2026-08-17",
+        null,
+        null,
+        null
+      ],
+      [
+        236768,
+        2500,
+        "2026-08-17",
+        "2026-08-17",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 502896,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156970,
+    "customer_id": 4262,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8156,
+    "schedule_converted": false
+  },
+  {
+    "name": "Neil Barrett",
+    "due_date": "2026-09-05",
+    "receipts": [
+      [
+        236919,
+        2500,
+        "2026-08-18",
+        "2026-08-18",
+        null,
+        null
+      ],
+      [
+        236920,
+        2500,
+        "2026-08-18",
+        "2026-07-15",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 455605,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156971,
+    "customer_id": 4265,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-15",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-05T00:00:20.713594-05:00",
+    "waiver_request_id": 8157,
+    "schedule_converted": false
+  },
+  {
+    "name": "Shanel Graham",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        434415,
+        2500,
+        "2026-08-26",
+        "2026-06-01",
+        null,
+        "2026-08-26T10:37:18.13117-05:00"
+      ],
+      [
+        434416,
+        2500,
+        "2026-08-26",
+        "2026-07-01",
+        null,
+        "2026-08-26T10:37:37.004098-05:00"
+      ]
+    ],
+    "charge_id": 502903,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156972,
+    "customer_id": 4266,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8158,
+    "schedule_converted": false
+  },
+  {
+    "name": "Sonya-Jo Buser",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        237088,
+        3500,
+        "2026-08-17",
+        "2026-07-22",
+        null,
+        null
+      ],
+      [
+        237089,
+        3500,
+        "2026-08-17",
+        "2026-08-17",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 502897,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156973,
+    "customer_id": 4268,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8159,
+    "schedule_converted": false
+  },
+  {
+    "name": "Mark Crawford",
+    "due_date": "2026-09-05",
+    "receipts": [
+      [
+        435155,
+        3500,
+        "2026-08-27",
+        "2026-07-01",
+        null,
+        "2026-08-27T17:16:15.121108-05:00"
+      ],
+      [
+        435156,
+        3000,
+        "2026-08-27",
+        "2026-08-01",
+        null,
+        "2026-08-27T17:16:36.069714-05:00"
+      ]
+    ],
+    "charge_id": 455757,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156974,
+    "customer_id": 4269,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-15",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-05T00:00:20.713594-05:00",
+    "waiver_request_id": 8160,
+    "schedule_converted": false
+  },
+  {
+    "name": "Karl Mayne",
+    "due_date": "2026-09-05",
+    "receipts": [
+      [
+        237253,
+        3500,
+        "2026-08-10",
+        "2026-08-10",
+        null,
+        null
+      ],
+      [
+        237254,
+        3500,
+        "2026-08-10",
+        "2026-07-14",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 455606,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156975,
+    "customer_id": 4270,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-15",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-05T00:00:20.713594-05:00",
+    "waiver_request_id": 8161,
+    "schedule_converted": false
+  },
+  {
+    "name": "Alvin Swaby",
+    "due_date": "2026-09-05",
+    "receipts": [
+      [
+        434336,
+        4500,
+        "2026-08-26",
+        "2026-07-01",
+        null,
+        "2026-08-26T09:27:56.084115-05:00"
+      ]
+    ],
+    "charge_id": 455608,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156976,
+    "customer_id": 4274,
+    "charge_amount": 4500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4500,
+    "waiver_status": "approved",
+    "before_balance": 4500,
+    "grace_end_date": "2026-09-15",
+    "cleared_current": 4500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-05T00:00:20.713594-05:00",
+    "waiver_request_id": 8162,
+    "schedule_converted": false
+  },
+  {
+    "name": "Shantal Hall",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        237738,
+        2500,
+        "2026-08-07",
+        "2026-07-14",
+        null,
+        null
+      ],
+      [
+        237739,
+        1000,
+        "2026-08-07",
+        "2026-08-07",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 502900,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156978,
+    "customer_id": 4278,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8164,
+    "schedule_converted": false
+  },
+  {
+    "name": "Donovan Jones",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        433194,
+        4000,
+        "2026-08-22",
+        "2026-07-01",
+        null,
+        "2026-08-22T16:35:44.157384-05:00"
+      ]
+    ],
+    "charge_id": 724470,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156979,
+    "customer_id": 4295,
+    "charge_amount": 4000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 4000,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 4000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8165,
+    "schedule_converted": false
+  },
+  {
+    "name": "Keisha Nicola Morgan",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        239157,
+        2500,
+        "2026-08-18",
+        "2026-07-15",
+        null,
+        null
+      ],
+      [
+        435579,
+        2500,
+        "2026-08-28",
+        "2026-08-01",
+        null,
+        "2026-08-28T12:18:07.037346-05:00"
+      ]
+    ],
+    "charge_id": 802858,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156981,
+    "customer_id": 4304,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8167,
+    "schedule_converted": false
+  },
+  {
+    "name": "Garfield Preddie",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        437541,
+        2500,
+        "2026-09-01",
+        "2026-06-01",
+        null,
+        "2026-09-01T15:55:10.34233-05:00"
+      ],
+      [
+        437542,
+        2500,
+        "2026-09-01",
+        "2026-07-01",
+        null,
+        "2026-09-01T15:55:19.277124-05:00"
+      ]
+    ],
+    "charge_id": 724476,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156982,
+    "customer_id": 4307,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8168,
+    "schedule_converted": false
+  },
+  {
+    "name": "Darnalee Scille",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        239773,
+        2000,
+        "2026-08-04",
+        "2026-07-16",
+        null,
+        null
+      ],
+      [
+        239774,
+        2000,
+        "2026-08-04",
+        "2026-06-10",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 802860,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156985,
+    "customer_id": 4316,
+    "charge_amount": 4000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 4000,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 4000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8171,
+    "schedule_converted": false
+  },
+  {
+    "name": "Samantha Smith-Farm",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        438417,
+        2500,
+        "2026-09-03",
+        "2026-07-01",
+        null,
+        "2026-09-03T14:38:45.962487-05:00"
+      ],
+      [
+        438459,
+        1000,
+        "2026-09-03",
+        "2026-08-01",
+        null,
+        "2026-09-03T15:25:13.227472-05:00"
+      ]
+    ],
+    "charge_id": 802862,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156986,
+    "customer_id": 4317,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 1500,
+    "waiver_status": "approved",
+    "before_balance": 1500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 1500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8172,
+    "schedule_converted": false
+  },
+  {
+    "name": "Kayonn Thompson",
+    "due_date": "2026-09-08",
+    "receipts": [
+      [
+        240056,
+        1500,
+        "2026-08-10",
+        "2026-06-02",
+        null,
+        null
+      ],
+      [
+        240058,
+        1000,
+        "2026-08-10",
+        "2026-07-15",
+        null,
+        null
+      ],
+      [
+        434552,
+        1500,
+        "2026-08-26",
+        "2026-07-01",
+        null,
+        "2026-08-26T12:50:09.675135-05:00"
+      ]
+    ],
+    "charge_id": 604939,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156987,
+    "customer_id": 4319,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-18",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-08T00:00:07.290107-05:00",
+    "waiver_request_id": 8173,
+    "schedule_converted": false
+  },
+  {
+    "name": "Pauline Walters Orvil lynch",
+    "due_date": "2026-09-12",
+    "receipts": [
+      [
+        240472,
+        2500,
+        "2026-08-14",
+        "2026-08-14",
+        null,
+        null
+      ],
+      [
+        442193,
+        2500,
+        "2026-09-15",
+        "2026-09-01",
+        null,
+        "2026-09-15T09:56:09.381893-05:00"
+      ]
+    ],
+    "charge_id": 878582,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156989,
+    "customer_id": 4345,
+    "charge_amount": 2500,
+    "later_entries": [
+      [
+        1184531,
+        "monthly_payment",
+        -2500,
+        null,
+        "2026-09-15T09:56:09.381893-05:00",
+        "payment:442193",
+        "Full receipt credited; any amount beyond outstanding debt remains as credit."
+      ]
+    ],
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-22",
+    "cleared_current": 2500,
+    "current_balance": -2500,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-12T00:00:00.415631-05:00",
+    "waiver_request_id": 8175,
+    "schedule_converted": false
+  },
+  {
+    "name": "Marlon N Williams",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        439327,
+        2500,
+        "2026-09-05",
+        "2026-01-01",
+        null,
+        "2026-09-05T16:53:58.842362-05:00"
+      ],
+      [
+        439328,
+        2500,
+        "2026-09-05",
+        "2026-02-01",
+        null,
+        "2026-09-05T16:54:14.261182-05:00"
+      ],
+      [
+        439329,
+        2500,
+        "2026-09-05",
+        "2026-03-01",
+        null,
+        "2026-09-05T16:54:24.53178-05:00"
+      ],
+      [
+        439330,
+        2500,
+        "2026-09-05",
+        "2026-04-01",
+        null,
+        "2026-09-05T16:54:42.125156-05:00"
+      ],
+      [
+        439331,
+        2500,
+        "2026-09-05",
+        "2026-05-01",
+        null,
+        "2026-09-05T16:54:57.634589-05:00"
+      ],
+      [
+        439332,
+        2500,
+        "2026-09-05",
+        "2026-06-01",
+        null,
+        "2026-09-05T16:55:14.75676-05:00"
+      ]
+    ],
+    "charge_id": 953877,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156990,
+    "customer_id": 4347,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8176,
+    "schedule_converted": false
+  },
+  {
+    "name": "Khalica Fuller",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        437889,
+        2500,
+        "2026-09-02",
+        "2026-07-01",
+        null,
+        "2026-09-02T11:39:29.977503-05:00"
+      ],
+      [
+        437890,
+        2500,
+        "2026-09-02",
+        "2026-08-01",
+        null,
+        "2026-09-02T11:39:37.198928-05:00"
+      ]
+    ],
+    "charge_id": 953698,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156991,
+    "customer_id": 4349,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8177,
+    "schedule_converted": false
+  },
+  {
+    "name": "Juline Tanasha Powell",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        434890,
+        2500,
+        "2026-08-27",
+        "2026-06-01",
+        null,
+        "2026-08-27T10:59:38.398404-05:00"
+      ],
+      [
+        434891,
+        1500,
+        "2026-08-27",
+        "2026-07-01",
+        null,
+        "2026-08-27T10:59:48.409953-05:00"
+      ]
+    ],
+    "charge_id": 953696,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156993,
+    "customer_id": 4353,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8179,
+    "schedule_converted": false
+  },
+  {
+    "name": "Cecil Gayle",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        436119,
+        2500,
+        "2026-08-29",
+        "2026-06-01",
+        null,
+        "2026-08-29T14:13:32.473257-05:00"
+      ],
+      [
+        436120,
+        2500,
+        "2026-08-29",
+        "2026-07-01",
+        null,
+        "2026-08-29T14:13:40.945072-05:00"
+      ]
+    ],
+    "charge_id": 953697,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156994,
+    "customer_id": 4360,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8180,
+    "schedule_converted": false
+  },
+  {
+    "name": "Lucille Campbell",
+    "due_date": "2026-09-12",
+    "receipts": [
+      [
+        436179,
+        2500,
+        "2026-08-29",
+        "2026-08-01",
+        null,
+        "2026-08-29T16:25:37.588308-05:00"
+      ]
+    ],
+    "charge_id": 878584,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156995,
+    "customer_id": 4363,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-22",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-12T00:00:00.415631-05:00",
+    "waiver_request_id": 8181,
+    "schedule_converted": false
+  },
+  {
+    "name": "Natalie Spence Wright",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        434137,
+        2500,
+        "2026-08-25",
+        "2026-07-01",
+        null,
+        "2026-08-25T13:50:52.415233-05:00"
+      ]
+    ],
+    "charge_id": 953693,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156997,
+    "customer_id": 4365,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8183,
+    "schedule_converted": false
+  },
+  {
+    "name": "Antonio Anson",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        432344,
+        2500,
+        "2026-08-19",
+        "2026-07-01",
+        null,
+        "2026-08-19T12:41:03.09807-05:00"
+      ]
+    ],
+    "charge_id": 997175,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1156998,
+    "customer_id": 4368,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8184,
+    "schedule_converted": false
+  },
+  {
+    "name": "Tallejae Flemmings",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        432551,
+        1300,
+        "2026-08-20",
+        "2026-07-01",
+        null,
+        "2026-08-20T10:12:18.506025-05:00"
+      ],
+      [
+        432552,
+        1200,
+        "2026-08-20",
+        "2026-08-01",
+        null,
+        "2026-08-20T10:12:43.819308-05:00"
+      ]
+    ],
+    "charge_id": 997173,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157000,
+    "customer_id": 4374,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8186,
+    "schedule_converted": false
+  },
+  {
+    "name": "Winnifred Hanson",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        436032,
+        5000,
+        "2026-08-29",
+        "2026-08-01",
+        null,
+        "2026-08-29T11:05:45.288972-05:00"
+      ]
+    ],
+    "charge_id": 1149573,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157001,
+    "customer_id": 4377,
+    "charge_amount": 5000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 5000,
+    "waiver_status": "approved",
+    "before_balance": 5000,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 5000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8187,
+    "schedule_converted": false
+  },
+  {
+    "name": "Everton Thomas",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        242343,
+        5500,
+        "2026-08-03",
+        null,
+        null,
+        null
+      ],
+      [
+        242344,
+        2500,
+        "2026-08-03",
+        "2026-08-03",
+        null,
+        null
+      ],
+      [
+        242345,
+        2500,
+        "2026-08-03",
+        "2026-07-15",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 1149574,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157002,
+    "customer_id": 4379,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8188,
+    "schedule_converted": false
+  },
+  {
+    "name": "Ohen Johnson",
+    "due_date": "2026-09-07",
+    "receipts": [
+      [
+        245350,
+        2000,
+        "2026-08-17",
+        "2026-06-09",
+        null,
+        null
+      ],
+      [
+        245351,
+        2500,
+        "2026-08-17",
+        "2026-07-14",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 533453,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157004,
+    "customer_id": 4451,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-17",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-07T00:00:07.656806-05:00",
+    "waiver_request_id": 8190,
+    "schedule_converted": false
+  },
+  {
+    "name": "Kerecia Francis",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        433654,
+        2500,
+        "2026-08-24",
+        "2026-08-01",
+        null,
+        "2026-08-24T15:00:19.645962-05:00"
+      ]
+    ],
+    "charge_id": 502904,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157005,
+    "customer_id": 4453,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8191,
+    "schedule_converted": false
+  },
+  {
+    "name": "Abbedayle Samuels",
+    "due_date": "2026-09-08",
+    "receipts": [
+      [
+        246070,
+        2500,
+        "2026-08-07",
+        "2026-06-24",
+        null,
+        null
+      ],
+      [
+        435182,
+        2500,
+        "2026-08-28",
+        "2026-07-01",
+        null,
+        "2026-08-28T06:39:46.764713-05:00"
+      ]
+    ],
+    "charge_id": 604942,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157007,
+    "customer_id": 4463,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-18",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-08T00:00:07.290107-05:00",
+    "waiver_request_id": 8193,
+    "schedule_converted": false
+  },
+  {
+    "name": "Mashaun Stephens",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        437470,
+        2500,
+        "2026-09-01",
+        "2026-06-01",
+        null,
+        "2026-09-01T14:16:42.850709-05:00"
+      ],
+      [
+        437471,
+        2500,
+        "2026-09-01",
+        "2026-07-01",
+        null,
+        "2026-09-01T14:16:52.450992-05:00"
+      ]
+    ],
+    "charge_id": 503050,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157008,
+    "customer_id": 4469,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8194,
+    "schedule_converted": false
+  },
+  {
+    "name": "Tenisha Clarke",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        432821,
+        2500,
+        "2026-08-21",
+        "2026-07-01",
+        null,
+        "2026-08-21T10:31:09.886569-05:00"
+      ],
+      [
+        432822,
+        2500,
+        "2026-08-21",
+        "2026-08-01",
+        null,
+        "2026-08-21T10:31:18.433604-05:00"
+      ]
+    ],
+    "charge_id": 724477,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157010,
+    "customer_id": 4471,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8196,
+    "schedule_converted": false
+  },
+  {
+    "name": "Rohan Dixon",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        247003,
+        2500,
+        "2026-08-13",
+        "2026-07-14",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 724659,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157011,
+    "customer_id": 4481,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8197,
+    "schedule_converted": false
+  },
+  {
+    "name": "Marcelene Chambers",
+    "due_date": "2026-09-08",
+    "receipts": [
+      [
+        247331,
+        3500,
+        "2026-08-18",
+        "2026-07-15",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 604941,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157012,
+    "customer_id": 4489,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-18",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-08T00:00:07.290107-05:00",
+    "waiver_request_id": 8198,
+    "schedule_converted": false
+  },
+  {
+    "name": "Elsworth Bailey",
+    "due_date": "2026-09-07",
+    "receipts": [
+      [
+        434643,
+        2500,
+        "2026-08-26",
+        "2026-07-01",
+        null,
+        "2026-08-26T15:08:28.69954-05:00"
+      ],
+      [
+        434644,
+        2500,
+        "2026-08-26",
+        "2026-08-01",
+        null,
+        "2026-08-26T15:08:35.948948-05:00"
+      ]
+    ],
+    "charge_id": 533454,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157013,
+    "customer_id": 4491,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-17",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-07T00:00:07.656806-05:00",
+    "waiver_request_id": 8199,
+    "schedule_converted": false
+  },
+  {
+    "name": "Lettuce Davey",
+    "due_date": "2026-09-07",
+    "receipts": [
+      [
+        432376,
+        2500,
+        "2026-08-19",
+        "2026-08-01",
+        null,
+        "2026-08-19T13:48:58.906284-05:00"
+      ]
+    ],
+    "charge_id": 533455,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157018,
+    "customer_id": 4504,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-17",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-07T00:00:07.656806-05:00",
+    "waiver_request_id": 8204,
+    "schedule_converted": false
+  },
+  {
+    "name": "Oneil Patterson",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        437984,
+        2500,
+        "2026-09-02",
+        "2026-07-01",
+        null,
+        "2026-09-02T14:11:54.627151-05:00"
+      ],
+      [
+        437986,
+        2500,
+        "2026-09-02",
+        "2026-08-01",
+        null,
+        "2026-09-02T14:12:06.895792-05:00"
+      ]
+    ],
+    "charge_id": 802864,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157019,
+    "customer_id": 4510,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8205,
+    "schedule_converted": false
+  },
+  {
+    "name": "Herman Green",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        436588,
+        2500,
+        "2026-08-31",
+        "2026-07-01",
+        null,
+        "2026-08-31T11:54:21.433276-05:00"
+      ]
+    ],
+    "charge_id": 802865,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157020,
+    "customer_id": 4511,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8206,
+    "schedule_converted": false
+  },
+  {
+    "name": "Alpheus Mclean",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        249239,
+        2500,
+        "2026-08-10",
+        "2026-07-07",
+        null,
+        null
+      ],
+      [
+        249240,
+        2500,
+        "2026-08-10",
+        "2026-06-25",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 802863,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157022,
+    "customer_id": 4583,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8208,
+    "schedule_converted": false
+  },
+  {
+    "name": "Affricka Smith Ricketts",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        432600,
+        3500,
+        "2026-08-20",
+        "2026-07-01",
+        null,
+        "2026-08-20T11:49:59.734997-05:00"
+      ]
+    ],
+    "charge_id": 997177,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157025,
+    "customer_id": 4589,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8211,
+    "schedule_converted": false
+  },
+  {
+    "name": "David Lloyd White",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        433936,
+        2500,
+        "2026-08-25",
+        "2026-06-01",
+        null,
+        "2026-08-25T10:07:26.318159-05:00"
+      ],
+      [
+        433937,
+        2500,
+        "2026-08-25",
+        "2026-07-01",
+        null,
+        "2026-08-25T10:07:34.357708-05:00"
+      ],
+      [
+        433938,
+        2500,
+        "2026-08-25",
+        "2026-08-01",
+        null,
+        "2026-08-25T10:07:38.989113-05:00"
+      ]
+    ],
+    "charge_id": 997178,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157026,
+    "customer_id": 4592,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8212,
+    "schedule_converted": false
+  },
+  {
+    "name": "Shelly-Ann Peart",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        249954,
+        2500,
+        "2026-08-18",
+        "2026-07-07",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 997180,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157027,
+    "customer_id": 4597,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8213,
+    "schedule_converted": false
+  },
+  {
+    "name": "Jadon Stewart",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        433380,
+        2500,
+        "2026-08-24",
+        "2026-06-01",
+        null,
+        "2026-08-24T10:48:17.984204-05:00"
+      ],
+      [
+        433381,
+        2500,
+        "2026-08-24",
+        "2026-07-01",
+        null,
+        "2026-08-24T10:48:43.145671-05:00"
+      ]
+    ],
+    "charge_id": 1149742,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157028,
+    "customer_id": 4616,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8214,
+    "schedule_converted": false
+  },
+  {
+    "name": "Kenrick Burton",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        441131,
+        2500,
+        "2026-09-11",
+        "2026-07-01",
+        null,
+        "2026-09-11T15:10:42.168602-05:00"
+      ],
+      [
+        441133,
+        2500,
+        "2026-09-11",
+        "2026-08-01",
+        null,
+        "2026-09-11T15:10:49.610186-05:00"
+      ]
+    ],
+    "charge_id": 1149575,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157029,
+    "customer_id": 4618,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8215,
+    "schedule_converted": false
+  },
+  {
+    "name": "Richard Baker",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        437864,
+        2500,
+        "2026-09-02",
+        "2026-07-01",
+        null,
+        "2026-09-02T11:26:05.20498-05:00"
+      ],
+      [
+        437865,
+        2500,
+        "2026-09-02",
+        "2026-08-01",
+        null,
+        "2026-09-02T11:26:17.300683-05:00"
+      ]
+    ],
+    "charge_id": 1149580,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157030,
+    "customer_id": 4621,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8216,
+    "schedule_converted": false
+  },
+  {
+    "name": "Roy Mitchell",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        250892,
+        2000,
+        "2026-08-04",
+        "2026-06-18",
+        null,
+        null
+      ],
+      [
+        250893,
+        2000,
+        "2026-08-04",
+        "2026-05-14",
+        null,
+        null
+      ],
+      [
+        432512,
+        2000,
+        "2026-08-20",
+        "2026-06-01",
+        null,
+        "2026-08-20T09:17:08.750746-05:00"
+      ],
+      [
+        432513,
+        1000,
+        "2026-08-20",
+        "2026-07-01",
+        null,
+        "2026-08-20T09:17:25.214387-05:00"
+      ],
+      [
+        437031,
+        3000,
+        "2026-08-31",
+        "2026-07-01",
+        null,
+        "2026-08-31T17:00:05.833805-05:00"
+      ]
+    ],
+    "charge_id": 1149578,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157031,
+    "customer_id": 4624,
+    "charge_amount": 4000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 4000,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 4000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8217,
+    "schedule_converted": false
+  },
+  {
+    "name": "Rayon Thompson",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        436501,
+        2500,
+        "2026-08-31",
+        "2026-07-01",
+        null,
+        "2026-08-31T11:10:04.379438-05:00"
+      ]
+    ],
+    "charge_id": 1149579,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157032,
+    "customer_id": 4625,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8218,
+    "schedule_converted": false
+  },
+  {
+    "name": "Ainsley Baker",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        433419,
+        3500,
+        "2026-08-24",
+        "2026-06-01",
+        null,
+        "2026-08-24T11:20:36.796512-05:00"
+      ],
+      [
+        433638,
+        2500,
+        "2026-08-24",
+        "2026-07-01",
+        null,
+        "2026-08-24T14:44:17.677502-05:00"
+      ],
+      [
+        434586,
+        1000,
+        "2026-08-26",
+        "2026-07-01",
+        null,
+        "2026-08-26T13:42:07.589193-05:00"
+      ]
+    ],
+    "charge_id": 1149576,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157033,
+    "customer_id": 4626,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8219,
+    "schedule_converted": false
+  },
+  {
+    "name": "Gifford Edwards",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        251390,
+        2500,
+        "2026-08-14",
+        "2026-07-07",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 1149577,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157034,
+    "customer_id": 4630,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8220,
+    "schedule_converted": false
+  },
+  {
+    "name": "Kay Parker",
+    "due_date": "2026-09-05",
+    "receipts": [
+      [
+        255321,
+        2000,
+        "2026-07-17",
+        "2026-08-05",
+        null,
+        null
+      ],
+      [
+        432834,
+        500,
+        "2026-08-21",
+        "2026-08-01",
+        null,
+        "2026-08-21T11:10:16.558008-05:00"
+      ],
+      [
+        432835,
+        2500,
+        "2026-08-21",
+        "2026-09-01",
+        null,
+        "2026-08-21T11:10:32.389954-05:00"
+      ]
+    ],
+    "charge_id": 455615,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157042,
+    "customer_id": 4702,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4500,
+    "waiver_status": "approved",
+    "before_balance": 2000,
+    "grace_end_date": "2026-09-15",
+    "cleared_current": 2000,
+    "current_balance": -2500,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-05T00:00:20.713594-05:00",
+    "waiver_request_id": 8228,
+    "schedule_converted": false
+  },
+  {
+    "name": "Suzette Bryan",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        436228,
+        2500,
+        "2026-08-31",
+        "2026-07-01",
+        null,
+        "2026-08-31T08:36:07.297159-05:00"
+      ],
+      [
+        436229,
+        2500,
+        "2026-08-31",
+        "2026-08-01",
+        null,
+        "2026-08-31T08:36:24.993743-05:00"
+      ]
+    ],
+    "charge_id": 502907,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157044,
+    "customer_id": 4714,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8230,
+    "schedule_converted": false
+  },
+  {
+    "name": "Michelle Lewis",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        256004,
+        3500,
+        "2026-08-05",
+        "2026-07-22",
+        null,
+        null
+      ],
+      [
+        440159,
+        3500,
+        "2026-09-09",
+        "2026-08-01",
+        null,
+        "2026-09-09T09:13:54.575368-05:00"
+      ]
+    ],
+    "charge_id": 802866,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157046,
+    "customer_id": 4718,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8232,
+    "schedule_converted": false
+  },
+  {
+    "name": "Chadwick Easie",
+    "due_date": "2026-09-07",
+    "receipts": [
+      [
+        434150,
+        5000,
+        "2026-08-25",
+        "2026-07-01",
+        null,
+        "2026-08-25T14:06:06.07617-05:00"
+      ],
+      [
+        442011,
+        5000,
+        "2026-09-14",
+        "2026-08-01",
+        null,
+        "2026-09-14T15:10:54.746445-05:00"
+      ]
+    ],
+    "charge_id": 533458,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157048,
+    "customer_id": 4721,
+    "charge_amount": 6500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 1500,
+    "waiver_status": "approved",
+    "before_balance": 1500,
+    "grace_end_date": "2026-09-17",
+    "cleared_current": 1500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-07T00:00:07.656806-05:00",
+    "waiver_request_id": 8234,
+    "schedule_converted": false
+  },
+  {
+    "name": "Joudian Phillips",
+    "due_date": "2026-09-07",
+    "receipts": [
+      [
+        432578,
+        2500,
+        "2026-08-20",
+        "2026-08-01",
+        null,
+        "2026-08-20T10:51:21.465175-05:00"
+      ]
+    ],
+    "charge_id": 533457,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157049,
+    "customer_id": 4726,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-17",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-07T00:00:07.656806-05:00",
+    "waiver_request_id": 8235,
+    "schedule_converted": false
+  },
+  {
+    "name": "Earnel Rowe",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        256820,
+        2500,
+        "2026-08-10",
+        "2026-07-13",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 724481,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157050,
+    "customer_id": 4732,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8236,
+    "schedule_converted": false
+  },
+  {
+    "name": "Natetia Natalie Farquharson",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        435897,
+        2500,
+        "2026-08-28",
+        "2026-08-01",
+        null,
+        "2026-08-28T15:59:39.220736-05:00"
+      ]
+    ],
+    "charge_id": 802868,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157051,
+    "customer_id": 4737,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8237,
+    "schedule_converted": false
+  },
+  {
+    "name": "Curtis Grindley 1",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        434524,
+        2500,
+        "2026-08-26",
+        "2026-06-01",
+        null,
+        "2026-08-26T12:13:02.022214-05:00"
+      ],
+      [
+        434804,
+        2500,
+        "2026-08-27",
+        "2026-07-01",
+        null,
+        "2026-08-27T09:23:51.84256-05:00"
+      ]
+    ],
+    "charge_id": 997181,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157052,
+    "customer_id": 4740,
+    "charge_amount": 4000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 4000,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 4000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8238,
+    "schedule_converted": false
+  },
+  {
+    "name": "Kemisha Adams",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        433544,
+        4500,
+        "2026-08-24",
+        "2026-07-01",
+        null,
+        "2026-08-24T12:49:12.488656-05:00"
+      ]
+    ],
+    "charge_id": 724483,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157053,
+    "customer_id": 4748,
+    "charge_amount": 4500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4500,
+    "waiver_status": "approved",
+    "before_balance": 4500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 4500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8239,
+    "schedule_converted": false
+  },
+  {
+    "name": "Jennifer Smith",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        435152,
+        4000,
+        "2026-08-27",
+        "2026-08-01",
+        null,
+        "2026-08-27T17:15:10.902347-05:00"
+      ]
+    ],
+    "charge_id": 802869,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157054,
+    "customer_id": 4752,
+    "charge_amount": 4000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 4000,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 4000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8240,
+    "schedule_converted": false
+  },
+  {
+    "name": "Kathleen Coley",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        257979,
+        2500,
+        "2026-08-14",
+        "2026-08-14",
+        null,
+        null
+      ],
+      [
+        442225,
+        2500,
+        "2026-09-15",
+        "2026-09-01",
+        null,
+        "2026-09-15T10:37:11.728944-05:00"
+      ]
+    ],
+    "charge_id": 724484,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157055,
+    "customer_id": 4753,
+    "charge_amount": 2500,
+    "later_entries": [
+      [
+        1190536,
+        "monthly_payment",
+        -2500,
+        null,
+        "2026-09-15T10:37:11.728944-05:00",
+        "payment:442225",
+        "Full receipt credited; any amount beyond outstanding debt remains as credit."
+      ]
+    ],
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 2500,
+    "current_balance": -2500,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8241,
+    "schedule_converted": false
+  },
+  {
+    "name": "Lenford L.Watson",
+    "due_date": "2026-09-09",
+    "receipts": [
+      [
+        433948,
+        500,
+        "2026-08-25",
+        "2026-07-01",
+        null,
+        "2026-08-25T10:16:21.900056-05:00"
+      ],
+      [
+        433949,
+        2500,
+        "2026-08-25",
+        "2026-08-01",
+        null,
+        "2026-08-25T10:16:32.180981-05:00"
+      ]
+    ],
+    "charge_id": 667018,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157056,
+    "customer_id": 4754,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-19",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-09T00:00:37.384917-05:00",
+    "waiver_request_id": 8242,
+    "schedule_converted": false
+  },
+  {
+    "name": "NCU PRESS",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        433205,
+        5500,
+        "2026-08-23",
+        "2026-07-01",
+        null,
+        "2026-08-23T09:07:28.864103-05:00"
+      ],
+      [
+        433206,
+        5500,
+        "2026-08-23",
+        "2026-08-01",
+        null,
+        "2026-08-23T09:08:35.154142-05:00"
+      ]
+    ],
+    "charge_id": 997182,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157057,
+    "customer_id": 4758,
+    "charge_amount": 5500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 5500,
+    "waiver_status": "approved",
+    "before_balance": 5500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 5500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8243,
+    "schedule_converted": false
+  },
+  {
+    "name": "Faith Emmanuel Apostolic Church",
+    "due_date": "2026-09-12",
+    "receipts": [
+      [
+        432652,
+        2500,
+        "2026-08-20",
+        "2026-07-01",
+        null,
+        "2026-08-20T12:56:35.46313-05:00"
+      ],
+      [
+        432657,
+        2500,
+        "2026-08-20",
+        "2026-08-01",
+        null,
+        "2026-08-20T12:59:02.201208-05:00"
+      ]
+    ],
+    "charge_id": 878587,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157059,
+    "customer_id": 4762,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-22",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-12T00:00:00.415631-05:00",
+    "waiver_request_id": 8245,
+    "schedule_converted": false
+  },
+  {
+    "name": "Judith Beckford",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        435911,
+        1000,
+        "2026-08-28",
+        "2026-08-01",
+        null,
+        "2026-08-28T16:11:54.066612-05:00"
+      ]
+    ],
+    "charge_id": 1149581,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157065,
+    "customer_id": 4892,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8251,
+    "schedule_converted": false
+  },
+  {
+    "name": "Dwayne Glave",
+    "due_date": "2026-09-09",
+    "receipts": [
+      [
+        263404,
+        2000,
+        "2026-08-07",
+        "2026-06-17",
+        null,
+        null
+      ],
+      [
+        263405,
+        3500,
+        "2026-08-07",
+        "2026-07-16",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 667019,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157067,
+    "customer_id": 4911,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-19",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-09T00:00:37.384917-05:00",
+    "waiver_request_id": 8253,
+    "schedule_converted": false
+  },
+  {
+    "name": "Natalee Gordon-Henry",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        433224,
+        2500,
+        "2026-08-23",
+        "2026-07-01",
+        null,
+        "2026-08-23T14:30:27.927403-05:00"
+      ],
+      [
+        433225,
+        2500,
+        "2026-08-23",
+        "2026-08-01",
+        null,
+        "2026-08-23T14:30:33.855999-05:00"
+      ]
+    ],
+    "charge_id": 502908,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157068,
+    "customer_id": 4913,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8254,
+    "schedule_converted": false
+  },
+  {
+    "name": "Dahvone Dontae Simpson",
+    "due_date": "2026-09-05",
+    "receipts": [
+      [
+        432971,
+        2500,
+        "2026-08-21",
+        "2026-07-01",
+        null,
+        "2026-08-21T14:27:22.537939-05:00"
+      ]
+    ],
+    "charge_id": 455746,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157073,
+    "customer_id": 4928,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-15",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-05T00:00:20.713594-05:00",
+    "waiver_request_id": 8259,
+    "schedule_converted": false
+  },
+  {
+    "name": "Delores Nelson",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        264643,
+        2500,
+        "2026-08-10",
+        "2026-07-22",
+        null,
+        null
+      ],
+      [
+        264645,
+        2500,
+        "2026-08-10",
+        null,
+        null,
+        null
+      ]
+    ],
+    "charge_id": 502909,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157074,
+    "customer_id": 4942,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8260,
+    "schedule_converted": false
+  },
+  {
+    "name": "Oshane Darby#2",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        265049,
+        2500,
+        "2026-08-07",
+        "2026-06-08",
+        null,
+        null
+      ],
+      [
+        434876,
+        2500,
+        "2026-08-27",
+        "2026-07-01",
+        null,
+        "2026-08-27T10:45:19.026536-05:00"
+      ],
+      [
+        434879,
+        2500,
+        "2026-08-27",
+        "2026-08-01",
+        null,
+        "2026-08-27T10:45:31.107545-05:00"
+      ]
+    ],
+    "charge_id": 724487,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157076,
+    "customer_id": 4950,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8262,
+    "schedule_converted": false
+  },
+  {
+    "name": "Dorris Campbell",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        441067,
+        2500,
+        "2026-09-11",
+        "2026-05-01",
+        null,
+        "2026-09-11T13:55:22.494227-05:00"
+      ],
+      [
+        441068,
+        2500,
+        "2026-09-11",
+        "2026-06-01",
+        null,
+        "2026-09-11T13:55:31.670073-05:00"
+      ],
+      [
+        441069,
+        2500,
+        "2026-09-11",
+        "2026-07-01",
+        null,
+        "2026-09-11T13:55:39.974479-05:00"
+      ]
+    ],
+    "charge_id": 953702,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157080,
+    "customer_id": 4958,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8266,
+    "schedule_converted": false
+  },
+  {
+    "name": "Kelly Ann Gordon-Edwards",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        433453,
+        2500,
+        "2026-08-24",
+        "2026-08-01",
+        null,
+        "2026-08-24T11:51:14.87108-05:00"
+      ]
+    ],
+    "charge_id": 802870,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157082,
+    "customer_id": 4964,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8268,
+    "schedule_converted": false
+  },
+  {
+    "name": "Keneil  George Edwards",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        266039,
+        2500,
+        "2026-08-14",
+        "2026-07-14",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 802871,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157083,
+    "customer_id": 4972,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8269,
+    "schedule_converted": false
+  },
+  {
+    "name": "Angella Mitchell",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        266323,
+        2500,
+        "2026-08-14",
+        "2026-07-15",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 997183,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157084,
+    "customer_id": 4978,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8270,
+    "schedule_converted": false
+  },
+  {
+    "name": "Dujon McDonald",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        437243,
+        3500,
+        "2026-09-01",
+        "2026-08-01",
+        null,
+        "2026-09-01T11:08:56.068442-05:00"
+      ]
+    ],
+    "charge_id": 997184,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157085,
+    "customer_id": 4979,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8271,
+    "schedule_converted": false
+  },
+  {
+    "name": "Patricia Palmer Powell",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        268143,
+        2500,
+        "2026-08-03",
+        "2026-06-18",
+        null,
+        null
+      ],
+      [
+        268144,
+        2500,
+        "2026-08-03",
+        "2026-07-15",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 802872,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157088,
+    "customer_id": 5014,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8274,
+    "schedule_converted": false
+  },
+  {
+    "name": "Courtney Francis",
+    "due_date": "2026-09-05",
+    "receipts": [
+      [
+        269173,
+        4000,
+        "2026-08-17",
+        "2026-06-17",
+        null,
+        null
+      ],
+      [
+        269174,
+        4000,
+        "2026-08-17",
+        "2026-07-14",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 455621,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157090,
+    "customer_id": 5036,
+    "charge_amount": 4000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 4000,
+    "grace_end_date": "2026-09-15",
+    "cleared_current": 4000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-05T00:00:20.713594-05:00",
+    "waiver_request_id": 8276,
+    "schedule_converted": false
+  },
+  {
+    "name": "Trae Devon Thompson",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        432933,
+        2500,
+        "2026-08-21",
+        "2026-07-01",
+        null,
+        "2026-08-21T13:17:41.44773-05:00"
+      ]
+    ],
+    "charge_id": 724488,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157091,
+    "customer_id": 5041,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8277,
+    "schedule_converted": false
+  },
+  {
+    "name": "Sangine Robinson",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        434240,
+        3000,
+        "2026-08-25",
+        "2026-07-01",
+        null,
+        "2026-08-25T16:13:29.36984-05:00"
+      ]
+    ],
+    "charge_id": 953703,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157092,
+    "customer_id": 5044,
+    "charge_amount": 3000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3000,
+    "waiver_status": "approved",
+    "before_balance": 3000,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 3000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8278,
+    "schedule_converted": false
+  },
+  {
+    "name": "Monique Mardner Edwards",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        269620,
+        2500,
+        "2026-08-12",
+        "2026-07-08",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 802873,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157093,
+    "customer_id": 5045,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8279,
+    "schedule_converted": false
+  },
+  {
+    "name": "Kenrick Morgan",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        432630,
+        2500,
+        "2026-08-20",
+        "2026-05-01",
+        null,
+        "2026-08-20T12:28:28.01414-05:00"
+      ],
+      [
+        432631,
+        2500,
+        "2026-08-20",
+        "2026-06-01",
+        null,
+        "2026-08-20T12:28:43.014783-05:00"
+      ],
+      [
+        432632,
+        2500,
+        "2026-08-20",
+        "2026-07-01",
+        null,
+        "2026-08-20T12:29:05.607724-05:00"
+      ]
+    ],
+    "charge_id": 997185,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157094,
+    "customer_id": 5046,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8280,
+    "schedule_converted": false
+  },
+  {
+    "name": "Shevan David Roache-Shop",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        435429,
+        2500,
+        "2026-08-28",
+        "2026-06-01",
+        null,
+        "2026-08-28T10:40:05.913523-05:00"
+      ],
+      [
+        435431,
+        2500,
+        "2026-08-28",
+        "2026-07-01",
+        null,
+        "2026-08-28T10:40:22.990274-05:00"
+      ],
+      [
+        435432,
+        2500,
+        "2026-08-28",
+        "2026-08-01",
+        null,
+        "2026-08-28T10:40:31.22227-05:00"
+      ]
+    ],
+    "charge_id": 803039,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157099,
+    "customer_id": 5066,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8285,
+    "schedule_converted": false
+  },
+  {
+    "name": "Shantay McLean",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        434288,
+        4000,
+        "2026-08-26",
+        "2026-08-01",
+        null,
+        "2026-08-26T08:09:06.074262-05:00"
+      ]
+    ],
+    "charge_id": 997186,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157100,
+    "customer_id": 5073,
+    "charge_amount": 4000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 4000,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 4000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8286,
+    "schedule_converted": false
+  },
+  {
+    "name": "Joy White",
+    "due_date": "2026-09-14",
+    "receipts": [
+      [
+        432540,
+        2500,
+        "2026-08-20",
+        "2026-07-01",
+        null,
+        "2026-08-20T09:56:45.03463-05:00"
+      ],
+      [
+        435548,
+        2500,
+        "2026-08-28",
+        "2026-08-01",
+        null,
+        "2026-08-28T11:47:54.931674-05:00"
+      ]
+    ],
+    "charge_id": 997187,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157101,
+    "customer_id": 5075,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-24",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-14T00:00:15.701362-05:00",
+    "waiver_request_id": 8287,
+    "schedule_converted": false
+  },
+  {
+    "name": "Pauline Wheatle Fletcher",
+    "due_date": "2026-09-08",
+    "receipts": [
+      [
+        433537,
+        6500,
+        "2026-08-24",
+        "2026-08-01",
+        null,
+        "2026-08-24T12:44:04.823229-05:00"
+      ]
+    ],
+    "charge_id": 604950,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157104,
+    "customer_id": 5121,
+    "charge_amount": 6500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 6500,
+    "waiver_status": "approved",
+    "before_balance": 6500,
+    "grace_end_date": "2026-09-18",
+    "cleared_current": 6500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-08T00:00:07.290107-05:00",
+    "waiver_request_id": 8290,
+    "schedule_converted": false
+  },
+  {
+    "name": "Ricardo Coley",
+    "due_date": "2026-09-06",
+    "receipts": [
+      [
+        432555,
+        2500,
+        "2026-08-20",
+        "2026-08-01",
+        null,
+        "2026-08-20T10:14:36.546058-05:00"
+      ]
+    ],
+    "charge_id": 502910,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157107,
+    "customer_id": 5152,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-16",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-06T00:00:34.460236-05:00",
+    "waiver_request_id": 8293,
+    "schedule_converted": false
+  },
+  {
+    "name": "Vendolyn Matthews",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        434174,
+        2500,
+        "2026-08-25",
+        "2026-07-01",
+        null,
+        "2026-08-25T14:27:18.049174-05:00"
+      ],
+      [
+        434176,
+        2500,
+        "2026-08-25",
+        "2026-08-01",
+        null,
+        "2026-08-25T14:27:39.657123-05:00"
+      ],
+      [
+        434177,
+        2500,
+        "2026-08-25",
+        "2026-09-01",
+        null,
+        "2026-08-25T14:28:09.532116-05:00"
+      ]
+    ],
+    "charge_id": 724669,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157108,
+    "customer_id": 5158,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 1500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 1500,
+    "current_balance": -2500,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8294,
+    "schedule_converted": false
+  },
+  {
+    "name": "Carmeleta Orenthia Smith",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        275897,
+        2500,
+        "2026-08-18",
+        "2026-07-08",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 724490,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157111,
+    "customer_id": 5171,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8297,
+    "schedule_converted": false
+  },
+  {
+    "name": "Blanche Watson",
+    "due_date": "2026-09-08",
+    "receipts": [
+      [
+        276107,
+        2500,
+        "2026-08-15",
+        "2026-08-15",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 604951,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157113,
+    "customer_id": 5175,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-18",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-08T00:00:07.290107-05:00",
+    "waiver_request_id": 8299,
+    "schedule_converted": false
+  },
+  {
+    "name": "Kareen Reid",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        276758,
+        1000,
+        "2026-08-03",
+        "2026-05-06",
+        null,
+        null
+      ],
+      [
+        276759,
+        2500,
+        "2026-08-03",
+        "2026-06-10",
+        null,
+        null
+      ],
+      [
+        276760,
+        1500,
+        "2026-08-03",
+        "2026-07-07",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 953704,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157114,
+    "customer_id": 5191,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8300,
+    "schedule_converted": false
+  },
+  {
+    "name": "Verna Henry",
+    "due_date": "2026-09-15",
+    "receipts": [
+      [
+        434235,
+        4000,
+        "2026-08-25",
+        "2026-07-01",
+        null,
+        "2026-08-25T16:02:50.962637-05:00"
+      ]
+    ],
+    "charge_id": 1149584,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157115,
+    "customer_id": 5194,
+    "charge_amount": 4000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 4000,
+    "grace_end_date": "2026-09-25",
+    "cleared_current": 4000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-15T00:00:27.265121-05:00",
+    "waiver_request_id": 8301,
+    "schedule_converted": false
+  },
+  {
+    "name": "Roxanne Brown",
+    "due_date": "2026-09-05",
+    "receipts": [
+      [
+        432732,
+        400,
+        "2026-08-20",
+        "2026-06-01",
+        null,
+        "2026-08-20T15:39:31.982719-05:00"
+      ],
+      [
+        432733,
+        2500,
+        "2026-08-20",
+        "2026-07-01",
+        null,
+        "2026-08-20T15:39:48.127774-05:00"
+      ],
+      [
+        432734,
+        100,
+        "2026-08-20",
+        "2026-08-01",
+        null,
+        "2026-08-20T15:40:08.464248-05:00"
+      ]
+    ],
+    "charge_id": 455622,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157118,
+    "customer_id": 5237,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-15",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-05T00:00:20.713594-05:00",
+    "waiver_request_id": 8304,
+    "schedule_converted": false
+  },
+  {
+    "name": "Lockley Cassanova",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        281135,
+        3500,
+        "2026-08-11",
+        "2026-07-15",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 802874,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157122,
+    "customer_id": 5287,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8308,
+    "schedule_converted": false
+  },
+  {
+    "name": "EVERALD DOBSON",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        281199,
+        2500,
+        "2026-08-11",
+        "2026-07-15",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 802875,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157123,
+    "customer_id": 5288,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8309,
+    "schedule_converted": false
+  },
+  {
+    "name": "Alderene Roye",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        432669,
+        5500,
+        "2026-08-20",
+        "2026-07-01",
+        null,
+        "2026-08-20T13:30:38.230193-05:00"
+      ]
+    ],
+    "charge_id": 802876,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157124,
+    "customer_id": 5289,
+    "charge_amount": 7500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 7500,
+    "waiver_status": "approved",
+    "before_balance": 7500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 7500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8310,
+    "schedule_converted": false
+  },
+  {
+    "name": "Andrew Raymond",
+    "due_date": "2026-09-12",
+    "receipts": [
+      [
+        437093,
+        2500,
+        "2026-09-01",
+        "2026-07-01",
+        null,
+        "2026-09-01T09:05:01.800048-05:00"
+      ],
+      [
+        437094,
+        2500,
+        "2026-09-01",
+        "2026-08-01",
+        null,
+        "2026-09-01T09:05:11.776192-05:00"
+      ]
+    ],
+    "charge_id": 878763,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157125,
+    "customer_id": 5292,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-22",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-12T00:00:00.415631-05:00",
+    "waiver_request_id": 8311,
+    "schedule_converted": false
+  },
+  {
+    "name": "Amoy Sharpe forrester",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        436766,
+        2500,
+        "2026-08-31",
+        "2026-07-01",
+        null,
+        "2026-08-31T13:37:56.623366-05:00"
+      ]
+    ],
+    "charge_id": 802880,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157129,
+    "customer_id": 5310,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8315,
+    "schedule_converted": false
+  },
+  {
+    "name": "Junior Griffiths",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        282488,
+        3500,
+        "2026-08-14",
+        "2026-07-15",
+        null,
+        null
+      ]
+    ],
+    "charge_id": 953706,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157130,
+    "customer_id": 5312,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8316,
+    "schedule_converted": false
+  },
+  {
+    "name": "Nickoy Chin",
+    "due_date": "2026-09-13",
+    "receipts": [
+      [
+        283165,
+        2500,
+        "2026-08-18",
+        "2026-06-18",
+        null,
+        null
+      ],
+      [
+        283166,
+        2500,
+        "2026-08-18",
+        "2026-05-20",
+        null,
+        null
+      ],
+      [
+        283167,
+        2500,
+        "2026-08-18",
+        "2026-07-23",
+        null,
+        null
+      ],
+      [
+        432701,
+        2500,
+        "2026-08-20",
+        "2026-08-01",
+        null,
+        "2026-08-20T14:32:30.142923-05:00"
+      ]
+    ],
+    "charge_id": 953707,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157132,
+    "customer_id": 5327,
+    "charge_amount": 2500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 2500,
+    "waiver_status": "approved",
+    "before_balance": 2500,
+    "grace_end_date": "2026-09-23",
+    "cleared_current": 2500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-13T00:00:02.483477-05:00",
+    "waiver_request_id": 8318,
+    "schedule_converted": false
+  },
+  {
+    "name": "Leon Hickling",
+    "due_date": "2026-09-09",
+    "receipts": [
+      [
+        433744,
+        8500,
+        "2026-08-24",
+        "2026-07-01",
+        null,
+        "2026-08-24T16:18:42.776318-05:00"
+      ]
+    ],
+    "charge_id": 667024,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157133,
+    "customer_id": 5330,
+    "charge_amount": 8500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 8500,
+    "waiver_status": "approved",
+    "before_balance": 8500,
+    "grace_end_date": "2026-09-19",
+    "cleared_current": 8500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-09T00:00:37.384917-05:00",
+    "waiver_request_id": 8319,
+    "schedule_converted": false
+  },
+  {
+    "name": "Chester Reid",
+    "due_date": "2026-09-11",
+    "receipts": [
+      [
+        283770,
+        3500,
+        "2026-08-03",
+        "2026-07-06",
+        null,
+        null
+      ],
+      [
+        438714,
+        3500,
+        "2026-09-04",
+        "2026-08-01",
+        null,
+        "2026-09-04T10:31:05.13292-05:00"
+      ]
+    ],
+    "charge_id": 802879,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157134,
+    "customer_id": 5337,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3500,
+    "waiver_status": "approved",
+    "before_balance": 3500,
+    "grace_end_date": "2026-09-21",
+    "cleared_current": 3500,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-11T00:00:00.459909-05:00",
+    "waiver_request_id": 8320,
+    "schedule_converted": false
+  },
+  {
+    "name": "Maizilyn Allen",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        434926,
+        2500,
+        "2026-08-27",
+        "2026-07-01",
+        null,
+        "2026-08-27T12:14:51.672335-05:00"
+      ],
+      [
+        434927,
+        4000,
+        "2026-08-27",
+        "2026-08-01",
+        null,
+        "2026-08-27T12:15:06.896033-05:00"
+      ]
+    ],
+    "charge_id": 724676,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157135,
+    "customer_id": 5352,
+    "charge_amount": 4000,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 4000,
+    "waiver_status": "approved",
+    "before_balance": 4000,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 4000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8321,
+    "schedule_converted": false
+  },
+  {
+    "name": "Adeline J Buchanan",
+    "due_date": "2026-09-10",
+    "receipts": [
+      [
+        284481,
+        500,
+        "2026-08-05",
+        "2026-07-14",
+        null,
+        null
+      ],
+      [
+        434938,
+        2500,
+        "2026-08-27",
+        "2026-08-01",
+        null,
+        "2026-08-27T12:24:07.896758-05:00"
+      ],
+      [
+        434939,
+        1500,
+        "2026-08-27",
+        "2026-08-01",
+        null,
+        "2026-08-27T12:27:02.875382-05:00"
+      ]
+    ],
+    "charge_id": 724491,
+    "waiver_at": "2026-09-15T01:15:56.883774-05:00",
+    "waiver_id": 1157136,
+    "customer_id": 5353,
+    "charge_amount": 3500,
+    "later_entries": null,
+    "service_month": "2026-08-01",
+    "waiver_amount": 3000,
+    "waiver_status": "approved",
+    "before_balance": 3000,
+    "grace_end_date": "2026-09-20",
+    "cleared_current": 3000,
+    "current_balance": 0,
+    "customer_status": "active",
+    "charge_posted_at": "2026-09-10T00:00:57.104327-05:00",
+    "waiver_request_id": 8322,
+    "schedule_converted": false
+  }
+]

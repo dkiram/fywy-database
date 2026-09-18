@@ -1,0 +1,11 @@
+{
+  "result": "PASS - all correction changes rolled back",
+  "details": {
+    "accounts": 933,
+    "verified_at": "2026-09-15T13:49:52.727566-05:00",
+    "net_restored": 2723330,
+    "nonpositive_after": 59,
+    "unpaid_grace_ends_today": 46,
+    "retained_credit_and_relief": 271750
+  }
+}

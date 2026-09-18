@@ -1,0 +1,31 @@
+[
+  {
+    "id": 15019,
+    "add": 1000,
+    "name": "Jodi Ann Dyce",
+    "later": null,
+    "receipts": [
+      [
+        75485,
+        0,
+        "2026-08-12",
+        null,
+        null,
+        null
+      ],
+      [
+        441498,
+        3000,
+        "2026-09-14",
+        "2026-08-01",
+        null,
+        "2026-09-14T08:05:52.048216-05:00"
+      ]
+    ],
+    "expected_due": "2026-09-12",
+    "simulated_due": "2026-09-15",
+    "expected_grace": "2026-09-22",
+    "current_balance": 0,
+    "simulated_grace": "2026-09-15"
+  }
+]

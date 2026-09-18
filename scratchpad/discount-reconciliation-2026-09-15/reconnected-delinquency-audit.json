@@ -1,0 +1,38 @@
+{
+  "tag": "reconnected-cohort",
+  "counts": [
+    {
+      "holds": 2,
+      "hidden": 0,
+      "status": "active",
+      "accounts": 573,
+      "restored": false,
+      "later_grace": 0,
+      "eligible_now": 1,
+      "clear_or_credit": 572,
+      "grace_ends_today": 0
+    },
+    {
+      "holds": 0,
+      "hidden": 0,
+      "status": "active",
+      "accounts": 1,
+      "restored": true,
+      "later_grace": 1,
+      "eligible_now": 0,
+      "clear_or_credit": 0,
+      "grace_ends_today": 0
+    }
+  ],
+  "restored_accounts": [
+    [
+      "Denisha Orr",
+      "active",
+      8500,
+      "2026-09-15",
+      "2026-09-25",
+      false,
+      false
+    ]
+  ]
+}

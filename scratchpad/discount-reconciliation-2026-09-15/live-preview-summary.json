@@ -1,0 +1,42 @@
+[
+  {
+    "accounts": 1,
+    "decision": "already_reversed",
+    "due_today": 0,
+    "remain_paid": 0,
+    "proposed_adjustment": 0,
+    "unpaid_grace_ends_today": 0
+  },
+  {
+    "accounts": 618,
+    "decision": "covered_by_receipts",
+    "due_today": 0,
+    "remain_paid": 0,
+    "proposed_adjustment": 0,
+    "unpaid_grace_ends_today": 0
+  },
+  {
+    "accounts": 934,
+    "decision": "proposed_restore",
+    "due_today": 108,
+    "remain_paid": 53,
+    "proposed_adjustment": 2724330,
+    "unpaid_grace_ends_today": 46
+  },
+  {
+    "accounts": 2,
+    "decision": "review_later_charges",
+    "due_today": 0,
+    "remain_paid": 0,
+    "proposed_adjustment": 0,
+    "unpaid_grace_ends_today": 0
+  },
+  {
+    "accounts": 27,
+    "decision": "review_unlabelled_receipts",
+    "due_today": 0,
+    "remain_paid": 0,
+    "proposed_adjustment": 0,
+    "unpaid_grace_ends_today": 0
+  }
+]

@@ -1,0 +1,25 @@
+[
+  {
+    "name": "Tiffany Brady",
+    "status": "active",
+    "payments": [
+      [
+        442397,
+        2500,
+        "2026-09-15",
+        "2026-08-01",
+        null,
+        "Monthly Fee"
+      ],
+      [
+        442398,
+        2500,
+        "2026-09-15",
+        "2026-09-01",
+        null,
+        "Monthly Fee"
+      ]
+    ],
+    "customer_id": 15092
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "amount": 2723330,
+  "accounts": 933,
+  "all_active": true,
+  "checked_at": "2026-09-15T13:40:44.795438-05:00",
+  "nonpositive_after": 56,
+  "waivers_to_replace": 76,
+  "wrong_due_or_grace": 0,
+  "invalid_restoration": 0,
+  "unpaid_grace_ends_today": 46,
+  "credit_and_relief_to_retain": 271750,
+  "unexpected_unpaid_when_covered": 0
+}

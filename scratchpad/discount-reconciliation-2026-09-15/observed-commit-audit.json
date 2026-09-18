@@ -1,0 +1,15 @@
+{
+  "database_time": "2026-09-15T13:31:45.422351-05:00",
+  "total_credits": 9467380,
+  "migration_records": [
+    [
+      "083_preserve_full_monthly_receipt_credit.sql",
+      "2026-09-15T01:15:56.883774-05:00"
+    ],
+    [
+      "084_scope_profile_billing_to_customer.sql",
+      "2026-09-15T12:59:23.552558-05:00"
+    ]
+  ],
+  "financial_adjustments": 2639
+}

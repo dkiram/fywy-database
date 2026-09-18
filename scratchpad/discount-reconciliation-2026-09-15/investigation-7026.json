@@ -1,0 +1,570 @@
+{
+  "ledger": [
+    {
+      "amount": 5000,
+      "reason": null,
+      "due_date": "2026-07-15",
+      "created_at": "2026-08-19T10:04:25.497088-05:00",
+      "entry_type": "monthly_charge",
+      "payment_id": null,
+      "source_key": "monthly-charge:7026:2026-07-15",
+      "effective_date": "2026-07-15",
+      "grace_end_date": "2026-07-25",
+      "account_ledger_entry_id": 262417
+    },
+    {
+      "amount": 5000,
+      "reason": null,
+      "due_date": "2026-08-15",
+      "created_at": "2026-08-19T10:04:25.497088-05:00",
+      "entry_type": "monthly_charge",
+      "payment_id": null,
+      "source_key": "monthly-charge:7026:2026-08-15",
+      "effective_date": "2026-08-15",
+      "grace_end_date": "2026-08-25",
+      "account_ledger_entry_id": 262418
+    },
+    {
+      "amount": 1500,
+      "reason": null,
+      "due_date": "2026-08-31",
+      "created_at": "2026-08-31T01:28:52.211939-05:00",
+      "entry_type": "reconnection_fee",
+      "payment_id": null,
+      "source_key": "reconnection-fee:status-history:14020",
+      "effective_date": "2026-08-31",
+      "grace_end_date": "2026-08-31",
+      "account_ledger_entry_id": 314929
+    },
+    {
+      "amount": -5000,
+      "reason": null,
+      "due_date": null,
+      "created_at": "2026-09-01T09:35:29.088381-05:00",
+      "entry_type": "monthly_payment",
+      "payment_id": 437131,
+      "source_key": "payment:437131",
+      "effective_date": "2026-09-01",
+      "grace_end_date": null,
+      "account_ledger_entry_id": 322012
+    },
+    {
+      "amount": -1500,
+      "reason": "no rec fee",
+      "due_date": null,
+      "created_at": "2026-09-01T09:37:56.721372-05:00",
+      "entry_type": "waiver",
+      "payment_id": null,
+      "source_key": null,
+      "effective_date": "2026-09-01",
+      "grace_end_date": null,
+      "account_ledger_entry_id": 322125
+    },
+    {
+      "amount": -5000,
+      "reason": "1 time waiver",
+      "due_date": null,
+      "created_at": "2026-09-01T09:38:39.811876-05:00",
+      "entry_type": "waiver",
+      "payment_id": null,
+      "source_key": null,
+      "effective_date": "2026-09-01",
+      "grace_end_date": null,
+      "account_ledger_entry_id": 322156
+    },
+    {
+      "amount": 5000,
+      "reason": null,
+      "due_date": "2026-09-15",
+      "created_at": "2026-09-15T00:00:27.265121-05:00",
+      "entry_type": "monthly_charge",
+      "payment_id": null,
+      "source_key": "monthly-charge:7026:2026-09-15",
+      "effective_date": "2026-09-15",
+      "grace_end_date": "2026-09-25",
+      "account_ledger_entry_id": 1149615
+    },
+    {
+      "amount": -5000,
+      "reason": "One-time management relief for monthly-paying accounts; preserve future payments and convert existing deferred coverage to credit.",
+      "due_date": null,
+      "created_at": "2026-09-15T01:15:56.883774-05:00",
+      "entry_type": "waiver",
+      "payment_id": null,
+      "source_key": "final-reconciliation-20260915:7026",
+      "effective_date": "2026-09-15",
+      "grace_end_date": null,
+      "account_ledger_entry_id": 1157491
+    },
+    {
+      "amount": 5000,
+      "reason": "bill due",
+      "due_date": null,
+      "created_at": "2026-09-15T13:10:41.423418-05:00",
+      "entry_type": "adjustment",
+      "payment_id": null,
+      "source_key": "waiver-reversal:request:8677",
+      "effective_date": "2026-09-15",
+      "grace_end_date": null,
+      "account_ledger_entry_id": 1207183
+    }
+  ],
+  "billing": {
+    "balance": 5000,
+    "is_on_hold": false,
+    "customer_id": 7026,
+    "hold_reason": null,
+    "is_delinquent": false,
+    "credit_balance": 0,
+    "grace_end_date": "2026-09-25",
+    "hold_expires_on": null,
+    "unverified_entries": 1,
+    "outstanding_balance": 5000,
+    "oldest_unpaid_due_date": "2026-09-15",
+    "ready_for_reconnection": false,
+    "eligible_for_disconnection": false,
+    "scheduled_disconnection_date": "2026-09-26"
+  },
+  "payments": [
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358649,
+      "amount_paid": 0,
+      "recorded_at": null,
+      "payment_date": "2023-09-05"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-01-22",
+      "payment_id": 358650,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2025-02-24"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-11-14",
+      "payment_id": 358651,
+      "amount_paid": 4000,
+      "recorded_at": null,
+      "payment_date": "2025-01-27"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358652,
+      "amount_paid": -2500,
+      "recorded_at": null,
+      "payment_date": "2015-01-27"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-10-15",
+      "payment_id": 358653,
+      "amount_paid": 3500,
+      "recorded_at": null,
+      "payment_date": "2024-12-02"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-12-17",
+      "payment_id": 358654,
+      "amount_paid": 4000,
+      "recorded_at": null,
+      "payment_date": "2025-02-24"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-09-19",
+      "payment_id": 358655,
+      "amount_paid": 2000,
+      "recorded_at": null,
+      "payment_date": "2024-12-02"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-12-18",
+      "payment_id": 358656,
+      "amount_paid": 1000,
+      "recorded_at": null,
+      "payment_date": "2025-01-27"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2023-11-02",
+      "payment_id": 358657,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2023-12-01"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2023-12-29",
+      "payment_id": 358658,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2023-12-29"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358659,
+      "amount_paid": -5000,
+      "recorded_at": null,
+      "payment_date": "2023-12-29"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2023-08-01",
+      "payment_id": 358660,
+      "amount_paid": 4000,
+      "recorded_at": null,
+      "payment_date": "2023-09-06"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358661,
+      "amount_paid": 1000,
+      "recorded_at": null,
+      "payment_date": "2023-09-06"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2026-04-22",
+      "payment_id": 358663,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2026-05-28"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2026-03-17",
+      "payment_id": 358664,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2026-04-30"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2026-05-31",
+      "payment_id": 358665,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2026-06-22"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2026-06-30",
+      "payment_id": 358666,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2026-07-30"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-09-24",
+      "payment_id": 358667,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2025-10-23"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2023-09-01",
+      "payment_id": 358668,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2023-10-02"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-08-13",
+      "payment_id": 358669,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2025-10-23"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-07-17",
+      "payment_id": 358670,
+      "amount_paid": 4000,
+      "recorded_at": null,
+      "payment_date": "2025-09-16"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2023-10-05",
+      "payment_id": 358672,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2023-11-06"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-06-26",
+      "payment_id": 358673,
+      "amount_paid": 4000,
+      "recorded_at": null,
+      "payment_date": "2025-08-04"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-05-13",
+      "payment_id": 358674,
+      "amount_paid": 1000,
+      "recorded_at": null,
+      "payment_date": "2025-06-25"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358675,
+      "amount_paid": 8000,
+      "recorded_at": null,
+      "payment_date": "2025-12-18"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-07-09",
+      "payment_id": 358676,
+      "amount_paid": 1000,
+      "recorded_at": null,
+      "payment_date": "2025-08-04"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-05-22",
+      "payment_id": 358677,
+      "amount_paid": 4000,
+      "recorded_at": null,
+      "payment_date": "2025-07-25"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-04-15",
+      "payment_id": 358678,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2025-06-25"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-10-15",
+      "payment_id": 358679,
+      "amount_paid": 2000,
+      "recorded_at": null,
+      "payment_date": "2025-12-18"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-06-12",
+      "payment_id": 358680,
+      "amount_paid": 1000,
+      "recorded_at": null,
+      "payment_date": "2025-07-25"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2026-02-05",
+      "payment_id": 358681,
+      "amount_paid": 2000,
+      "recorded_at": null,
+      "payment_date": "2026-04-09"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358682,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2026-02-16"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2026-02-18",
+      "payment_id": 358683,
+      "amount_paid": 3000,
+      "recorded_at": null,
+      "payment_date": "2026-03-19"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2026-01-14",
+      "payment_id": 358684,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2026-02-16"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-06-06",
+      "payment_id": 358685,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2024-07-29"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358686,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2024-07-29"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-08-14",
+      "payment_id": 358687,
+      "amount_paid": 3500,
+      "recorded_at": null,
+      "payment_date": "2024-11-01"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-09-11",
+      "payment_id": 358688,
+      "amount_paid": 1500,
+      "recorded_at": null,
+      "payment_date": "2024-11-01"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358689,
+      "amount_paid": 8000,
+      "recorded_at": null,
+      "payment_date": "2015-11-01"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-05-16",
+      "payment_id": 358690,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2024-06-05"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358691,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2015-08-27"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-06-12",
+      "payment_id": 358692,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2024-08-27"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358693,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2025-04-22"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-04-22",
+      "payment_id": 358694,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2025-04-22"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-03-12",
+      "payment_id": 358695,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2025-04-22"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-03-01",
+      "payment_id": 358696,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2025-04-22"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-04-29",
+      "payment_id": 358697,
+      "amount_paid": -2500,
+      "recorded_at": null,
+      "payment_date": "2025-04-22"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-01-16",
+      "payment_id": 358698,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2025-03-17"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2025-02-04",
+      "payment_id": 358699,
+      "amount_paid": 2500,
+      "recorded_at": null,
+      "payment_date": "2025-03-17"
+    },
+    {
+      "voided_at": null,
+      "month_paid": null,
+      "payment_id": 358700,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2015-02-08"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-04-17",
+      "payment_id": 358701,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2024-05-08"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-02-07",
+      "payment_id": 358702,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2024-03-11"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-03-13",
+      "payment_id": 358703,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2024-04-08"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2024-01-16",
+      "payment_id": 358704,
+      "amount_paid": 5000,
+      "recorded_at": null,
+      "payment_date": "2024-02-08"
+    },
+    {
+      "voided_at": null,
+      "month_paid": "2026-07-01",
+      "payment_id": 437131,
+      "amount_paid": 5000,
+      "recorded_at": "2026-09-01T09:35:29.088381-05:00",
+      "payment_date": "2026-09-01"
+    }
+  ]
+}

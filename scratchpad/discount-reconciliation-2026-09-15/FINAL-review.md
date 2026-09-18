@@ -1,6 +1,6 @@
 # Final all-account reconciliation
 
-**Rehearsal passed; not committed.** Prepared from production records and management’s clarification. The complete production rehearsal passed every balance/status/schedule guard and rolled back all changes, including migration 083.
+**Committed September 15 at 01:15:56 Jamaica time.** Production audit confirmed 2,639 ledger credits totaling J$9,467,380. The table below is the original before/target snapshot, not current balances. A subsequent investigation found current charges still within grace were also cleared; see `CURRENT-CHARGE-REVIEW.md` and the read-only `preview-current-charge-corrections.sql`. The earlier rehearsal passed and rolled back before the separately approved commit.
 
 | Change | Total |
 |---|---:|

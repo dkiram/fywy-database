@@ -1,0 +1,163 @@
+{
+  "tag": "void-reconnect-audit",
+  "accounts": [
+    {
+      "name": "Monekic Reid",
+      "ledger": [
+        [
+          303539,
+          "monthly_charge",
+          2500,
+          "2026-08-22",
+          "2026-09-01",
+          null,
+          "2026-08-22T08:10:44.415236-05:00",
+          "monthly-charge:1155:2026-08-22",
+          null
+        ],
+        [
+          310294,
+          "adjustment",
+          -2500,
+          "2026-08-28",
+          "2026-08-28",
+          null,
+          "2026-08-28T02:25:33.95822-05:00",
+          "clean-slate:1155",
+          "Clean slate: paid for at least 5 of the last 6 months. The arrears were produced by the legacy balance rebuild, which charged every month since activation and did not account for outages or periods without service."
+        ]
+      ],
+      "status": "active",
+      "billing": {
+        "balance": 0,
+        "is_on_hold": false,
+        "customer_id": 1155,
+        "hold_reason": null,
+        "is_delinquent": false,
+        "credit_balance": 0,
+        "grace_end_date": null,
+        "hold_expires_on": null,
+        "unverified_entries": 1,
+        "outstanding_balance": 0,
+        "oldest_unpaid_due_date": null,
+        "ready_for_reconnection": false,
+        "eligible_for_disconnection": false,
+        "scheduled_disconnection_date": null
+      },
+      "history": null,
+      "customer_id": 1155,
+      "monthly_fee": 2500,
+      "activation_date": "2020-05-22",
+      "hidden_from_app": false,
+      "recent_payments": null,
+      "reactivation_date": "2020-05-22"
+    },
+    {
+      "name": "Delano Wilson",
+      "ledger": [
+        [
+          1166177,
+          "monthly_payment",
+          -2500,
+          null,
+          null,
+          442123,
+          "2026-09-15T08:27:46.941781-05:00",
+          "payment:442123",
+          "Full receipt credited; any amount beyond outstanding debt remains as credit."
+        ],
+        [
+          1201641,
+          "monthly_payment",
+          -2500,
+          null,
+          null,
+          442287,
+          "2026-09-15T12:19:04.792507-05:00",
+          "payment:442287",
+          "Full receipt credited; any amount beyond outstanding debt remains as credit."
+        ],
+        [
+          1201698,
+          "payment_void",
+          2500,
+          null,
+          null,
+          442123,
+          "2026-09-15T12:19:19.65019-05:00",
+          "payment-void:442123",
+          "should be sept"
+        ]
+      ],
+      "status": "active",
+      "billing": {
+        "balance": -2500,
+        "is_on_hold": false,
+        "customer_id": 14754,
+        "hold_reason": null,
+        "is_delinquent": false,
+        "credit_balance": 2500,
+        "grace_end_date": null,
+        "hold_expires_on": null,
+        "unverified_entries": 0,
+        "outstanding_balance": 0,
+        "oldest_unpaid_due_date": null,
+        "ready_for_reconnection": false,
+        "eligible_for_disconnection": false,
+        "scheduled_disconnection_date": null
+      },
+      "history": [
+        [
+          "active",
+          "active",
+          "2026-08-30",
+          "2026-08-30T12:29:50.799974-05:00",
+          "Duplicate record merged in; this account remains active"
+        ]
+      ],
+      "customer_id": 14754,
+      "monthly_fee": 2500,
+      "activation_date": "2022-03-05",
+      "hidden_from_app": false,
+      "recent_payments": [
+        [
+          73152,
+          130000,
+          "2026-08-17",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          73153,
+          2500,
+          "2026-08-17",
+          "2026-07-15",
+          null,
+          null,
+          null
+        ],
+        [
+          442123,
+          2500,
+          "2026-09-15",
+          "2026-09-01",
+          "2026-09-15T12:19:19.65019-05:00",
+          "should be sept",
+          "2026-09-15T08:27:46.941781-05:00"
+        ],
+        [
+          442287,
+          2500,
+          "2026-09-15",
+          "2026-08-01",
+          null,
+          null,
+          "2026-09-15T12:19:04.792507-05:00"
+        ]
+      ],
+      "reactivation_date": "2022-03-05"
+    }
+  ]
+}
