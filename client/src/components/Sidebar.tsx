@@ -74,7 +74,7 @@ function Sidebar({ open, onClose }: SidebarProps) {
       aria-label="Main navigation"
     >
       {/* Brand */}
-      <div className="flex items-start justify-between px-6 py-5 lg:py-6">
+      <div className="flex items-start justify-between px-6 pb-5 pt-[calc(1.25rem+var(--safe-top))] lg:pb-6 lg:pt-[calc(1.5rem+var(--safe-top))]">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sidebar-text/50">
             FYWY
@@ -96,7 +96,7 @@ function Sidebar({ open, onClose }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-4 pb-6">
+      <nav className="flex-1 overflow-y-auto px-4 pb-[calc(1.5rem+var(--safe-bottom))]">
         <NavSection title="Main">
           {isAdmin && (
             <NavItem

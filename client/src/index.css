@@ -80,6 +80,16 @@
   box-sizing: border-box;
 }
 
+/* Added to the home screen, the app runs under a translucent status bar
+   (viewport-fit=cover + black-translucent in index.html), so the top of the
+   page sits beneath the clock and battery. These resolve to the notch /
+   Dynamic Island height in that mode and to 0 in an ordinary browser tab,
+   which is why the shell pads with them instead of a fixed number. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 html,
 body,
 #root {

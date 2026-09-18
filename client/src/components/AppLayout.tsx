@@ -27,7 +27,7 @@ function AppLayout({ children }: AppLayoutProps) {
       <div className="lg:pl-72">
         <Header onMenuClick={() => setNavOpen(true)} />
 
-        <main className="min-h-screen pt-16 lg:pt-20">
+        <main className="min-h-screen pb-[var(--safe-bottom)] pt-[calc(4rem+var(--safe-top))] lg:pt-[calc(5rem+var(--safe-top))]">
           {children}
         </main>
       </div>

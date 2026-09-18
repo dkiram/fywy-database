@@ -27,7 +27,7 @@ const roleLabel =
       : "Branch Staff";
 
   return (
-<header className="fixed left-0 right-0 top-0 z-30 flex h-16 items-center justify-between bg-surface/90 px-4 shadow-sm backdrop-blur-xl sm:px-6 lg:left-72 lg:h-20 lg:justify-end lg:px-8">
+<header className="fixed left-0 right-0 top-0 z-30 flex h-[calc(4rem+var(--safe-top))] items-center justify-between bg-surface/90 px-4 pt-[var(--safe-top)] shadow-sm backdrop-blur-xl sm:px-6 lg:left-72 lg:h-[calc(5rem+var(--safe-top))] lg:justify-end lg:px-8">
 
       {/* Menu + brand, phone/tablet only. The brand sits here because the
           sidebar (which normally carries it) is off-screen. */}
