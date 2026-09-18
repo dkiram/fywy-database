@@ -373,7 +373,7 @@ if (error || !customer) {
 }
 
   return (
-    <div className="flex w-full flex-col gap-8 bg-surface p-8 lg:p-12">
+    <div className="flex w-full flex-col gap-6 bg-surface px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 lg:gap-8">
       {/* Back */}
       <button
         type="button"
@@ -390,8 +390,8 @@ if (error || !customer) {
       {/* Customer heading */}
       <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-semibold tracking-tight text-on-surface lg:text-5xl">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <h1 className="text-3xl font-semibold tracking-tight text-on-surface sm:text-4xl lg:text-5xl">
               {accountGroup?.displayName || customer.name || "Unnamed customer"}
             </h1>
 
@@ -414,13 +414,13 @@ if (error || !customer) {
         </div>
 
         {/* Future actions */}
- <div className="flex items-center gap-4">
+ <div className="flex items-center gap-3 sm:gap-4">
   {activeTab === "overview" ? (
     employee?.role === "admin" || employee?.role === "head_office" ? (
       <button
         type="button"
         onClick={() => navigate(`/customers/${customer.customer_id}/edit`, { state: location.state })}
-        className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container"
+        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container sm:flex-none sm:px-6"
       >
         <span className="material-symbols-outlined text-lg">
           edit
@@ -433,7 +433,7 @@ if (error || !customer) {
     <button
       type="button"
       onClick={() => setShowPaymentForm(true)}
-      className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container"
+      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container sm:flex-none sm:px-6"
     >
       <span className="material-symbols-outlined text-lg">
         add
@@ -446,7 +446,7 @@ if (error || !customer) {
       <button
         type="button"
         onClick={() => navigate(`/service-requests?customerId=${customer.customer_id}`)}
-        className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container"
+        className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary shadow-md transition hover:bg-primary-container sm:flex-none sm:px-6"
       >
         <span className="material-symbols-outlined text-lg">add</span>
         New Service Ticket
@@ -479,7 +479,7 @@ if (error || !customer) {
               Choose an account before taking a payment or changing service. Balances, billing dates, and connection status stay separate.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             {canManageSubscription && (
               <button
                 type="button"
@@ -607,14 +607,14 @@ if (error || !customer) {
       </section>
 
       {/* Tabs */}
-     <div className="flex border-b border-surface-container-highest">
+     <div className="-mx-4 flex overflow-x-auto border-b border-surface-container-highest px-4 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
   <button
     type="button"
     onClick={() => setActiveTab("overview")}
     className={
       activeTab === "overview"
-        ? "border-b-2 border-primary px-6 py-3 text-sm font-medium text-primary"
-        : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
+        ? "shrink-0 whitespace-nowrap border-b-2 border-primary px-4 py-3 text-sm font-medium text-primary sm:px-6"
+        : "shrink-0 whitespace-nowrap px-4 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface sm:px-6"
     }
   >
     Overview
@@ -625,8 +625,8 @@ if (error || !customer) {
     onClick={() => setActiveTab("payments")}
     className={
       activeTab === "payments"
-        ? "border-b-2 border-primary px-6 py-3 text-sm font-medium text-primary"
-        : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
+        ? "shrink-0 whitespace-nowrap border-b-2 border-primary px-4 py-3 text-sm font-medium text-primary sm:px-6"
+        : "shrink-0 whitespace-nowrap px-4 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface sm:px-6"
     }
   >
     Payments
@@ -637,8 +637,8 @@ if (error || !customer) {
     onClick={() => setActiveTab("support")}
     className={
       activeTab === "support"
-        ? "border-b-2 border-primary px-6 py-3 text-sm font-medium text-primary"
-        : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
+        ? "shrink-0 whitespace-nowrap border-b-2 border-primary px-4 py-3 text-sm font-medium text-primary sm:px-6"
+        : "shrink-0 whitespace-nowrap px-4 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface sm:px-6"
     }
   >
     Support History
@@ -649,8 +649,8 @@ if (error || !customer) {
     onClick={() => setActiveTab("history")}
     className={
       activeTab === "history"
-        ? "border-b-2 border-primary px-6 py-3 text-sm font-medium text-primary"
-        : "px-6 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
+        ? "shrink-0 whitespace-nowrap border-b-2 border-primary px-4 py-3 text-sm font-medium text-primary sm:px-6"
+        : "shrink-0 whitespace-nowrap px-4 py-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface sm:px-6"
     }
   >
     Timeline
@@ -662,7 +662,7 @@ if (error || !customer) {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="flex flex-col gap-6 lg:col-span-8">
           {/* Customer information */}
-          <section className="rounded-2xl bg-surface-container-lowest p-8 shadow-sm">
+          <section className="rounded-2xl bg-surface-container-lowest p-5 shadow-sm sm:p-8">
             <div className="mb-6 flex items-center gap-3 border-b border-surface-container pb-4">
               <span className="material-symbols-outlined text-primary">
                 contact_mail
@@ -1255,7 +1255,7 @@ if (error || !customer) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="terminate-subscription-title"
-            className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl"
+            className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-5 shadow-2xl sm:p-6"
           >
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined rounded-full bg-error/10 p-2 text-error">

@@ -1,5 +1,6 @@
 /** Provides the persistent sidebar/header frame used by every authenticated page. */
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useLocation } from "react-router";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
@@ -8,14 +9,25 @@ type AppLayoutProps = {
 };
 
 function AppLayout({ children }: AppLayoutProps) {
+  // Below the lg breakpoint the sidebar is an off-canvas drawer opened from
+  // the header's menu button; at lg and up it is always pinned and this state
+  // is ignored. Navigating closes the drawer so a tap on a link lands on the
+  // page rather than on the still-open menu.
+  const [navOpen, setNavOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="min-h-screen bg-surface text-on-surface">
-      <Sidebar />
+      <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
 
-      <div className="pl-72">
-        <Header />
+      <div className="lg:pl-72">
+        <Header onMenuClick={() => setNavOpen(true)} />
 
-        <main className="min-h-screen pt-20">
+        <main className="min-h-screen pt-16 lg:pt-20">
           {children}
         </main>
       </div>

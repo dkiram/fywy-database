@@ -37,7 +37,7 @@ function DashboardPage() {
   const maxTrend = Math.max(...data.paymentTrend.map((item) => Number(item.total_amount)), 1);
   const today = jamaicaToday();
 
-  return <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
+  return <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
     <div><h1 className="text-2xl font-semibold tracking-tight text-on-surface">Management Dashboard</h1><p className="mt-1 text-sm text-on-surface-variant">Welcome back, {employee?.firstName}. Here is SPCL&apos;s operational snapshot for {formatDate(today)}.</p></div>
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

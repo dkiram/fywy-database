@@ -275,7 +275,7 @@ const response = await apiFetch(
       {/* Table */}
       <div className="overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full min-w-[44rem] text-left md:min-w-0">
             <thead className="bg-surface-container-low/60">
               <tr>
                 <TableHeading>Date</TableHeading>

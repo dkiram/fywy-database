@@ -411,7 +411,7 @@ function AccountOperationsPage() {
   }, [loadReconnectionRequests]);
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-on-surface">
           Account Operations
@@ -611,7 +611,7 @@ function AccountOperationsPage() {
         )}
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full min-w-[44rem] text-left md:min-w-0">
             <thead className="bg-surface-container-low">
               <tr>
                 <TableHeading>Customer</TableHeading>

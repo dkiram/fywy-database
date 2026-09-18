@@ -774,7 +774,7 @@ function ApplicationsPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0 flex-1 basis-80">
           <h1 className="text-2xl font-semibold tracking-tight text-on-surface">
@@ -888,7 +888,7 @@ function ApplicationsPage() {
         {error && <div className="m-6 rounded-lg bg-error/10 p-4 text-sm text-error">{error}</div>}
 
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left">
+          <table className="w-full min-w-[44rem] border-collapse text-left md:min-w-0">
             <thead className="bg-surface-container-low">
               <tr>
                 <TableHeading>Application</TableHeading>

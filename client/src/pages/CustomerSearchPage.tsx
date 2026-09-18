@@ -83,7 +83,7 @@ function CustomerSearchPage() {
   }, [search]);
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-8 py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:gap-8 lg:px-8 lg:py-8">
       {/* Page heading */}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-on-surface">
@@ -117,10 +117,66 @@ function CustomerSearchPage() {
         </div>
       )}
 
-      {/* Customer table */}
+      {/* Customer table. Below md the same rows render as a card list — a
+          seven-column table on a phone is a horizontal scroll nobody reads. */}
       <div className="overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
+        <ul className="divide-y divide-surface-container md:hidden">
+          {!loading &&
+            customers.map((customer) => (
+              <li key={customer.customer_id}>
+                <button
+                  type="button"
+                  onClick={() => openCustomer(customer.customer_id)}
+                  aria-label={`Open ${customer.name || "unnamed customer"}`}
+                  className="flex w-full items-start gap-3 px-4 py-4 text-left transition active:bg-surface-container-low/60"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <p className="text-base font-semibold text-on-surface">
+                        {customer.name || "Unnamed customer"}
+                      </p>
+                      <span className="font-mono text-xs text-on-surface-variant">
+                        {customer.account_ids.map((id) => `#${id}`).join(", ")}
+                      </span>
+                    </div>
+
+                    {customer.address && (
+                      <p className="mt-1 line-clamp-2 text-sm text-on-surface-variant">
+                        {customer.address}
+                      </p>
+                    )}
+
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-on-surface-variant">
+                      {customer.package_names.length > 0 && (
+                        <span>{customer.package_names.join(" · ")}</span>
+                      )}
+                      {customer.telephone && (
+                        <span className="font-mono text-xs">{customer.telephone}</span>
+                      )}
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {customer.account_statuses.map((status, index) => (
+                        <StatusBadge key={`${status}-${index}`} status={status} />
+                      ))}
+                      {customer.account_count > 1 && (
+                        <span className="text-xs font-medium text-primary">
+                          {customer.account_count} service accounts
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <span className="material-symbols-outlined mt-0.5 shrink-0 text-outline">
+                    chevron_right
+                  </span>
+                </button>
+              </li>
+            ))}
+        </ul>
+
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[44rem] text-left md:min-w-0">
             <thead className="bg-surface-container-low/50">
               <tr>
                 <TableHeading>Account(s)</TableHeading>

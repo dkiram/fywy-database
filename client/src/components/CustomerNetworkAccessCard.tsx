@@ -795,7 +795,7 @@ export default function CustomerNetworkAccessCard({
           aria-modal="true"
           aria-label="Remove OLT information"
         >
-          <div className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
+          <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface-container-lowest p-5 shadow-2xl sm:p-6">
             <h3 className="text-xl font-semibold">Remove OLT information</h3>
             <p className="mt-2 text-sm text-on-surface-variant">
               This releases <strong>{networkAccess.olt_name} {location}</strong> from customer{" "}
@@ -861,7 +861,7 @@ export default function CustomerNetworkAccessCard({
           aria-modal="true"
           aria-label={`${controlAction} test ONT`}
         >
-          <div className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
+          <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface-container-lowest p-5 shadow-2xl sm:p-6">
             <h3 className="text-xl font-semibold capitalize">
               {controlAction} test ONT
             </h3>
@@ -938,7 +938,7 @@ export default function CustomerNetworkAccessCard({
           aria-modal="true"
           aria-label="Confirm Huawei ONT description override"
         >
-          <div className="w-full max-w-lg rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
+          <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface-container-lowest p-5 shadow-2xl sm:p-6">
             <h3 className="text-xl font-semibold">Confirm description override</h3>
             <p className="mt-2 text-sm text-on-surface-variant">
               The backend will re-read location {location} and its ONT serial. It will

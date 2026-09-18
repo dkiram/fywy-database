@@ -2,8 +2,13 @@
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router";
 
+type HeaderProps = {
+  notificationCount?: number;
+  /** Opens the navigation drawer; the button only renders below lg. */
+  onMenuClick?: () => void;
+};
 
-function Header({ notificationCount = 0 }: { notificationCount?: number }) {
+function Header({ notificationCount = 0, onMenuClick }: HeaderProps) {
 
 const { employee, logout } = useAuth();
 const navigate = useNavigate();
@@ -14,10 +19,34 @@ const employeeInitials = employee
       .charAt(0)}`.toUpperCase()
   : "?";
 
-  return (
-<header className="fixed left-72 right-0 top-0 z-40 flex h-20 items-center justify-end bg-surface/90 px-8 shadow-sm backdrop-blur-xl">
+const roleLabel =
+  employee?.role === "admin"
+    ? "Administrator"
+    : employee?.role === "head_office"
+      ? "Head Office"
+      : "Branch Staff";
 
-      <div className="flex items-center gap-6">
+  return (
+<header className="fixed left-0 right-0 top-0 z-30 flex h-16 items-center justify-between bg-surface/90 px-4 shadow-sm backdrop-blur-xl sm:px-6 lg:left-72 lg:h-20 lg:justify-end lg:px-8">
+
+      {/* Menu + brand, phone/tablet only. The brand sits here because the
+          sidebar (which normally carries it) is off-screen. */}
+      <div className="flex items-center gap-2 lg:hidden">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="Open navigation"
+          className="-ml-2 rounded-full p-2 text-on-surface-variant transition hover:bg-surface-container-high"
+        >
+          <span className="material-symbols-outlined">menu</span>
+        </button>
+
+        <p className="text-sm font-semibold tracking-wide text-on-surface">
+          FYWY
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3 sm:gap-6">
         <button
           type="button"
           aria-label={
@@ -36,8 +65,8 @@ const employeeInitials = employee
           )}
         </button>
 
-        <div className="flex items-center gap-3 border-l border-outline-variant pl-4">
-          <div className="text-right">
+        <div className="flex items-center gap-3 border-l border-outline-variant pl-3 sm:pl-4">
+          <div className="hidden text-right sm:block">
             <p className="text-sm font-semibold text-on-surface">
   {employee
     ? `${employee.firstName} ${employee.lastName}`
@@ -45,17 +74,14 @@ const employeeInitials = employee
 </p>
 
 <p className="text-xs text-on-surface-variant">
-  {employee?.role === "admin"
-    ? "Administrator"
-    : employee?.role === "head_office"
-      ? "Head Office"
-      : "Branch Staff"}
+  {roleLabel}
 </p>
           </div>
 
           <div
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-primary"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary lg:h-10 lg:w-10"
             aria-label={employee ? `${employee.firstName} ${employee.lastName}` : "Employee"}
+            title={employee ? `${employee.firstName} ${employee.lastName} · ${roleLabel}` : undefined}
           >
             <span className="text-sm font-medium tracking-wide text-on-primary">
               {employeeInitials}

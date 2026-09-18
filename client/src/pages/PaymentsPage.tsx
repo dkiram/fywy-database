@@ -141,7 +141,7 @@ function PaymentsPage() {
   const summary = data?.summary ?? { payment_count: 0, total_amount: "0", average_amount: "0" };
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-on-surface">Daily Payments</h1>
@@ -201,7 +201,7 @@ function PaymentsPage() {
         ) : data && data.recentPayments.length > 0 ? (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
+              <table className="w-full min-w-[44rem] text-left md:min-w-0">
                 <thead className="bg-surface-container-low">
                   <tr>
                     <TableHeading>Time</TableHeading>

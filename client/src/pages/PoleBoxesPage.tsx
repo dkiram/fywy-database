@@ -108,7 +108,7 @@ function PoleBoxesPage() {
     finally { setSaving(false); }
   };
 
-  return <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
+  return <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
     <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-semibold tracking-tight text-on-surface">Pole Boxes</h1><p className="mt-1 text-sm text-on-surface-variant">Review port usage, connected customers, and infrastructure conflicts.</p></div>{canManage && <button type="button" onClick={openNew} className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary"><span className="material-symbols-outlined text-lg">add</span>Add Pole Box</button>}</div>
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4"><Summary label="Pole Boxes" value={summary.total_boxes} icon="dns" tone="primary" /><Summary label="Active Connections" value={summary.active_connections} icon="cable" tone="positive" /><Summary label="Duplicate Assignments" value={summary.boxes_with_duplicates} icon="warning" tone="warning" /><Summary label="Over Capacity" value={summary.over_capacity} icon="error" tone="negative" /></div>
     {notice && <p className="rounded-lg bg-tertiary/10 p-4 text-sm font-semibold text-tertiary">{notice}</p>}{error && <p className="rounded-lg bg-error/10 p-4 text-sm text-error">{error}</p>}

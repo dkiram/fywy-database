@@ -113,7 +113,7 @@ function AdminControlsPage() {
   }, []);
 
   return (
-    <div className="p-8">
+    <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <div>
         <h1 className="text-2xl font-semibold text-on-surface">Admin Controls</h1>
         <p className="mt-1 text-sm text-on-surface-variant">
@@ -144,7 +144,7 @@ function AdminControlsPage() {
         {!loading && !error && (
           <div className="mt-4 overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
+              <table className="w-full min-w-[44rem] text-left md:min-w-0">
                 <thead className="bg-surface-container-low">
                   <tr>
                     <TableHeading>Employee</TableHeading>

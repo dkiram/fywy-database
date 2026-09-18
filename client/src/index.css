@@ -100,6 +100,18 @@ textarea {
   font: inherit;
 }
 
+/* Phones only. iOS Safari zooms the whole page into any field whose text is
+   under 16px, and every form field in the app is text-sm (14px). Lifting the
+   field's own font-size to 16px on narrow screens is the one thing that stops
+   that zoom; the labels around it are untouched. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* One focus rule for the whole app. The previous focus:ring-primary/10 and /20
    computed to roughly #ecefef — about 1.05:1 against the input they sat on,
    i.e. invisible — and buttons had no focus style at all. Only shows for
