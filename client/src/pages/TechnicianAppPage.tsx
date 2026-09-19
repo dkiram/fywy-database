@@ -649,7 +649,9 @@ function JobCard({
         <PriorityStripe priority={job.priority} />
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          {/* Wraps: a rescheduled install carries three pills plus the ticket
+              number, which is wider than a phone. */}
+          <div className="flex flex-wrap items-center gap-2">
             <JobStatusPill status={job.status} />
             {job.job_type === "installation" && (
               <span className="inline-flex whitespace-nowrap rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
@@ -657,7 +659,7 @@ function JobCard({
               </span>
             )}
             {rescheduled && (
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-secondary-container px-2.5 py-1 text-[11px] font-semibold text-secondary">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-scheduled px-2.5 py-1 text-[11px] font-semibold text-on-scheduled">
                 <span className="material-symbols-outlined text-sm">event</span>
                 {formatAppointment(job.rescheduled_for!)}
               </span>
@@ -858,7 +860,7 @@ function JobCard({
                         busy={busy}
                         disabled={!when}
                         onClick={() => save(null, when)}
-                        className="bg-secondary text-white"
+                        className="bg-scheduled text-on-scheduled"
                         icon="event"
                         label="Set time"
                       />
@@ -868,7 +870,7 @@ function JobCard({
                   <ActionButton
                     busy={busy}
                     onClick={() => setPicking(true)}
-                    className="bg-secondary-container text-secondary"
+                    className="bg-scheduled/25 text-on-scheduled"
                     icon="event"
                     label={rescheduled ? "Change the time" : "Reschedule"}
                   />
