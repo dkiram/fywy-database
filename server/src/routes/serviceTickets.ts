@@ -3,6 +3,7 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
+import { parseAppointment, formatAppointment, APPOINTMENT_ERROR } from "../appointments.js";
 
 // MVP 4 service-ticket workflow. Tickets are current work records, while the
 // reports router only summarizes/filter records created here.
@@ -676,6 +677,21 @@ serviceTicketsRouter.patch(
       const resolutionNotes = req.body.resolutionNotes === undefined ? current.resolution_notes ?? "" : cleanText(req.body.resolutionNotes);
       const updateNote = cleanText(req.body.updateNote);
 
+      // The office rescheduling on the customer's behalf - they rang the desk
+      // instead of the technician. Same rules as the phone (migration 080):
+      // it is a time on an assigned ticket, not a status of its own, so the
+      // job stays on the technician's list and inside their cap.
+      const rescheduleRequested =
+        req.body.rescheduledFor !== undefined && req.body.rescheduledFor !== null && req.body.rescheduledFor !== "";
+      const rescheduledFor = rescheduleRequested ? parseAppointment(req.body.rescheduledFor) : null;
+
+      if (rescheduleRequested && rescheduledFor === null) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: APPOINTMENT_ERROR });
+      }
+      // A rescheduled job is by definition assigned to somebody who will go.
+      if (rescheduleRequested) status = "assigned";
+
       if (!ticketStatuses.includes(status)) {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "Choose a valid status." });
@@ -767,17 +783,23 @@ serviceTicketsRouter.patch(
           -- it. Any change of status from here clears it, same as from the
           -- phone, so a job the office re-opens does not come back carrying
           -- one from a previous life.
-          rescheduled_for = CASE WHEN $4 <> status THEN NULL ELSE rescheduled_for END,
+          rescheduled_for = CASE
+            WHEN $12::TIMESTAMPTZ IS NOT NULL THEN $12::TIMESTAMPTZ
+            WHEN $4 <> status THEN NULL
+            ELSE rescheduled_for
+          END,
           updated_by_employee_id = $10,
           updated_at = CURRENT_TIMESTAMP
         WHERE service_ticket_id = $11
         RETURNING *;
         `,
-        [issueSummary, description, priority, status, assignedEmployeeId, poleBoxNumber, portNumber, serviceDate, resolutionNotes, employee.employeeId, ticketId]
+        [issueSummary, description, priority, status, assignedEmployeeId, poleBoxNumber, portNumber, serviceDate, resolutionNotes, employee.employeeId, ticketId, rescheduledFor]
       );
 
       const statusChanged = status !== current.status;
-      const historyNote = updateNote || (status === "completed" ? resolutionNotes : `Ticket updated by ${employee.firstName} ${employee.lastName}`);
+      const historyNote = rescheduledFor
+        ? `Rescheduled for ${formatAppointment(rescheduledFor)} by the office` + (updateNote ? ` — ${updateNote}` : "")
+        : updateNote || (status === "completed" ? resolutionNotes : `Ticket updated by ${employee.firstName} ${employee.lastName}`);
       await client.query(
         `INSERT INTO public.service_ticket_history
           (service_ticket_id, event_type, from_status, to_status, note, changed_by_employee_id)

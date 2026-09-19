@@ -272,7 +272,7 @@ function ApplicationsPage() {
   useScrollRestoration(!loading);
 
   const [dispatching, setDispatching] = useState<
-    { application: ApplicationRecord; mode: "send" | "move" } | null
+    { application: ApplicationRecord; mode: "send" | "move" | "reschedule" } | null
   >(null);
   const [selected, setSelected] = useState<ApplicationRecord | null>(null);
   // Shown right after an installation fee is collected, and reprintable from
@@ -1205,6 +1205,7 @@ function ApplicationsPage() {
                     application={activeApplication}
                     onDispatch={() => setDispatching({ application: activeApplication, mode: "send" })}
                     onMove={() => setDispatching({ application: activeApplication, mode: "move" })}
+                    onReschedule={() => setDispatching({ application: activeApplication, mode: "reschedule" })}
                   />
                 )}
                 <div className="flex flex-col gap-3 sm:flex-row">
@@ -1771,6 +1772,16 @@ function DrawerSection({ title, icon, children }: { title: string; icon: string;
  * activates it the installation is history, and a "Done" badge on a serviced
  * row would just be repeating the status beside it.
  */
+/** A stored instant as a datetime-local value in the browser's own (Jamaica) time. */
+function toDateTimeLocal(value: string) {
+  const d = new Date(value);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+/** The earliest the picker accepts: now. The server checks again with a proper clock. */
+function minAppointment() {
+  return toDateTimeLocal(new Date().toISOString());
+}
 /** "Sat 20 Sept, 9:00 am" — when the technician agreed to come back. */
 function formatAppointment(value: string) {
   return new Date(value).toLocaleString("en-JM", {
@@ -1813,10 +1824,12 @@ function InstallationDispatchRow({
   application,
   onDispatch,
   onMove,
+  onReschedule,
 }: {
   application: ApplicationRecord;
   onDispatch: () => void;
   onMove: () => void;
+  onReschedule: () => void;
 }) {
   const status = application.install_status;
   const out = status === "assigned" || status === "in_progress";
@@ -1856,13 +1869,22 @@ function InstallationDispatchRow({
           {/* Only while it is out. This whole panel already sits behind the
               admin / head-office footer, so the button inherits that gate
               without checking again. */}
-          <button
-            type="button"
-            onClick={onMove}
-            className="shrink-0 rounded-lg bg-surface-container-high px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-highest"
-          >
-            Change technician
-          </button>
+          <div className="flex shrink-0 flex-col gap-2">
+            <button
+              type="button"
+              onClick={onReschedule}
+              className="rounded-lg bg-secondary-container px-3 py-2 text-xs font-medium text-secondary transition hover:bg-secondary-container/80"
+            >
+              {application.install_rescheduled_for ? "Change the time" : "Reschedule"}
+            </button>
+            <button
+              type="button"
+              onClick={onMove}
+              className="rounded-lg bg-surface-container-high px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-highest"
+            >
+              Change technician
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1904,12 +1926,24 @@ function DispatchInstallationModal({
   onSent,
 }: {
   application: ApplicationRecord;
-  /** "send" creates the job; "move" hands an open one to somebody else. */
-  mode: "send" | "move";
+  /**
+   * "send" creates the job; "move" hands an open one to somebody else;
+   * "reschedule" sets the agreed time. Move and reschedule are the same
+   * PATCH underneath and can be combined: "Andre is off tomorrow, Devon
+   * will do the nine o'clock" is one save.
+   */
+  mode: "send" | "move" | "reschedule";
   onClose: () => void;
   onSent: (message: string) => void;
 }) {
   const moving = mode === "move";
+  const rescheduling = mode === "reschedule";
+  const editing = moving || rescheduling;
+  const [when, setWhen] = useState(
+    rescheduling && application.install_rescheduled_for
+      ? toDateTimeLocal(application.install_rescheduled_for)
+      : ""
+  );
   const [technicians, setTechnicians] = useState<
     Array<{
       employee_id: number; first_name: string; last_name: string;
@@ -1941,14 +1975,17 @@ function DispatchInstallationModal({
         {
           // Same address, two verbs: POST sends a new job out, PATCH moves the
           // one that is already out.
-          method: moving ? "PATCH" : "POST",
+          method: editing ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assignedEmployeeId: chosen }),
+          body: JSON.stringify({
+            assignedEmployeeId: chosen || undefined,
+            rescheduledFor: rescheduling ? when : undefined,
+          }),
         }
       );
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || (moving ? "Could not move this." : "Could not send this out."));
+      if (!response.ok) throw new Error(data.error || (editing ? "Could not save that." : "Could not send this out."));
 
       onSent(`${application.name}: ${data.message}`);
     } catch (sendError) {
@@ -1961,7 +1998,7 @@ function DispatchInstallationModal({
   const everyoneFull = technicians.length > 0 && technicians.every((t) => !t.can_take_work);
 
   return (
-    <Modal title={moving ? "Change technician" : "Send for installation"} onClose={() => !saving && onClose()}>
+    <Modal title={rescheduling ? "Reschedule the visit" : moving ? "Change technician" : "Send for installation"} onClose={() => !saving && onClose()}>
       <div className="space-y-5">
         <div className="rounded-xl bg-surface-container-low p-4">
           <p className="font-medium text-on-surface">{application.name}</p>
@@ -1975,17 +2012,29 @@ function DispatchInstallationModal({
               their phone on the next refresh and shows as new work on the other.
             </p>
           )}
+          {rescheduling && (
+            <p className="mt-2 text-xs text-on-surface-variant">
+              Stays with <strong>{application.install_technician_name || "the technician"}</strong> unless
+              you pick somebody else below. Their phone shows the new time.
+            </p>
+          )}
         </div>
 
-        <Field label="Technician" required>
+        {rescheduling && (
+          <Field label="Come back on" required>
+            <input type="datetime-local" min={minAppointment()} value={when} onChange={(event) => setWhen(event.target.value)} className={inputClass} />
+          </Field>
+        )}
+
+        <Field label={rescheduling ? "Technician (optional — leave to keep the same one)" : "Technician"} required={!rescheduling}>
           <select value={chosen} onChange={(event) => setChosen(event.target.value)} className={inputClass}>
-            <option value="">Choose a technician</option>
+            <option value="">{rescheduling ? "Keep the same technician" : "Choose a technician"}</option>
             {technicians.map((technician) => (
               <option
                 key={technician.employee_id}
                 value={technician.employee_id}
                 // The one who already has it is not somebody to move it to.
-                disabled={!technician.can_take_work || (moving && technician.employee_id === application.install_technician_id)}
+                disabled={!technician.can_take_work || (editing && technician.employee_id === application.install_technician_id)}
               >
                 {technician.first_name} {technician.last_name} —{" "}
                 {technician.can_take_work
@@ -2013,8 +2062,8 @@ function DispatchInstallationModal({
         {error && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{error}</p>}
 
         <ModalActions
-          saving={saving || !chosen}
-          primaryLabel={moving ? "Move" : "Send"}
+          saving={saving || (rescheduling ? !when : !chosen)}
+          primaryLabel={rescheduling ? "Set time" : moving ? "Move" : "Send"}
           onCancel={onClose}
           onPrimary={send}
         />

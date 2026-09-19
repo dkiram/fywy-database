@@ -8,6 +8,7 @@ import {
   recordFailedLogin,
   clearFailedLogins,
 } from "../loginThrottle.js";
+import { parseAppointment, formatAppointment, APPOINTMENT_ERROR } from "../appointments.js";
 
 /**
  * Everything a technician's phone can reach, and nothing else.
@@ -84,44 +85,6 @@ type TechnicianStatus = (typeof technicianStatuses)[number];
  * audit trail behind it.
  */
 const editableStatuses = ["assigned", "in_progress", "unresolved"];
-
-/**
- * Turns the phone's datetime-local value into an instant.
- *
- * The input arrives as "2026-09-20T09:00" with no zone: it is the time on the
- * technician's screen, which is Jamaica time. Jamaica does not observe
- * daylight saving, so pinning -05:00 is exact rather than approximately right,
- * and it keeps this from depending on whatever TZ the container happens to
- * run in.
- *
- * Returns null for anything unparseable, in the past, or absurdly far out - a
- * customer asking for "next Tuesday" is real; a typo landing in 2062 is not.
- */
-function parseAppointment(value: unknown): Date | null {
-  const text = String(value ?? "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)) return null;
-
-  const when = new Date(`${text}:00-05:00`);
-  if (Number.isNaN(when.getTime())) return null;
-
-  const now = Date.now();
-  const fiveMinutes = 5 * 60 * 1000;
-  const ninetyDays = 90 * 24 * 60 * 60 * 1000;
-
-  if (when.getTime() < now - fiveMinutes) return null;
-  if (when.getTime() > now + ninetyDays) return null;
-
-  return when;
-}
-
-/** "Sat 20 Sept, 9:00 am" in Jamaica time, for history rows and audit lines. */
-function formatJamaica(when: Date) {
-  return new Intl.DateTimeFormat("en-JM", {
-    timeZone: "America/Jamaica",
-    weekday: "short", day: "numeric", month: "short",
-    hour: "numeric", minute: "2-digit",
-  }).format(when);
-}
 
 function requireTechnician(req: Request, res: Response, next: NextFunction) {
   if (!req.session.technician) {
@@ -558,9 +521,7 @@ technicianAppRouter.patch(
       return res.status(400).json({ error: "That is not a status you can set." });
     }
     if (rescheduleRequested && rescheduledFor === null) {
-      return res.status(400).json({
-        error: "Pick a date and time that is still to come, within the next three months.",
-      });
+      return res.status(400).json({ error: APPOINTMENT_ERROR });
     }
     if (rescheduleRequested && requestedStatus) {
       return res.status(400).json({ error: "Reschedule it, or change its status - not both." });
@@ -683,7 +644,7 @@ technicianAppRouter.patch(
 
       const statusChanged = status !== current.status;
       const historyNote = rescheduledFor
-        ? `Rescheduled for ${formatJamaica(rescheduledFor)}` + (note ? ` — ${note}` : "")
+        ? `Rescheduled for ${formatAppointment(rescheduledFor)}` + (note ? ` — ${note}` : "")
         : note ||
           `Marked ${status.replace(/_/g, " ")} by ${technician.firstName} ${technician.lastName}`;
 

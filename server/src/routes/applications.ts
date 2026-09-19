@@ -15,6 +15,7 @@ import { loadReceipt } from "./payments.js";
 // Shared so the installation cap is the same code as the repair cap,
 // rather than a second implementation that can drift from it.
 import { readTechnicianQueue, queueFullMessage } from "./serviceTickets.js";
+import { parseAppointment, formatAppointment, APPOINTMENT_ERROR } from "../appointments.js";
 
 // Application workflow API, including the MVP 3 activation handoff from an
 // approved application to an active customer account.
@@ -2085,10 +2086,14 @@ applicationsRouter.post(
 );
 
 /**
- * Moves an installation that is still out to a different technician.
+ * Changes an installation that is still out: who is going, when, or both.
  *
- * It leaves the first technician's phone on their next refresh and appears on
- * the second's, and the latch trigger (migration 079) re-reads both queues.
+ * Moving it leaves the first technician's phone on their next refresh and
+ * appears on the second's, and the latch trigger (migration 079) re-reads
+ * both queues. Rescheduling it - the applicant rang the office rather than
+ * the technician - stamps the agreed time on it (migration 080); the job
+ * stays where it is, now with a badge saying when. Both at once is the
+ * "Andre is off tomorrow, Devon will do the nine o'clock" case.
  *
  * Only while it is out - assigned or in progress. Once it is done or failed
  * there is nothing to move; a failed one is re-sent from scratch instead,
@@ -2110,10 +2115,22 @@ applicationsRouter.patch(
     }
 
     const assigneeText = String(req.body?.assignedEmployeeId ?? "").trim();
-    if (!/^\d+$/.test(assigneeText)) {
+    const moving = assigneeText !== "";
+    if (moving && !/^\d+$/.test(assigneeText)) {
       return res.status(400).json({ error: "Choose a technician." });
     }
-    const assignedEmployeeId = Number(assigneeText);
+    const assignedEmployeeId = moving ? Number(assigneeText) : null;
+
+    const rescheduleRequested =
+      req.body?.rescheduledFor !== undefined && req.body?.rescheduledFor !== null && req.body?.rescheduledFor !== "";
+    const rescheduledFor = rescheduleRequested ? parseAppointment(req.body.rescheduledFor) : null;
+
+    if (rescheduleRequested && rescheduledFor === null) {
+      return res.status(400).json({ error: APPOINTMENT_ERROR });
+    }
+    if (!moving && !rescheduleRequested) {
+      return res.status(400).json({ error: "Choose a technician, a new time, or both." });
+    }
 
     const client = await pool.connect();
 
@@ -2143,51 +2160,67 @@ applicationsRouter.patch(
         });
       }
 
-      if (Number(ticket.assigned_employee_id) === assignedEmployeeId) {
+      // A move to the person who already has it is not a move. It is still a
+      // valid request if a new time came with it.
+      const actuallyMoving = moving && Number(ticket.assigned_employee_id) !== assignedEmployeeId;
+
+      if (moving && !actuallyMoving && !rescheduleRequested) {
         await client.query("ROLLBACK");
         return res.status(400).json({
           error: `It is already with ${ticket.current_name}.`,
         });
       }
 
-      const technicianResult = await client.query(
-        `SELECT employee_id, first_name, last_name
-         FROM public.employees
-         WHERE employee_id = $1 AND is_active = TRUE AND role = 'technician';`,
-        [assignedEmployeeId]
-      );
-      const technician = technicianResult.rows[0];
+      let newName = ticket.current_name as string;
 
-      if (!technician) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: "Selected technician is unavailable." });
+      if (actuallyMoving) {
+        const technicianResult = await client.query(
+          `SELECT employee_id, first_name, last_name
+           FROM public.employees
+           WHERE employee_id = $1 AND is_active = TRUE AND role = 'technician';`,
+          [assignedEmployeeId]
+        );
+        const technician = technicianResult.rows[0];
+
+        if (!technician) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: "Selected technician is unavailable." });
+        }
+
+        // The receiving technician's installation cap. Moving a job is still
+        // giving somebody work.
+        const queue = await readTechnicianQueue(client, assignedEmployeeId!, "installation");
+
+        if (queue && !queue.canTakeWork) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: queueFullMessage(queue) });
+        }
+
+        newName = `${technician.first_name} ${technician.last_name}`;
       }
 
-      // The receiving technician's installation cap. Moving a job is still
-      // giving somebody work.
-      const queue = await readTechnicianQueue(client, assignedEmployeeId, "installation");
-
-      if (queue && !queue.canTakeWork) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({ error: queueFullMessage(queue) });
-      }
-
-      const newName = `${technician.first_name} ${technician.last_name}`;
-
-      // Back to 'assigned' whatever it was. If the first technician had tapped
-      // Start, that progress was theirs; the new one has not been to the
-      // address yet, and their phone should show it as new work.
+      // Back to 'assigned' whatever it was. If the technician had tapped
+      // Start, that progress is over either way: a new person has not been to
+      // the address yet, and a rescheduled visit is not happening right now.
+      //
+      // The appointment: a new one replaces whatever was there; a plain move
+      // keeps the existing one, because the applicant's nine o'clock does not
+      // change when a different van turns up for it.
       await client.query(
         `UPDATE public.service_tickets
-         SET assigned_employee_id = $1,
+         SET assigned_employee_id = COALESCE($1, assigned_employee_id),
              status = 'assigned',
+             rescheduled_for = COALESCE($4::TIMESTAMPTZ, rescheduled_for),
              updated_by_employee_id = $2,
              updated_at = CURRENT_TIMESTAMP
          WHERE service_ticket_id = $3;`,
-        [assignedEmployeeId, employee.employeeId, ticket.service_ticket_id]
+        [actuallyMoving ? assignedEmployeeId : null, employee.employeeId, ticket.service_ticket_id, rescheduledFor]
       );
 
-      const note = `Moved from ${ticket.current_name || "unassigned"} to ${newName}`;
+      const note = [
+        actuallyMoving ? `Moved from ${ticket.current_name || "unassigned"} to ${newName}` : null,
+        rescheduledFor ? `Rescheduled for ${formatAppointment(rescheduledFor)} by the office` : null,
+      ].filter(Boolean).join(" · ");
 
       await client.query(
         `INSERT INTO public.service_ticket_history
@@ -2205,19 +2238,25 @@ applicationsRouter.patch(
       await client.query(
         `INSERT INTO public.audit_logs
           (employee_id, actor_name, action, entity_type, entity_id, field_name, old_value, new_value)
-         VALUES ($1, $2, 'Moved installation to another technician', 'application', $3, 'installation', $4, $5);`,
+         VALUES ($1, $2, $6, 'application', $3, 'installation', $4, $5);`,
         [
           employee.employeeId,
           `${employee.firstName} ${employee.lastName}`,
           String(applicationId),
           ticket.current_name,
           newName,
+          actuallyMoving ? "Moved installation to another technician" : "Rescheduled installation",
         ]
       );
 
       await client.query("COMMIT");
 
-      res.json({ message: `Moved to ${newName}.` });
+      res.json({
+        message: [
+          actuallyMoving ? `Moved to ${newName}` : null,
+          rescheduledFor ? `booked for ${formatAppointment(rescheduledFor)}` : null,
+        ].filter(Boolean).join(", ") + ".",
+      });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       console.error("Could not move the installation:", error);
