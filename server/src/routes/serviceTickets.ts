@@ -262,10 +262,16 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   }
 
   const viewClauses: Record<string, string> = {
-    // Unresolved sits in here on purpose. It is a closed status, but it is the
-    // one closed status that still owes the customer a visit, so leaving it
-    // out of the default view is how a job quietly stops existing.
-    attention: "t.status IN ('open', 'assigned', 'in_progress', 'unresolved')",
+    // Jobs a technician has agreed a time for (migration 080). Not a status:
+    // the ticket is still 'assigned' and still theirs, it just has an
+    // appointment on it. Starting or finishing the job clears the time and
+    // takes it off this tab.
+    //
+    // This took the slot Needs Attention used to have. That view was the four
+    // active statuses rolled together, and with a chip per status and a
+    // Rescheduled tab beside them it had stopped answering a question the
+    // others could not.
+    rescheduled: "t.status = 'assigned' AND t.rescheduled_for IS NOT NULL",
     open: "t.status = 'open'",
     assigned: "t.status = 'assigned'",
     in_progress: "t.status = 'in_progress'",
@@ -284,7 +290,11 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   // with an answer, and giving one chip no date filter when every other chip
   // has one is harder to explain than just answering it.
   const viewTransitionStatuses: Record<string, string[]> = {
-    attention: ["open", "assigned", "in_progress", "unresolved"],
+    // A reschedule is not a status move, so the date on this chip means
+    // something different from every other: not "when did it get here" but
+    // "what is booked for that day". Handled below, where the date clause is
+    // built; the entry here only keeps the chip a valid view name.
+    rescheduled: [],
     open: ["open"],
     assigned: ["assigned"],
     in_progress: ["in_progress"],
@@ -293,8 +303,10 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     cancelled: ["cancelled"],
     all: ["open", "assigned", "in_progress", "completed", "unresolved", "cancelled"],
   };
-  const safeView = Object.hasOwn(viewTransitionStatuses, view) ? view : "attention";
-  const viewClause = viewClauses[safeView] ?? viewClauses.attention;
+  // Open is the default now that Needs Attention is gone: it is the pile the
+  // office has to act on, since anything assigned is already on a phone.
+  const safeView = Object.hasOwn(viewTransitionStatuses, view) ? view : "open";
+  const viewClause = viewClauses[safeView] ?? viewClauses.open;
   // Built from the map above, never from the request, so no status name
   // reaches the SQL as text from the query string.
   const transitionList = viewTransitionStatuses[safeView]
@@ -305,7 +317,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   try {
     const params = [search, searchPattern, customerId, onDate];
     const whereSql = `
-      WHERE ${onDate ? "TRUE" : viewClause}
+      WHERE ${onDate && safeView !== "rescheduled" ? "TRUE" : viewClause}
         ${listJobType === "all" ? "" : `AND t.job_type = '${listJobType === "installation" ? "installation" : "repair"}'`}
         AND ($3::INTEGER IS NULL OR t.customer_id = $3)
         -- The day a ticket moved into the status the chip names, read from the
@@ -339,7 +351,15 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
         -- under the 6th.
         AND (
           NULLIF($4, '')::DATE IS NULL
-          OR EXISTS (
+          ${
+            safeView === "rescheduled"
+              // The Rescheduled chip's date is the appointment itself: "what
+              // is booked for Tuesday", which is the question the office
+              // actually asks of this tab. Every other chip's date is a move
+              // in the history, and a reschedule is not a move.
+              ? `OR (t.rescheduled_for AT TIME ZONE 'America/Jamaica')::DATE
+                    = NULLIF($4, '')::DATE`
+              : `OR EXISTS (
             SELECT 1
             FROM public.service_ticket_history h
             WHERE h.service_ticket_id = t.service_ticket_id
@@ -347,7 +367,8 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
               AND h.from_status IS DISTINCT FROM h.to_status
               AND (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE
                   = NULLIF($4, '')::DATE
-          )
+          )`
+          }
         )
         AND (
           $1 = ''
@@ -394,6 +415,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           t.port_number,
           t.service_date,
           t.resolution_notes,
+          t.rescheduled_for,
           t.updated_at
         FROM public.service_tickets t
         LEFT JOIN public.customers c ON c.customer_id = t.customer_id
@@ -401,6 +423,12 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           ON assignee.employee_id = t.assigned_employee_id
         ${whereSql}
         ORDER BY
+          ${
+            // Soonest appointment first on the Rescheduled tab. Priority is
+            // the wrong order for a list of agreed times: the nine o'clock is
+            // the nine o'clock whether the fault is urgent or not.
+            safeView === "rescheduled" ? "t.rescheduled_for ASC," : ""
+          }
           CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
           t.reported_date ASC,
           t.service_ticket_id ASC
@@ -411,7 +439,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
       pool.query(
         `
         SELECT
-          COUNT(*) FILTER (WHERE status IN ('open', 'assigned', 'in_progress', 'unresolved'))::INTEGER AS attention,
+          COUNT(*) FILTER (WHERE status = 'assigned' AND rescheduled_for IS NOT NULL)::INTEGER AS rescheduled,
           COUNT(*) FILTER (WHERE status = 'open')::INTEGER AS open,
           COUNT(*) FILTER (WHERE status = 'assigned')::INTEGER AS assigned,
           COUNT(*) FILTER (WHERE status = 'in_progress')::INTEGER AS in_progress,
@@ -735,6 +763,11 @@ serviceTicketsRouter.patch(
           service_date = NULLIF($8, '')::DATE,
           resolution_notes = NULLIF($9, ''),
           completed_at = CASE WHEN $4 = 'completed' THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE NULL END,
+          -- An appointment only means something while the job is waiting for
+          -- it. Any change of status from here clears it, same as from the
+          -- phone, so a job the office re-opens does not come back carrying
+          -- one from a previous life.
+          rescheduled_for = CASE WHEN $4 <> status THEN NULL ELSE rescheduled_for END,
           updated_by_employee_id = $10,
           updated_at = CURRENT_TIMESTAMP
         WHERE service_ticket_id = $11

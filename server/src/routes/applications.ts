@@ -167,6 +167,14 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         LIMIT 1)
     `;
 
+    const latestInstallAppointment = (alias: string) => `
+      (SELECT t.rescheduled_for FROM public.service_tickets t
+        WHERE t.application_id = ${alias}.application_id
+          AND t.job_type = 'installation'
+        ORDER BY t.service_ticket_id DESC
+        LIMIT 1)
+    `;
+
     const openInstall = (alias: string) => `
       EXISTS (SELECT 1 FROM public.service_tickets t
         WHERE t.application_id = ${alias}.application_id
@@ -208,6 +216,14 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
       // The technician got there and could not do it - nobody home, no answer.
       // It needs re-sending, and until now there was no way to see it at all.
       install_failed: `a.status = 'pending' AND ${latestInstall("a")} = 'unresolved'`,
+
+      // The technician rang ahead and the applicant asked for another time.
+      // Still assigned, still on the phone (migration 080) - it just has an
+      // appointment now. Took the Match Review slot in the tab strip; those
+      // applications are still in Active and All, and still get their
+      // "same person as" button on the row.
+      rescheduled: `a.status = 'pending' AND ${latestInstall("a")} = 'assigned'
+                    AND ${latestInstallAppointment("a")} IS NOT NULL`,
       // Applications confirmed to be an existing customer. Deliberately absent
       // from every other view, including 'active' and 'review', so confirming
       // one clears it off the queue. Still reachable here and under 'all'.
@@ -289,12 +305,13 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         install.resolution_notes AS install_notes,
         install.updated_at AS install_updated_at,
         install.assigned_employee_id AS install_technician_id,
+        install.rescheduled_for AS install_rescheduled_for,
         CONCAT_WS(' ', install_tech.first_name, install_tech.last_name)
           AS install_technician_name
       FROM public.applications a
       LEFT JOIN LATERAL (
         SELECT t.service_ticket_id, t.status, t.resolution_notes,
-               t.updated_at, t.assigned_employee_id
+               t.updated_at, t.assigned_employee_id, t.rescheduled_for
         FROM public.service_tickets t
         WHERE t.application_id = a.application_id
           AND t.job_type = 'installation'
@@ -385,7 +402,12 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         COUNT(*) FILTER (
           WHERE status = 'pending'
             AND ${latestInstall("applications")} = 'unresolved'
-        )::INTEGER AS install_failed
+        )::INTEGER AS install_failed,
+        COUNT(*) FILTER (
+          WHERE status = 'pending'
+            AND ${latestInstall("applications")} = 'assigned'
+            AND ${latestInstallAppointment("applications")} IS NOT NULL
+        )::INTEGER AS rescheduled
       FROM public.applications;
     `);
 

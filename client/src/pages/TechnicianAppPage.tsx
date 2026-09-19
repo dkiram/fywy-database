@@ -46,6 +46,8 @@ type Job = {
    */
   job_type: "repair" | "installation";
   application_id: number | null;
+  /** When the customer asked them to come back. Only meaningful while assigned. */
+  rescheduled_for: string | null;
   issue_summary: string;
   description: string | null;
   priority: JobPriority;
@@ -591,9 +593,16 @@ function JobCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const closed = job.status !== "assigned" && job.status !== "in_progress";
+  // The reschedule picker, open or not, and the time typed into it. Kept
+  // separate from the note draft so opening the picker never touches what
+  // was already written in the box above it.
+  const [picking, setPicking] = useState(false);
+  const [when, setWhen] = useState("");
 
-  const save = async (status: JobStatus | null) => {
+  const closed = job.status !== "assigned" && job.status !== "in_progress";
+  const rescheduled = job.status === "assigned" && !!job.rescheduled_for;
+
+  const save = async (status: JobStatus | null, rescheduledFor?: string) => {
     try {
       setBusy(true);
       setError("");
@@ -601,12 +610,18 @@ function JobCard({
       const response = await apiFetch(`/api/tech/jobs/${job.service_ticket_id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: status ?? undefined, note: draft }),
+        body: JSON.stringify({
+          status: status ?? undefined,
+          note: draft,
+          rescheduledFor: rescheduledFor ?? undefined,
+        }),
       });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save that.");
 
+      setPicking(false);
+      setWhen("");
       onSaved();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Could not save that.");
@@ -639,6 +654,12 @@ function JobCard({
             {job.job_type === "installation" && (
               <span className="inline-flex whitespace-nowrap rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
                 Install
+              </span>
+            )}
+            {rescheduled && (
+              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-secondary-container px-2.5 py-1 text-[11px] font-semibold text-secondary">
+                <span className="material-symbols-outlined text-sm">event</span>
+                {formatAppointment(job.rescheduled_for!)}
               </span>
             )}
             <span className="font-mono text-xs text-on-surface-variant">
@@ -806,6 +827,52 @@ function JobCard({
                     label="Unresolved"
                   />
                 </div>
+
+                {/* "Come back tomorrow at nine." Not an ending and not a
+                    failure - the job stays theirs with a time on it. The
+                    picker is hidden behind a button because most jobs never
+                    need it, and a date field sitting open on every card would
+                    read as something that has to be filled in. */}
+                {picking ? (
+                  <div className="rounded-xl border border-outline-variant bg-white p-3">
+                    <label className="block text-sm font-semibold text-on-surface">
+                      Come back on
+                      <input
+                        type="datetime-local"
+                        value={when}
+                        onChange={(event) => setWhen(event.target.value)}
+                        min={minAppointment()}
+                        className="mt-2 w-full rounded-lg border border-outline-variant bg-white px-3 py-3 text-base text-on-surface"
+                      />
+                    </label>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => { setPicking(false); setWhen(""); }}
+                        className="rounded-xl bg-surface-container px-4 py-3 text-sm font-semibold text-on-surface-variant"
+                      >
+                        Cancel
+                      </button>
+                      <ActionButton
+                        busy={busy}
+                        disabled={!when}
+                        onClick={() => save(null, when)}
+                        className="bg-secondary text-white"
+                        icon="event"
+                        label="Set time"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <ActionButton
+                    busy={busy}
+                    onClick={() => setPicking(true)}
+                    className="bg-secondary-container text-secondary"
+                    icon="event"
+                    label={rescheduled ? "Change the time" : "Reschedule"}
+                  />
+                )}
               </div>
 
               <p className="mt-2 text-xs leading-5 text-on-surface-variant">
@@ -909,6 +976,25 @@ function JobStatusPill({ status }: { status: JobStatus }) {
       {labels[status]}
     </span>
   );
+}
+
+/** "Sat 20 Sept, 9:00 am" for a rescheduled visit. */
+function formatAppointment(value: string) {
+  return new Date(value).toLocaleString("en-JM", {
+    weekday: "short", day: "numeric", month: "short",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+
+/**
+ * The earliest the picker will accept, as a datetime-local string in the
+ * phone's own time. Stops the wheel landing on yesterday by accident; the
+ * server checks again with a proper clock.
+ */
+function minAppointment() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 16);
 }
 
 function formatDate(value: string | null) {

@@ -68,6 +68,7 @@ type ApplicationRecord = {
   install_updated_at: string | null;
   install_technician_id: number | null;
   install_technician_name: string | null;
+  install_rescheduled_for: string | null;
 };
 
 // Minimal shape of /api/customers, used by the Match Review customer picker.
@@ -97,6 +98,7 @@ type ApplicationSummary = {
   out_for_install: number;
   installed: number;
   install_failed: number;
+  rescheduled: number;
 };
 
 type ApplicationPagination = {
@@ -122,6 +124,10 @@ type ApplicationView =
   | "out_for_install"
   | "installed"
   | "install_failed"
+  // The technician agreed a time with the applicant. Still out, still on the
+  // phone - it just has an appointment on it. Took the Match Review slot in
+  // the tab strip; those applications are still under Active and All.
+  | "rescheduled"
   | "all";
 
 type OltOption = {
@@ -167,6 +173,7 @@ const emptySummary: ApplicationSummary = {
   out_for_install: 0,
   installed: 0,
   install_failed: 0,
+  rescheduled: 0,
 };
 
 const emptyPagination: ApplicationPagination = {
@@ -832,7 +839,11 @@ function ApplicationsPage() {
             {(
               [
                 ["active", "Active"],
-                ["review", "Match Review"],
+                // Rescheduled sits where Match Review was. Match Review
+                // applications are still under Active and All, and still get
+                // their "same person as" button on the row - it was the tab
+                // that had stopped earning its place, not the state.
+                ["rescheduled", "Rescheduled"],
                 // Where an installation has got to. Installed is the one that
                 // matters day to day: a technician has finished and the office
                 // has not activated the customer yet, which is exactly the
@@ -1760,6 +1771,13 @@ function DrawerSection({ title, icon, children }: { title: string; icon: string;
  * activates it the installation is history, and a "Done" badge on a serviced
  * row would just be repeating the status beside it.
  */
+/** "Sat 20 Sept, 9:00 am" — when the technician agreed to come back. */
+function formatAppointment(value: string) {
+  return new Date(value).toLocaleString("en-JM", {
+    weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
+  });
+}
+
 function InstallBadge({ application }: { application: ApplicationRecord }) {
   const status = application.install_status;
 
@@ -1768,7 +1786,9 @@ function InstallBadge({ application }: { application: ApplicationRecord }) {
   const who = application.install_technician_name;
 
   const shown: Record<string, { label: string; className: string }> = {
-    assigned: { label: "Out for install", className: "bg-info/10 text-info" },
+    assigned: application.install_rescheduled_for
+      ? { label: `Booked ${formatAppointment(application.install_rescheduled_for)}`, className: "bg-secondary-container text-secondary" }
+      : { label: "Out for install", className: "bg-info/10 text-info" },
     in_progress: { label: "Being installed", className: "bg-warning-container text-warning" },
     // Solid, matching the unresolved pill on the service ticket queue, so the
     // one state that needs somebody to act reads the same in both places.
@@ -1828,7 +1848,9 @@ function InstallationDispatchRow({
               {status === "in_progress" ? "Being installed" : "Sent"} — {application.install_technician_name || "a technician"}
             </p>
             <p className="mt-1 text-xs text-on-surface-variant">
-              It is on their phone. They mark it done when the service is in.
+              {application.install_rescheduled_for
+                ? `Coming back ${formatAppointment(application.install_rescheduled_for)} — the applicant asked for that time.`
+                : "It is on their phone. They mark it done when the service is in."}
             </p>
           </div>
           {/* Only while it is out. This whole panel already sits behind the

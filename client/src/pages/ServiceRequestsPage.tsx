@@ -9,7 +9,7 @@ import { useScrollRestoration } from "../hooks/useScrollRestoration";
 // an employee is assigned, and the technician records the completed work.
 type TicketStatus = "open" | "assigned" | "in_progress" | "completed" | "unresolved" | "cancelled";
 type TicketPriority = "low" | "normal" | "high" | "urgent";
-type TicketView = "attention" | "open" | "assigned" | "in_progress" | "completed" | "unresolved" | "cancelled" | "all";
+type TicketView = "rescheduled" | "open" | "assigned" | "in_progress" | "completed" | "unresolved" | "cancelled" | "all";
 
 type ServiceTicket = {
   service_ticket_id: number; customer_id: number | null; legacy_customer_id: number | null;
@@ -24,6 +24,9 @@ type ServiceTicket = {
   created_by_name?: string | null; completed_by_name?: string | null;
   pole_box_number: string | null;
   port_number: string | null; service_date: string | null; resolution_notes: string | null;
+  // When the technician agreed to come back (migration 080). A time, not a
+  // status: the ticket stays 'assigned' and stays on their phone.
+  rescheduled_for: string | null;
 };
 
 type CustomerOption = {
@@ -51,9 +54,9 @@ function ServiceRequestsPage() {
   const openCustomer = useOpenCustomerProfile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState<ServiceTicket[]>([]);
-  const [summary, setSummary] = useState({ attention: 0, open: 0, assigned: 0, in_progress: 0, completed: 0, unresolved: 0 });
+  const [summary, setSummary] = useState({ rescheduled: 0, open: 0, assigned: 0, in_progress: 0, completed: 0, unresolved: 0 });
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
-  const view = (searchParams.get("view") as TicketView) || "attention";
+  const view = (searchParams.get("view") as TicketView) || "open";
   const search = searchParams.get("search") ?? "";
   // One day, read through whichever view is selected: the chip picks the
   // status, the date asks when a ticket moved into it. In the URL alongside
@@ -173,7 +176,7 @@ function ServiceRequestsPage() {
       setSaving(true); setModalError("");
       const response = await apiFetch("/api/service-tickets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not create service ticket.");
-      setShowNew(false); setNotice(`Service ticket #${data.ticket.service_ticket_id} was created.`); setView("attention"); await loadTickets();
+      setShowNew(false); setNotice(`Service ticket #${data.ticket.service_ticket_id} was created.`); setView(data.ticket.assigned_employee_id ? "assigned" : "open"); await loadTickets();
     } catch (saveError) { setModalError(saveError instanceof Error ? saveError.message : "Could not create service ticket."); }
     finally { setSaving(false); }
   };
@@ -222,7 +225,10 @@ function ServiceRequestsPage() {
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-semibold tracking-tight text-on-surface">Service Tickets</h1><p className="mt-1 text-sm text-on-surface-variant">Report customer issues, assign technicians, and record completed work.</p></div><button type="button" onClick={openNew} className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary shadow-sm"><span className="material-symbols-outlined text-lg">add</span>New Ticket</button></div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6"><Summary label="Needs Attention" value={summary.attention} icon="warning" tone="warning" /><Summary label="Open" value={summary.open} icon="inbox" tone="primary" /><Summary label="Assigned" value={summary.assigned} icon="engineering" tone="primary" /><Summary label="In Progress" value={summary.in_progress} icon="construction" tone="warning" /><Summary label="Completed" value={summary.completed} icon="task_alt" tone="positive" />{/* Counted separately from Completed because these are the jobs that
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">{/* Took the Needs Attention slot. That card was the four active
+          statuses rolled together, and with a card per status beside it, it
+          had stopped saying anything the others did not. */}
+      <Summary label="Rescheduled" value={summary.rescheduled} icon="event" tone="scheduled" /><Summary label="Open" value={summary.open} icon="inbox" tone="primary" /><Summary label="Assigned" value={summary.assigned} icon="engineering" tone="primary" /><Summary label="In Progress" value={summary.in_progress} icon="construction" tone="warning" /><Summary label="Completed" value={summary.completed} icon="task_alt" tone="positive" />{/* Counted separately from Completed because these are the jobs that
           still owe somebody a visit — the technician got there and could not
           do the work. They stay inside Needs Attention for the same reason. */}
       <Summary label="Unresolved" value={summary.unresolved} icon="door_front" tone="stalled" /></div>
@@ -230,11 +236,11 @@ function ServiceRequestsPage() {
       {error && <div className="rounded-lg bg-error/10 p-4 text-sm text-error">{error}</div>}
 
       <section className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4"><div className="flex flex-wrap gap-2">{([['attention', 'Needs Attention'], ['open', 'Open'], ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['unresolved', 'Unresolved'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => setView(value)} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><div className="flex flex-wrap items-center justify-between gap-3"><OnDateFilter view={view} value={onDate} onChange={setOnDate} /><SearchInput value={search} onChange={setSearch} placeholder="Search ticket, customer, phone, issue..." /></div></div>
+        <div className="flex flex-col gap-3 border-b border-surface-container px-5 py-4"><div className="flex flex-wrap gap-2">{([['rescheduled', 'Rescheduled'], ['open', 'Open'], ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['completed', 'Completed'], ['unresolved', 'Unresolved'], ['all', 'All']] as Array<[TicketView, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => setView(value)} className={view === value ? activeChip : idleChip}>{label}</button>)}</div><div className="flex flex-wrap items-center justify-between gap-3"><OnDateFilter view={view} value={onDate} onChange={setOnDate} /><SearchInput value={search} onChange={setSearch} placeholder="Search ticket, customer, phone, issue..." /></div></div>
         <div className="overflow-x-auto"><table className="w-full min-w-[44rem] text-left md:min-w-0"><thead className="bg-surface-container-low"><tr><Heading>Ticket</Heading><Heading>Customer</Heading><Heading>Problem</Heading><Heading>Priority</Heading><Heading>Status</Heading><Heading>Technician</Heading><Heading>Reported</Heading><th className="px-5 py-4" /></tr></thead><tbody className="divide-y divide-surface-container">{!loading && tickets.map((ticket) => <tr key={ticket.service_ticket_id} className="cursor-pointer transition hover:bg-surface-container-low/60" onClick={() => openEdit(ticket)}><td className="px-5 py-4 font-mono text-sm font-medium text-primary">#{ticket.service_ticket_id}</td><td className="px-5 py-4"><p className="font-semibold text-on-surface">{ticket.customer_name || (ticket.legacy_customer_id ? "Legacy Customer" : "Customer unavailable")}</p>{/* The address is on the row because a technician reading this queue
        is deciding where to drive, and making them open each profile to
        find that out is the slowest possible way to answer it. */}
-    <p className="mt-0.5 max-w-[22rem] text-xs leading-5 text-on-surface-variant">{ticket.address || "No address on file"}</p>{ticket.customer_id ? <button type="button" onClick={(event) => { event.stopPropagation(); openCustomer(ticket.customer_id!); }} className="mt-1 whitespace-nowrap text-left text-xs font-medium text-primary">Customer #{ticket.customer_id}</button> : <p className="mt-1 whitespace-nowrap text-xs text-on-surface-variant">{ticket.legacy_customer_id ? `Legacy Customer #${ticket.legacy_customer_id}` : "No linked customer profile"}</p>}</td><td className="max-w-xs px-5 py-4 text-sm text-on-surface"><p className="line-clamp-2">{ticket.issue_summary}</p><p className="mt-1 text-xs text-on-surface-variant">Pole {ticket.pole_box_number || "—"} · Port {ticket.port_number || "—"}</p></td><td className="px-5 py-4"><PriorityBadge priority={ticket.priority} /></td><td className="px-5 py-4"><StatusBadge status={ticket.status} /></td><td className="px-5 py-4 text-sm text-on-surface-variant">{ticket.assigned_employee_name || "Unassigned"}</td><td className="whitespace-nowrap px-5 py-4 text-sm text-on-surface-variant">{formatDate(ticket.reported_date)}</td><td className="px-5 py-4 text-right"><span className="material-symbols-outlined text-outline">chevron_right</span></td></tr>)}</tbody></table></div>
+    <p className="mt-0.5 max-w-[22rem] text-xs leading-5 text-on-surface-variant">{ticket.address || "No address on file"}</p>{ticket.customer_id ? <button type="button" onClick={(event) => { event.stopPropagation(); openCustomer(ticket.customer_id!); }} className="mt-1 whitespace-nowrap text-left text-xs font-medium text-primary">Customer #{ticket.customer_id}</button> : <p className="mt-1 whitespace-nowrap text-xs text-on-surface-variant">{ticket.legacy_customer_id ? `Legacy Customer #${ticket.legacy_customer_id}` : "No linked customer profile"}</p>}</td><td className="max-w-xs px-5 py-4 text-sm text-on-surface"><p className="line-clamp-2">{ticket.issue_summary}</p><p className="mt-1 text-xs text-on-surface-variant">Pole {ticket.pole_box_number || "—"} · Port {ticket.port_number || "—"}</p></td><td className="px-5 py-4"><PriorityBadge priority={ticket.priority} /></td><td className="px-5 py-4"><StatusBadge status={ticket.status} />{ticket.status === "assigned" && ticket.rescheduled_for && <span className="mt-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-secondary-container px-2.5 py-1 text-[11px] font-medium text-secondary"><span className="material-symbols-outlined text-sm">event</span>{formatAppointment(ticket.rescheduled_for)}</span>}</td><td className="px-5 py-4 text-sm text-on-surface-variant">{ticket.assigned_employee_name || "Unassigned"}</td><td className="whitespace-nowrap px-5 py-4 text-sm text-on-surface-variant">{formatDate(ticket.reported_date)}</td><td className="px-5 py-4 text-right"><span className="material-symbols-outlined text-outline">chevron_right</span></td></tr>)}</tbody></table></div>
         {loading && <EmptyState text="Loading service tickets..." />}{!loading && !error && tickets.length === 0 && <EmptyState text="No service tickets found." />}{!loading && tickets.length > 0 && <Pagination pagination={pagination} setPage={setPage} />}
       </section>
 
@@ -252,7 +258,7 @@ const inputClass = "mt-1.5 w-full rounded-lg border border-outline-variant bg-wh
 const activeChip = "rounded-full bg-primary px-4 py-2 text-xs font-medium text-on-primary";
 const idleChip = "rounded-full bg-surface-container px-4 py-2 text-xs font-medium text-on-surface-variant transition hover:bg-surface-container-high";
 
-function Summary({ label, value, icon, tone }: { label: string; value: number; icon: string; tone: "primary" | "positive" | "warning" | "stalled" }) { const tones = { primary: "bg-info/10 text-info", positive: "bg-tertiary/10 text-tertiary", warning: "bg-warning-container text-warning", stalled: "bg-stalled/10 text-stalled" }; return <div className="rounded-xl bg-surface-container-lowest p-4 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p><p className="mt-1 text-2xl font-medium text-on-surface">{value.toLocaleString()}</p></div><span className={`material-symbols-outlined rounded-lg p-2 ${tones[tone]}`}>{icon}</span></div></div>; }
+function Summary({ label, value, icon, tone }: { label: string; value: number; icon: string; tone: "primary" | "positive" | "warning" | "stalled" | "scheduled" }) { const tones = { primary: "bg-info/10 text-info", positive: "bg-tertiary/10 text-tertiary", warning: "bg-warning-container text-warning", stalled: "bg-stalled/10 text-stalled", scheduled: "bg-secondary-container text-secondary" }; return <div className="rounded-xl bg-surface-container-lowest p-4 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">{label}</p><p className="mt-1 text-2xl font-medium text-on-surface">{value.toLocaleString()}</p></div><span className={`material-symbols-outlined rounded-lg p-2 ${tones[tone]}`}>{icon}</span></div></div>; }
 /**
  * What the date means, per view.
  *
@@ -266,7 +272,9 @@ function Summary({ label, value, icon, tone }: { label: string; value: number; i
  * general word: something moved into the pile that day.
  */
 const ON_DATE_LABELS: Record<TicketView, string> = {
-  attention: "Moved on",
+  // The one chip whose date is not a move in the history but the appointment
+  // itself: "what is booked for Tuesday".
+  rescheduled: "Booked for",
   open: "Opened on",
   assigned: "Assigned on",
   in_progress: "Started on",
@@ -293,7 +301,7 @@ function OnDateFilter({
 }: {
   view: TicketView; value: string; onChange: (value: string) => void;
 }) {
-  const label = ON_DATE_LABELS[view] ?? ON_DATE_LABELS.attention;
+  const label = ON_DATE_LABELS[view] ?? ON_DATE_LABELS.open;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs font-medium uppercase tracking-wider text-on-surface-variant">{label}</span>
@@ -370,6 +378,8 @@ function reporterLabel(ticket: ServiceTicket) {
   return `Reported by ${ticket.created_by_name || "legacy import"}`;
 }
 
+/** "Sat 20 Sept, 9:00 am" — when the technician agreed to come back. */
+function formatAppointment(value: string) { return new Date(value).toLocaleString("en-JM", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); }
 function humanize(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function formatDate(value: string | null) { if (!value) return "—"; return new Date(`${value.slice(0, 10)}T00:00:00`).toLocaleDateString("en-JM", { day: "numeric", month: "short", year: "numeric" }); }
 function jamaicaToday() { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Jamaica", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }

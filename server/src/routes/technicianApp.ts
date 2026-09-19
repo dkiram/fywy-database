@@ -85,6 +85,44 @@ type TechnicianStatus = (typeof technicianStatuses)[number];
  */
 const editableStatuses = ["assigned", "in_progress", "unresolved"];
 
+/**
+ * Turns the phone's datetime-local value into an instant.
+ *
+ * The input arrives as "2026-09-20T09:00" with no zone: it is the time on the
+ * technician's screen, which is Jamaica time. Jamaica does not observe
+ * daylight saving, so pinning -05:00 is exact rather than approximately right,
+ * and it keeps this from depending on whatever TZ the container happens to
+ * run in.
+ *
+ * Returns null for anything unparseable, in the past, or absurdly far out - a
+ * customer asking for "next Tuesday" is real; a typo landing in 2062 is not.
+ */
+function parseAppointment(value: unknown): Date | null {
+  const text = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)) return null;
+
+  const when = new Date(`${text}:00-05:00`);
+  if (Number.isNaN(when.getTime())) return null;
+
+  const now = Date.now();
+  const fiveMinutes = 5 * 60 * 1000;
+  const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+
+  if (when.getTime() < now - fiveMinutes) return null;
+  if (when.getTime() > now + ninetyDays) return null;
+
+  return when;
+}
+
+/** "Sat 20 Sept, 9:00 am" in Jamaica time, for history rows and audit lines. */
+function formatJamaica(when: Date) {
+  return new Intl.DateTimeFormat("en-JM", {
+    timeZone: "America/Jamaica",
+    weekday: "short", day: "numeric", month: "short",
+    hour: "numeric", minute: "2-digit",
+  }).format(when);
+}
+
 function requireTechnician(req: Request, res: Response, next: NextFunction) {
   if (!req.session.technician) {
     return res.status(401).json({ error: "Not signed in." });
@@ -405,6 +443,7 @@ technicianAppRouter.get("/tech/jobs", requireTechnician, async (req, res) => {
       t.service_date,
       t.resolution_notes,
       t.updated_at,
+      t.rescheduled_for,
       t.job_type,
       t.application_id,
       c.customer_id,
@@ -509,10 +548,24 @@ technicianAppRouter.patch(
     const requestedStatus = cleanText(req.body?.status);
     const note = cleanText(req.body?.note);
 
+    // "Come back tomorrow at nine." A time, not a status - see migration 080.
+    const rescheduleRequested = req.body?.rescheduledFor !== undefined;
+    const rescheduledFor = rescheduleRequested
+      ? parseAppointment(req.body.rescheduledFor)
+      : null;
+
     if (requestedStatus && !technicianStatuses.includes(requestedStatus as TechnicianStatus)) {
       return res.status(400).json({ error: "That is not a status you can set." });
     }
-    if (!requestedStatus && !note) {
+    if (rescheduleRequested && rescheduledFor === null) {
+      return res.status(400).json({
+        error: "Pick a date and time that is still to come, within the next three months.",
+      });
+    }
+    if (rescheduleRequested && requestedStatus) {
+      return res.status(400).json({ error: "Reschedule it, or change its status - not both." });
+    }
+    if (!requestedStatus && !note && !rescheduleRequested) {
       return res.status(400).json({ error: "Nothing to save." });
     }
     if (note.length > 1000) {
@@ -559,8 +612,19 @@ technicianAppRouter.patch(
         });
       }
 
-      const status = (requestedStatus || current.status) as string;
+      // Rescheduling from in_progress goes back to assigned: they are not at
+      // the address any more, and the phone should show it as waiting for its
+      // time rather than as work under way. A rescheduled job otherwise keeps
+      // whatever status it has.
+      const status = (
+        rescheduleRequested ? "assigned" : requestedStatus || current.status
+      ) as string;
       const closing = status === "completed" || status === "unresolved";
+
+      if (rescheduleRequested && !editableStatuses.includes(current.status)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "This job cannot be rescheduled from here." });
+      }
 
       // The database refuses a completed or unresolved ticket without a reason
       // (migrations 025 and 074), so it is checked here, where the resulting
@@ -600,18 +664,28 @@ technicianAppRouter.patch(
             WHEN $1 = 'completed' THEN COALESCE(completed_at, CURRENT_TIMESTAMP)
             ELSE NULL
           END,
+          -- Set by a reschedule; cleared by any change of status. An
+          -- appointment is only meaningful while the job is waiting for it,
+          -- and a ticket re-opened weeks later must not arrive carrying one
+          -- from a previous life.
+          rescheduled_for = CASE
+            WHEN $6::TIMESTAMPTZ IS NOT NULL THEN $6::TIMESTAMPTZ
+            WHEN $1 <> status THEN NULL
+            ELSE rescheduled_for
+          END,
           updated_by_employee_id = $4,
           updated_at = CURRENT_TIMESTAMP
         WHERE service_ticket_id = $5
         RETURNING *;
         `,
-        [status, closing, note, technician.employeeId, ticketId]
+        [status, closing, note, technician.employeeId, ticketId, rescheduledFor]
       );
 
       const statusChanged = status !== current.status;
-      const historyNote =
-        note ||
-        `Marked ${status.replace(/_/g, " ")} by ${technician.firstName} ${technician.lastName}`;
+      const historyNote = rescheduledFor
+        ? `Rescheduled for ${formatJamaica(rescheduledFor)}` + (note ? ` — ${note}` : "")
+        : note ||
+          `Marked ${status.replace(/_/g, " ")} by ${technician.firstName} ${technician.lastName}`;
 
       await client.query(
         `INSERT INTO public.service_ticket_history
