@@ -58,14 +58,13 @@
      a second visit. */
   --color-stalled: #3f5a70;
 
-  /* Rescheduled (migration 080) — a visit with an agreed time on it. Solid
-     marigold with dark text, because a readable "orangish yellow" cannot be
-     done as pale-tint-plus-coloured-text: any yellow dark enough to read on
-     cream is brown, and that is already In Progress. A filled pill keeps
-     the yellow yellow. Deliberately warmer and brighter than --color-warning
-     so a booked job and a job under way never read as the same thing. */
-  --color-scheduled: #f2a900;
-  --color-on-scheduled: #3b2300;
+  /* Rescheduled (migration 080) — a visit with an agreed time on it. Used
+     the same way as every other soft status: the colour at 15% behind
+     itself at full strength. A golden orange, chosen as the yellowest shade
+     that still reads at pill size on white (about 5:1) - go any yellower and
+     the text washes out, go any browner and it becomes --color-warning,
+     which is In Progress. */
+  --color-scheduled: #c26a00;
 
   /* Our shared navy sidebar */
   --color-sidebar: #0b1c2d;

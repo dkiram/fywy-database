@@ -1798,7 +1798,7 @@ function InstallBadge({ application }: { application: ApplicationRecord }) {
 
   const shown: Record<string, { label: string; className: string }> = {
     assigned: application.install_rescheduled_for
-      ? { label: `Booked ${formatAppointment(application.install_rescheduled_for)}`, className: "bg-scheduled text-on-scheduled" }
+      ? { label: `Booked ${formatAppointment(application.install_rescheduled_for)}`, className: "bg-scheduled/15 text-scheduled" }
       : { label: "Out for install", className: "bg-info/10 text-info" },
     in_progress: { label: "Being installed", className: "bg-warning-container text-warning" },
     // Solid, matching the unresolved pill on the service ticket queue, so the
@@ -1873,7 +1873,7 @@ function InstallationDispatchRow({
             <button
               type="button"
               onClick={onReschedule}
-              className="rounded-lg bg-scheduled/25 px-3 py-2 text-xs font-medium text-on-scheduled transition hover:bg-scheduled/40"
+              className="rounded-lg bg-scheduled/15 px-3 py-2 text-xs font-medium text-scheduled transition hover:bg-scheduled/25"
             >
               {application.install_rescheduled_for ? "Change the time" : "Reschedule"}
             </button>

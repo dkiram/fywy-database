@@ -659,7 +659,7 @@ function JobCard({
               </span>
             )}
             {rescheduled && (
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-scheduled px-2.5 py-1 text-[11px] font-semibold text-on-scheduled">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-scheduled/15 px-2.5 py-1 text-[11px] font-semibold text-scheduled">
                 <span className="material-symbols-outlined text-sm">event</span>
                 {formatAppointment(job.rescheduled_for!)}
               </span>
@@ -860,7 +860,7 @@ function JobCard({
                         busy={busy}
                         disabled={!when}
                         onClick={() => save(null, when)}
-                        className="bg-scheduled text-on-scheduled"
+                        className="bg-scheduled text-white"
                         icon="event"
                         label="Set time"
                       />
@@ -870,7 +870,7 @@ function JobCard({
                   <ActionButton
                     busy={busy}
                     onClick={() => setPicking(true)}
-                    className="bg-scheduled/25 text-on-scheduled"
+                    className="bg-scheduled/15 text-scheduled"
                     icon="event"
                     label={rescheduled ? "Change the time" : "Reschedule"}
                   />
