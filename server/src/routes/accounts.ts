@@ -15,6 +15,7 @@ import {
   type OntControlAction,
 } from "../huawei/verifyOnt.js";
 import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
+import { loadWaiverBalance } from "./waiverBalance.js";
 
 // MVP 3 account-operations API.
 //
@@ -1685,19 +1686,16 @@ accountsRouter.post(
           (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
         );`
       );
-      const billingResult = await client.query(
-        `SELECT outstanding_balance FROM public.customer_billing_status WHERE customer_id = $1;`,
-        [customerId]
-      );
-      const outstandingBalance = Number(billingResult.rows[0]?.outstanding_balance ?? 0);
+      const waiverBalance = await loadWaiverBalance(client, customerId);
+      const outstandingBalance = waiverBalance.amount;
       if (outstandingBalance <= 0) {
         await client.query("ROLLBACK");
-        return res.status(409).json({ error: "This customer has no outstanding balance to waive." });
+        return res.status(409).json({ error: "This customer has no remaining amount to waive." });
       }
       if (Number(amount) > outstandingBalance) {
         await client.query("ROLLBACK");
         return res.status(400).json({
-          error: `The waiver cannot exceed the J$${outstandingBalance.toFixed(2)} outstanding balance.`,
+          error: `The waiver cannot exceed the J$${outstandingBalance.toFixed(2)} ${waiverBalance.label}.`,
         });
       }
 
@@ -1895,10 +1893,12 @@ accountsRouter.get("/waiver-requests", requireAuth, requireAdmin, async (_req, r
           customer.name AS customer_name,
           customer.telephone,
           billing.outstanding_balance,
+          suspension.total_due_to_reconnect,
           CONCAT_WS(' ', requester.first_name, requester.last_name) AS requested_by_name
        FROM public.waiver_requests request
        JOIN public.customers customer ON customer.customer_id = request.customer_id
        LEFT JOIN public.customer_billing_status billing ON billing.customer_id = request.customer_id
+       LEFT JOIN public.customer_suspension_status suspension ON suspension.customer_id = request.customer_id
        LEFT JOIN public.employees requester
          ON requester.employee_id = request.requested_by_employee_id
        WHERE request.status = 'pending'
@@ -1993,17 +1993,14 @@ accountsRouter.post(
           (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE
         );`
       );
-      const billingResult = await client.query(
-        `SELECT outstanding_balance FROM public.customer_billing_status WHERE customer_id = $1;`,
-        [waiverRequest.customer_id]
-      );
-      const outstandingBalance = Number(billingResult.rows[0]?.outstanding_balance ?? 0);
+      const waiverBalance = await loadWaiverBalance(client, Number(waiverRequest.customer_id));
+      const outstandingBalance = waiverBalance.amount;
       if (outstandingBalance <= 0 || Number(waiverRequest.amount) > outstandingBalance) {
         await client.query("ROLLBACK");
         return res.status(409).json({
           error: outstandingBalance <= 0
-            ? "The customer no longer has an outstanding balance. Reject this request instead."
-            : `The current outstanding balance is J$${outstandingBalance.toFixed(2)}. Reject this request and submit a lower amount.`,
+            ? "The customer no longer has an amount to waive. Reject this request instead."
+            : `The current ${waiverBalance.label} is J$${outstandingBalance.toFixed(2)}. Reject this request and submit a lower amount.`,
         });
       }
 

@@ -53,6 +53,16 @@ transaction, *before* the cleared-balance check. Two consequences worth knowing:
   everything else, so no stale price is ever left on the account. The customer
   pays at the counter first, then the reconnection commits.
 
+Discount requests for suspended accounts may cover the full credit-adjusted
+`total_due_to_reconnect`, including the unposted return fee, even when the
+current outstanding balance is zero. The discount/credit form offers “Use full
+reconnection amount” and previews the remainder; Admin approval shows the same
+total and checks it again under the customer lock. An approved discount creates
+ledger credit that covers the fee when End Suspension posts it. It does not
+activate service automatically. Later payments reduce the allowable discount;
+later holding charges or a higher return fee can change the quote. Other account
+statuses remain capped at their current outstanding balance.
+
 ## The workflow
 
 ```
@@ -73,7 +83,11 @@ active ──suspend──> suspended ──end-suspension──> active
   before the database status and billing change. Confirmation is `SUSPEND <id>`.
 * `POST /api/customers/:id/end-suspension` — one direct transition back to
   `active`, gated on a cleared balance, with the usual audited
-  `adminBalanceOverride` available. Confirmation is `RECONNECT <id>`.
+  `adminBalanceOverride` available. The End Suspension dialog shows the return
+  fee and total due after credits, and lets an Admin explicitly select
+  “End suspension even if a balance remains”. This restores service without
+  forgiving the remaining balance or return fee; the override and reason are
+  audited. Confirmation is `RECONNECT <id>`.
 * `POST /api/customers/:id/deactivate` now also accepts `suspended`. This is
   the write-off path for a customer who went away, stopped answering and
   stopped paying the holding fee: it ends the suspension, stops it accruing,

@@ -71,6 +71,22 @@ const PASSCODE_LOCK_MINUTES = 15;
  */
 const FINISHED_JOBS_SHOWN = 15;
 
+/**
+ * Identifies this deploy to the phones.
+ *
+ * A home-screen web app on iOS does not reload when reopened; it restores the
+ * page it had, and keeps running whatever build it loaded last week. Nothing
+ * in the browser tells it a deploy happened. So the API tells it: this value
+ * goes down with every queue refresh, the phone remembers the first one it
+ * saw, and reloads itself the first time a different one arrives.
+ *
+ * The process start time is a good enough marker because the API restarts on
+ * every deploy, in the same compose restart that swaps the client build in.
+ * It is not a version and does not pretend to be one - it only has to differ
+ * from the last one.
+ */
+const DEPLOY_MARK = String(Date.now());
+
 /** Statuses a technician is allowed to move a job into from the phone. */
 const technicianStatuses = ["in_progress", "completed", "unresolved"] as const;
 type TechnicianStatus = (typeof technicianStatuses)[number];
@@ -483,6 +499,7 @@ technicianAppRouter.get("/tech/jobs", requireTechnician, async (req, res) => {
       // Lets the phone tell "nothing new" from "the request failed" without
       // comparing the whole list.
       fetchedAt: new Date().toISOString(),
+      deployMark: DEPLOY_MARK,
     });
   } catch (error) {
     console.error("Could not load technician jobs:", error);

@@ -11,6 +11,10 @@ type LookupRow = {
   due_date: string | null;
   is_past: boolean;
   has_charge: boolean;
+  already_settled: boolean;
+  owing_due_date: string | null;
+  owing_entry_type: string | null;
+  owing_service_month: string | null;
   service_on: boolean | null;
   status_then: string | null;
   customer_rate_history_id: number | null;
@@ -36,6 +40,11 @@ const baseRow: LookupRow = {
   due_date: '2026-07-18',
   is_past: true,
   has_charge: false,
+  // July is the oldest thing owing on this account, so it is not settled.
+  already_settled: false,
+  owing_due_date: '2026-07-18',
+  owing_entry_type: 'monthly_charge',
+  owing_service_month: '2026-07-01',
   service_on: true,
   status_then: 'active',
   customer_rate_history_id: 7,
@@ -56,10 +65,61 @@ test('a past month that was never billed is charged at the rate in force', async
   assert.deepEqual(charge.values, [6105, '4500.00', '2026-07-18', 7, 2]);
 });
 
-test('a month that already has a charge is left alone', async () => {
+test('a month that already has an open charge is left alone', async () => {
   const { client, inserts } = fakeClient({ ...baseRow, has_charge: true });
   const outcome = await ensureMonthlyChargeForPayment(client, input);
   assert.deepEqual(outcome, { kind: 'ok', reason: 'already_charged' });
+  assert.equal(inserts.length, 0);
+});
+
+// The Sept 2026 settled-twice shape: August was charged, then forgiven by the
+// clean-slate, then the customer comes in believing August is what they owe.
+// The charge exists but has nothing left on it; September is the open month.
+const augustForgiven: LookupRow = {
+  ...baseRow,
+  month_start: '2026-08-01', due_date: '2026-08-04', has_charge: true,
+  already_settled: true,
+  owing_due_date: '2026-09-04', owing_entry_type: 'monthly_charge', owing_service_month: '2026-08-01',
+};
+
+test('a month that was charged and already settled is refused, naming the open month', async () => {
+  const { client, inserts } = fakeClient({ ...augustForgiven, owing_service_month: '2026-09-01' });
+  const outcome = await ensureMonthlyChargeForPayment(client, { ...input, monthPaid: '2026-08' });
+  assert.equal(outcome.kind, 'refused');
+  if (outcome.kind === 'refused') {
+    assert.equal(outcome.code, 'settled');
+    assert.match(outcome.message, /August 2026 is already settled/);
+    assert.match(outcome.message, /September 2026 \(due 4 September 2026\)/);
+  }
+  assert.equal(inserts.length, 0);
+});
+
+test('a settled month on an account that owes nothing warns that the money becomes credit', async () => {
+  const { client } = fakeClient({ ...augustForgiven, owing_due_date: null, owing_entry_type: null, owing_service_month: null });
+  const outcome = await ensureMonthlyChargeForPayment(client, { ...input, monthPaid: '2026-08' });
+  assert.equal(outcome.kind, 'refused');
+  if (outcome.kind === 'refused') {
+    assert.equal(outcome.code, 'settled');
+    assert.match(outcome.message, /nothing is owing/);
+    assert.match(outcome.message, /sitting as credit/);
+    assert.match(outcome.message, /next unbilled month/);
+  }
+});
+
+test('a settled month whose open item is a fee names the fee, not a service month', async () => {
+  const { client } = fakeClient({ ...augustForgiven, owing_due_date: '2026-09-15', owing_entry_type: 'reconnection_fee', owing_service_month: null });
+  const outcome = await ensureMonthlyChargeForPayment(client, { ...input, monthPaid: '2026-08' });
+  assert.equal(outcome.kind, 'refused');
+  if (outcome.kind === 'refused') {
+    assert.match(outcome.message, /a reconnection fee due 15 September 2026/);
+  }
+});
+
+test('explicit override accepts a settled month as credit without raising a charge', async () => {
+  const { client, inserts } = fakeClient(augustForgiven);
+  const outcome = await ensureMonthlyChargeForPayment(client, { ...input, monthPaid: '2026-08', overrideDisconnectedMonth: true });
+  assert.equal(outcome.kind, 'overridden');
+  if (outcome.kind === 'overridden') assert.equal(outcome.code, 'settled');
   assert.equal(inserts.length, 0);
 });
 
@@ -94,6 +154,7 @@ test('a month the customer was disconnected is refused, whether past or current'
     const outcome = await ensureMonthlyChargeForPayment(client, input);
     assert.equal(outcome.kind, 'refused');
     if (outcome.kind === 'refused') {
+      assert.equal(outcome.code, 'disconnected');
       assert.match(outcome.message, /disconnected in July 2026/);
       assert.match(outcome.message, /does not bill months a customer was cut off/);
       assert.match(outcome.message, /Reconnection Fee/);
@@ -151,6 +212,7 @@ test('explicit override accepts cut-off months without raising a charge', async 
     const { client, inserts } = fakeClient({ ...baseRow, is_past: isPast, service_on: false, status_then: 'disconnected' });
     const outcome = await ensureMonthlyChargeForPayment(client, { ...input, overrideDisconnectedMonth: true });
     assert.equal(outcome.kind, 'overridden');
+    if (outcome.kind === 'overridden') assert.equal(outcome.code, 'disconnected');
     assert.equal(inserts.length, 0);
   }
 });

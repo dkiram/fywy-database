@@ -59,6 +59,7 @@ type WaiverApprovalRequest = {
   requested_at: string;
   requested_by_name: string | null;
   outstanding_balance: string;
+  total_due_to_reconnect: string | null;
 };
 
 type ReconnectionApprovalRequest = {
@@ -448,6 +449,11 @@ function AccountOperationsPage() {
                   <div>
                     <p className="text-lg font-semibold text-on-surface">{formatCurrency(request.amount)}</p>
                     <p className="text-xs text-on-surface-variant">Outstanding {formatCurrency(request.outstanding_balance)}</p>
+                    {request.total_due_to_reconnect != null && (
+                      <p className="text-xs text-on-surface-variant">
+                        To end suspension, including return fee: {formatCurrency(request.total_due_to_reconnect)}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p className="text-sm text-on-surface">{request.reason}</p>

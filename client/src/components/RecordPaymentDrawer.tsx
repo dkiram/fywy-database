@@ -112,7 +112,7 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
       });
       const data = await response.json();
       if (!response.ok) {
-        if (data.code === "DISCONNECTED_PAYMENT_MONTH") {
+        if (data.code === "DISCONNECTED_PAYMENT_MONTH" || data.code === "SETTLED_PAYMENT_MONTH") {
           setOverrideWarning(data.error);
           return;
         }
@@ -256,7 +256,7 @@ function RecordPaymentDrawer({ customer, employee, onClose, onRecorded }: { cust
             {overrideWarning && (
               <div role="alert" className="rounded-lg bg-error/10 p-3 text-sm font-medium text-error">
                 <p>{overrideWarning}</p>
-                <p className="mt-2">You can override this warning if the month is correct. Past-month payments only reduce the outstanding balance; any excess does not become credit. Advance payments can still create credit after the balance is cleared.</p>
+                <p className="mt-2">Check the month with the customer first. If you override, the full amount is taken and anything beyond what is owed stays on the account as credit.</p>
                 <button type="submit" name="overrideDisconnectedMonth" disabled={saving} className="mt-3 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary disabled:opacity-50">Override and add</button>
               </div>
             )}

@@ -307,6 +307,14 @@ function JobQueue({
   // assignment from the same seven jobs coming back again.
   const knownIds = useRef<Set<number> | null>(null);
 
+  // The deploy this page was loaded against. When the API starts answering
+  // with a different one, a deploy has happened and this page is running
+  // old code - so it reloads itself. A home-screen web app on iOS never
+  // reloads on its own; it restores the page it had, indefinitely.
+  const deployMark = useRef<string | null>(null);
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
+
   const load = useCallback(async (options: { quiet?: boolean } = {}) => {
     try {
       if (!options.quiet) setLoading(true);
@@ -326,6 +334,20 @@ function JobQueue({
       if (!response.ok) throw new Error(data.error || "Could not load your jobs.");
 
       const incoming: Job[] = data.jobs;
+
+      if (typeof data.deployMark === "string") {
+        if (deployMark.current === null) {
+          deployMark.current = data.deployMark;
+        } else if (data.deployMark !== deployMark.current) {
+          // Not while somebody is mid-sentence. The next poll will try again,
+          // and the note box is the only unsaved state the page holds.
+          const typing = Object.values(draftsRef.current).some((text) => text.trim() !== "");
+          if (!typing) {
+            window.location.reload();
+            return;
+          }
+        }
+      }
 
       if (knownIds.current === null) {
         // First load of the session. Everything is "new" and none of it is

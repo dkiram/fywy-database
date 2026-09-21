@@ -9,8 +9,16 @@ import {
   resolvePendingReconnectionRequests,
 } from "./accounts.js";
 import { ensureMonthlyChargeForPayment, paymentBalanceDeduction } from "./paymentMonthCharge.js";
+import type { MonthChargeRefusal } from "./paymentMonthCharge.js";
 
 const paymentsRouter = Router();
+
+// RecordPaymentDrawer.tsx matches on these to show the warning-and-override
+// panel instead of a plain error.
+const monthRefusalCodes: Record<MonthChargeRefusal, string> = {
+  disconnected: "DISCONNECTED_PAYMENT_MONTH",
+  settled: "SETTLED_PAYMENT_MONTH",
+};
 
 // What a cashier may take money for. payment_type is a free TEXT column with
 // no database constraint, so this list is the only thing standing between the
@@ -357,8 +365,8 @@ paymentsRouter.post(
         });
       }
 
-      // Keep the cut-off warning unless the cashier explicitly overrides it.
-      let overrideWarning: string | null = null;
+      // Keep the month warning unless the cashier explicitly overrides it.
+      let overrideWarning: { code: MonthChargeRefusal; message: string } | null = null;
       let raisedCharge: { dueDate: string; amount: string } | null = null;
       if (paymentType === "Monthly Fee") {
         const outcome = await ensureMonthlyChargeForPayment(client, {
@@ -369,10 +377,10 @@ paymentsRouter.post(
         });
         if (outcome.kind === "refused") {
           await client.query("ROLLBACK");
-          return res.status(409).json({ error: outcome.message, code: "DISCONNECTED_PAYMENT_MONTH" });
+          return res.status(409).json({ error: outcome.message, code: monthRefusalCodes[outcome.code] });
         }
         if (outcome.kind === "charged") raisedCharge = outcome;
-        if (outcome.kind === "overridden") overrideWarning = outcome.message;
+        if (outcome.kind === "overridden") overrideWarning = outcome;
       }
 
       // Generate any anniversary charge due through today before deciding
@@ -564,7 +572,9 @@ paymentsRouter.post(
 
       const paymentAuditNote = [
         note,
-        overrideWarning ? `Disconnected month override for ${monthPaid}: ${overrideWarning}` : "",
+        overrideWarning
+          ? `${overrideWarning.code === "settled" ? "Settled" : "Disconnected"} month override for ${monthPaid}: ${overrideWarning.message}`
+          : "",
         paymentType === "Monthly Fee"
           ? `Received J$${amountText}; applied J$${appliedAmount} to the balance. Past-month payments do not create credit.`
           : "",

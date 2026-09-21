@@ -733,7 +733,12 @@ function AccountOperationsPanel({
                     short. */}
                 <p className="mt-2 font-semibold">
                   To reconnect today: {formatCurrency(suspension.total_due_to_reconnect)}
-                  {" "}({formatCurrency(suspension.reconnection_fee_today)} reconnection fee plus the balance)
+                  {" "}(includes the {formatCurrency(suspension.reconnection_fee_today)} return fee, after account credits)
+                </p>
+                <p className="mt-1">
+                  {Number(suspension.total_due_to_reconnect) <= 0
+                    ? "Financially cleared to end suspension. Use End Suspension to restore service."
+                    : "Clearing only the outstanding balance may leave the return fee unpaid. Payments, approved discounts, and credits can cover the full amount above."}
                 </p>
                 {suspension.reconnection_fee_today !== suspension.reconnection_fee_after && (
                   <p className="mt-1">
@@ -875,11 +880,43 @@ function AccountOperationsPanel({
                 ? "The backend will re-check the saved customer, ONT serial, and OLT location. It will confirm the physical ONT state before updating the account database."
                 : "This change becomes permanent account history and is recorded in Activity History."}
             </p>
-            {adminBalanceOverride && billing && (
+            {action === "end-suspension" && (
+              <div className="mt-4 rounded-xl border border-outline-variant p-4 text-sm text-on-surface">
+                {suspension ? (
+                  <>
+                    <p>Return fee today: {formatCurrency(suspension.reconnection_fee_today)}</p>
+                    <p className="mt-1 font-semibold">
+                      To reconnect today, after account credits: {formatCurrency(suspension.total_due_to_reconnect)}
+                    </p>
+                    <p className="mt-1 text-on-surface-variant">
+                      The return fee is added when the suspension ends. It is not yet included in the account balance. A discount that clears the current balance does not automatically waive this fee.
+                    </p>
+                  </>
+                ) : (
+                  <p>The server will check the balance including the suspension return fee before reconnecting.</p>
+                )}
+                {employeeRole === "admin" && (
+                  <label className="mt-3 flex items-start gap-2 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={adminBalanceOverride}
+                      disabled={saving}
+                      onChange={(event) => setAdminBalanceOverride(event.target.checked)}
+                      className="mt-1"
+                    />
+                    End suspension even if a balance remains (admin override)
+                  </label>
+                )}
+              </div>
+            )}
+            {adminBalanceOverride && (
               <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
                 <p className="font-semibold">Admin balance override</p>
                 <p className="mt-1">
-                  This reconnects service with {formatCurrency(billing.outstanding_balance)} still outstanding. It does not erase or discount the balance, and the delinquency scheduler may disconnect the account again unless a hold or valid discount is added.
+                  {action === "end-suspension"
+                    ? `This reconnects service with ${suspension ? formatCurrency(suspension.total_due_to_reconnect) : "any remaining balance"} still outstanding, including the return fee.`
+                    : `This reconnects service with ${formatCurrency(billing?.outstanding_balance ?? 0)} still outstanding.`}
+                  {" "}It does not erase or discount the balance, and the delinquency scheduler may disconnect the account again unless a hold or valid discount is added. The override and your reason are recorded in Activity History.
                 </p>
               </div>
             )}
@@ -993,6 +1030,35 @@ function AccountOperationsPanel({
                 className="mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm"
               />
             </label>
+
+            {exceptionAction !== "hold" && status === "suspended" && suspension && (
+              <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
+                <p className="font-semibold">
+                  To end suspension today: {formatCurrency(suspension.total_due_to_reconnect)}
+                </p>
+                <p className="mt-1 text-on-surface-variant">
+                  Includes the {formatCurrency(suspension.reconnection_fee_today)} return fee after existing payments and credits. Cover this total to clear reconnection, even if the current outstanding balance is zero.
+                </p>
+                {Number(suspension.total_due_to_reconnect) > 0 && (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => setExceptionValue(Number(suspension.total_due_to_reconnect).toFixed(2))}
+                    className="mt-2 font-semibold text-primary underline disabled:opacity-50"
+                  >
+                    Use full reconnection amount
+                  </button>
+                )}
+                {Number(exceptionValue) > 0 && (
+                  <p className="mt-2 font-semibold">
+                    Remaining to reconnect {exceptionAction === "waiver" ? "after approval" : "after credit"}: {formatCurrency(Math.max(0, Math.round((Number(suspension.total_due_to_reconnect) - Number(exceptionValue)) * 100) / 100))}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-on-surface-variant">
+                  Based on today's quote. Later payments or suspension charges can change the amount; the server checks again at approval and reconnection.
+                </p>
+              </div>
+            )}
 
             <label className="mt-4 block text-sm font-semibold text-on-surface">
               Reason <span className="text-error">*</span>

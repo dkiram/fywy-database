@@ -20,23 +20,35 @@
  *      The full accepted receipt remains a ledger credit, including any excess
  *      over the outstanding balance.
  *
+ *   3. The month was billed AND already settled. Found in the Sept 2026
+ *      settled-twice sweep (182 accounts, 163 of them in September alone):
+ *      the 28 Aug clean-slate forgave August on 2,128 accounts, the customer
+ *      still believes August is what they owe, the cashier types August, and
+ *      the money lands as credit because the August charge has nothing left
+ *      on it. The month the customer actually owes is September. Same
+ *      warning-and-override shape as a cut-off month, with the open month
+ *      named so the cashier can just fix the tag.
+ *
  * Called inside the payment transaction, before the payment is written, so a
  * refusal costs nothing and a raised charge commits with the payment or not
  * at all.
  */
 import type { PoolClient } from "pg";
 
+export type MonthChargeRefusal = "disconnected" | "settled";
+
 export type MonthChargeOutcome =
   | { kind: "ok"; reason: "already_charged" | "not_past" | "suspended" | "no_activation_date" | "no_rate" }
-  | { kind: "overridden"; message: string }
+  | { kind: "overridden"; code: MonthChargeRefusal; message: string }
   | { kind: "charged"; dueDate: string; amount: string }
-  | { kind: "refused"; message: string };
+  | { kind: "refused"; code: MonthChargeRefusal; message: string };
 
 type MonthChargeInput = {
   customerId: number;
   /** YYYY-MM as typed on the payment form. */
   monthPaid: string;
   employeeId: number;
+  /** Cashier has seen the warning and wants the receipt taken as credit anyway. Covers both refusal kinds. */
   overrideDisconnectedMonth?: boolean;
 };
 
@@ -44,6 +56,31 @@ const MONTH_LABEL = new Intl.DateTimeFormat("en-JM", { month: "long", year: "num
 
 function describeMonth(monthStart: string) {
   return MONTH_LABEL.format(new Date(`${monthStart}T00:00:00Z`));
+}
+
+const DATE_LABEL = new Intl.DateTimeFormat("en-JM", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+function describeSettled(row: {
+  month_start: string;
+  owing_due_date: string | null;
+  owing_entry_type: string | null;
+  owing_service_month: string | null;
+}) {
+  const paid = describeMonth(row.month_start);
+  if (row.owing_due_date === null) {
+    return (
+      `${paid} is already settled on this account and nothing is owing. Recording this ` +
+      "payment as " + paid + " would leave the money sitting as credit. If the customer " +
+      "is paying ahead, tag the next unbilled month instead."
+    );
+  }
+  const owing = row.owing_service_month
+    ? `${describeMonth(row.owing_service_month)} (due ${DATE_LABEL.format(new Date(`${row.owing_due_date}T00:00:00Z`))})`
+    : `a ${row.owing_entry_type?.replace(/_/g, " ") ?? "charge"} due ${DATE_LABEL.format(new Date(`${row.owing_due_date}T00:00:00Z`))}`;
+  return (
+    `${paid} is already settled on this account. The oldest amount still owing is ${owing}. ` +
+    "Record this payment against what the customer actually owes, or override to take it as credit."
+  );
 }
 
 function describeStatus(status: string | null) {
@@ -99,6 +136,17 @@ export async function ensureMonthlyChargeForPayment(
           AND ch.entry_type = 'monthly_charge'
           AND COALESCE(ch.due_date, ch.effective_date) = d.due_date
       ) AS has_charge,
+      -- The billing view applies every credit to the debits oldest-first and
+      -- names the first one not fully covered. A charge due before that one
+      -- has nothing left on it, whether it was paid or forgiven.
+      (bs.oldest_unpaid_due_date IS NULL OR d.due_date < bs.oldest_unpaid_due_date) AS already_settled,
+      bs.oldest_unpaid_due_date::TEXT AS owing_due_date,
+      owing.entry_type AS owing_entry_type,
+      -- Map the open charge back to the service month the cashier should type.
+      CASE WHEN owing.entry_type = 'monthly_charge' THEN
+        DATE_TRUNC('month', bs.oldest_unpaid_due_date
+          - CASE WHEN EXTRACT(DAY FROM d.activation_date) <= 15 THEN INTERVAL '1 month' ELSE INTERVAL '0 months' END)::DATE::TEXT
+      END AS owing_service_month,
       CASE WHEN d.due_date IS NULL THEN NULL
            ELSE public.spcl_customer_service_active_on(d.customer_id, d.due_date)
       END AS service_on,
@@ -113,6 +161,16 @@ export async function ensureMonthlyChargeForPayment(
       rate.customer_rate_history_id,
       rate.monthly_fee::TEXT AS monthly_fee
     FROM due d
+    LEFT JOIN public.customer_billing_status bs ON bs.customer_id = d.customer_id
+    LEFT JOIN LATERAL (
+      SELECT o.entry_type
+      FROM public.account_ledger_entries o
+      WHERE o.customer_id = d.customer_id
+        AND o.amount > 0
+        AND o.due_date = bs.oldest_unpaid_due_date
+      ORDER BY o.account_ledger_entry_id
+      LIMIT 1
+    ) owing ON TRUE
     LEFT JOIN LATERAL (
       SELECT r.customer_rate_history_id, r.monthly_fee
       FROM public.customer_rate_history r
@@ -130,6 +188,10 @@ export async function ensureMonthlyChargeForPayment(
         due_date: string | null;
         is_past: boolean;
         has_charge: boolean;
+        already_settled: boolean;
+        owing_due_date: string | null;
+        owing_entry_type: string | null;
+        owing_service_month: string | null;
         service_on: boolean | null;
         status_then: string | null;
         customer_rate_history_id: string | number | null;
@@ -138,7 +200,14 @@ export async function ensureMonthlyChargeForPayment(
     | undefined;
   if (!row) throw new Error(`Customer ${input.customerId} not found while checking the paid month.`);
 
-  if (row.has_charge) return { kind: "ok", reason: "already_charged" };
+  if (row.has_charge) {
+    if (!row.already_settled) return { kind: "ok", reason: "already_charged" };
+    return {
+      kind: input.overrideDisconnectedMonth ? "overridden" : "refused",
+      code: "settled",
+      message: describeSettled(row),
+    };
+  }
 
   // Cut-off months require explicit acknowledgement before taking payment. A suspension is the one "off" status that still bills
   // (J$500 holding charges), so a suspended month is accepted as-is.
@@ -146,6 +215,7 @@ export async function ensureMonthlyChargeForPayment(
     if (row.status_then === "suspended") return { kind: "ok", reason: "suspended" };
     return {
       kind: input.overrideDisconnectedMonth ? "overridden" : "refused",
+      code: "disconnected",
       message:
         `This account was ${describeStatus(row.status_then)} in ${describeMonth(row.month_start)}, ` +
         "and SPCL does not bill months a customer was cut off. Record this payment " +
