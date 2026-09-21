@@ -275,6 +275,7 @@ function ApplicationsPage() {
     { application: ApplicationRecord; mode: "send" | "move" | "reschedule" } | null
   >(null);
   const [selected, setSelected] = useState<ApplicationRecord | null>(null);
+  const [editing, setEditing] = useState<ApplicationRecord | null>(null);
   // Shown right after an installation fee is collected, and reprintable from
   // the application drawer afterwards.
   const [receipt, setReceipt] = useState<PaymentReceipt | null>(null);
@@ -1186,7 +1187,25 @@ function ApplicationsPage() {
         </Modal>
       )}
 
-      {activeApplication && !decision && (
+      {editing && (
+        <EditApplicationModal
+          application={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(updated) => {
+            const application = { ...editing, ...updated };
+            setSelected(application);
+            setApplications((current) => current.map((item) =>
+              item.application_id === application.application_id ? { ...item, ...updated } : item
+            ));
+            setEditing(null);
+            setNotice(`Application #${application.application_id} was updated.`);
+            setNoticeCustomerId(null);
+            void loadApplications();
+          }}
+        />
+      )}
+
+      {activeApplication && !decision && !editing && (
         <ApplicationDrawer
           application={activeApplication}
           onClose={() => setSelected(null)}
@@ -1219,6 +1238,9 @@ function ApplicationsPage() {
           }
         >
           <div className="space-y-8">
+            <button type="button" onClick={() => setEditing(activeApplication)} className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white transition hover:bg-primary/90">
+              <span className="material-symbols-outlined">edit</span>Edit Application
+            </button>
             <DrawerSection title="Applicant information" icon="person">
               <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
                 <Detail label="Full name" value={activeApplication.name} />
@@ -2068,6 +2090,73 @@ function DispatchInstallationModal({
           onPrimary={send}
         />
       </div>
+    </Modal>
+  );
+}
+
+const editableApplicantFields = [
+  ["name", "Full name"], ["alias", "Alias"], ["telephone", "Telephone"],
+  ["email", "Email"], ["address", "Service address"], ["occupation", "Occupation"],
+  ["id_type", "ID type"], ["id_number", "ID number"],
+] as const;
+
+function EditApplicationModal({ application, onClose, onSaved }: {
+  application: ApplicationRecord;
+  onClose: () => void;
+  onSaved: (application: Partial<ApplicationRecord>) => void;
+}) {
+  const [values, setValues] = useState(() => Object.fromEntries(
+    editableApplicantFields.map(([field]) => [field, application[field] ?? ""])
+  ));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const changed = editableApplicantFields.filter(([field]) =>
+        values[field].trim() !== (application[field] ?? "")
+      );
+      const response = await apiFetch(`/api/applications/${application.application_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          changes: Object.fromEntries(changed.map(([field]) => [field, values[field]])),
+          original: Object.fromEntries(changed.map(([field]) => [field, application[field]])),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not save application changes.");
+      onSaved(data.application);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not save application changes.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Modal title={`Edit Application #${application.application_id}`} onClose={() => !saving && onClose()}>
+      <form onSubmit={save} className="space-y-6">
+        {application.customer_id && (
+          <p className="rounded-lg bg-surface-container-low p-3 text-sm text-on-surface-variant">
+            These corrections update the application. To change the activated customer's details, edit their customer profile separately.
+          </p>
+        )}
+        <fieldset disabled={saving} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {editableApplicantFields.map(([field, label]) => (
+            <Field key={field} label={label} required={field === "name"}>
+              {field === "address" ? (
+                <textarea rows={3} value={values[field]} onChange={(event) => setValues({ ...values, [field]: event.target.value })} className={inputClass} />
+              ) : (
+                <input autoFocus={field === "name"} required={field === "name"} type={field === "email" ? "email" : field === "telephone" ? "tel" : "text"} value={values[field]} onChange={(event) => setValues({ ...values, [field]: event.target.value })} className={inputClass} />
+              )}
+            </Field>
+          ))}
+        </fieldset>
+        {error && <p role="alert" className="rounded-lg bg-error/10 p-3 text-sm text-error">{error}</p>}
+        <ModalActions saving={saving} primaryLabel="Save Changes" onCancel={onClose} />
+      </form>
     </Modal>
   );
 }

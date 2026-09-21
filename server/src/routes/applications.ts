@@ -428,6 +428,71 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
   }
 });
 
+// Corrections to the submitted form do not alter an account or payment.
+applicationsRouter.patch("/applications/:applicationId", requireAuth, async (req, res) => {
+  const applicationId = parseApplicationId(req, res);
+  if (applicationId === null) return;
+  const fields = ["name", "alias", "address", "occupation", "telephone", "email", "id_type", "id_number"] as const;
+  const changes = req.body?.changes;
+  const original = req.body?.original;
+  if (!changes || typeof changes !== "object" || Array.isArray(changes) ||
+      !original || typeof original !== "object" || Array.isArray(original) ||
+      Object.keys(changes).some((key) => !fields.includes(key as typeof fields[number]))) {
+    return res.status(400).json({ error: "Enter valid application corrections." });
+  }
+  const keys = fields.filter((field) => Object.hasOwn(changes, field));
+  if (keys.some((field) => typeof changes[field] !== "string" ||
+      !(typeof original[field] === "string" || original[field] === null))) {
+    return res.status(400).json({ error: "Enter valid application details." });
+  }
+  if (keys.includes("name") && !cleanText(changes.name)) {
+    return res.status(400).json({ error: "Full name is required." });
+  }
+  const employee = req.session.employee!;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      "SELECT * FROM public.applications WHERE application_id = $1 FOR UPDATE",
+      [applicationId]
+    );
+    const application = result.rows[0];
+    if (!application) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Application not found." });
+    }
+    if (keys.some((field) => application[field] !== original[field])) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This application was edited by someone else. Close this form and refresh before trying again." });
+    }
+    for (const field of keys) {
+      const value = cleanText(changes[field]) || null;
+      if (value === application[field]) continue;
+      // field comes exclusively from the allowlist above.
+      await client.query(
+        `UPDATE public.applications SET ${field} = $1, updated_at = CURRENT_TIMESTAMP WHERE application_id = $2`,
+        [value, applicationId]
+      );
+      await client.query(
+        `INSERT INTO public.audit_logs (
+          employee_id, actor_name, action, entity_type, entity_id,
+          field_name, old_value, new_value, occurred_at
+        ) VALUES ($1, $2, 'Edited application', 'application', $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+        [employee.employeeId, `${employee.firstName} ${employee.lastName}`, String(applicationId), field, application[field], value]
+      );
+      application[field] = value;
+    }
+    await client.query("COMMIT");
+    return res.json({ application });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Could not edit application", error);
+    return res.status(500).json({ error: "Could not save application changes." });
+  } finally {
+    client.release();
+  }
+});
+
 applicationsRouter.post("/applications", requireAuth, async (req, res) => {
   const employee = req.session.employee!;
   const name = cleanText(req.body.name);
