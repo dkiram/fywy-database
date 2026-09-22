@@ -239,13 +239,13 @@ function ServiceRequestsPage() {
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-2xl font-semibold tracking-tight text-on-surface">Service Tickets</h1><p className="mt-1 text-sm text-on-surface-variant">Report customer issues, assign technicians, and record completed work.</p></div><button type="button" onClick={openNew} className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary shadow-sm"><span className="material-symbols-outlined text-lg">add</span>New Ticket</button></div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">{/* Took the Needs Attention slot. That card was the four active
-          statuses rolled together, and with a card per status beside it, it
-          had stopped saying anything the others did not. */}
-      <Summary label="Rescheduled" value={summary.rescheduled} icon="event" tone="scheduled" /><Summary label="Open" value={summary.open} icon="inbox" tone="primary" /><Summary label="Assigned" value={summary.assigned} icon="engineering" tone="primary" /><Summary label="In Progress" value={summary.in_progress} icon="construction" tone="warning" /><Summary label="Completed" value={summary.completed} icon="task_alt" tone="positive" />{/* Counted separately from Completed because these are the jobs that
-          still owe somebody a visit — the technician got there and could not
-          do the work. They stay inside Needs Attention for the same reason. */}
-      <Summary label="Unresolved" value={summary.unresolved} icon="door_front" tone="stalled" /></div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <Summary label="Rescheduled" value={summary.rescheduled} icon="event" tone="scheduled" />
+        <Summary label="Open" value={summary.open} icon="inbox" tone="primary" />
+        <Summary label="Assigned" value={summary.assigned} icon="engineering" tone="primary" />
+        <Summary label="In Progress" value={summary.in_progress} icon="construction" tone="warning" />
+        <Summary label="Unresolved" value={summary.unresolved} icon="door_front" tone="stalled" />
+      </div>
       {notice && <div className="rounded-lg bg-tertiary/10 p-4 text-sm font-medium text-tertiary">{notice}</div>}
       {error && <div className="rounded-lg bg-error/10 p-4 text-sm text-error">{error}</div>}
 
