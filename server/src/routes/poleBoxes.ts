@@ -237,9 +237,11 @@ poleBoxesRouter.patch(
     const poleBoxId = parsePositiveId(req.params.poleBoxId);
     if (poleBoxId === null) return res.status(400).json({ error: "Invalid pole-box ID." });
     const employee = req.session.employee!;
+    const boxNumber = cleanText(req.body.boxNumber);
     const capacityText = String(req.body.capacity ?? "").trim();
     const capacity = capacityText ? Number(capacityText) : null;
     const status = cleanText(req.body.status);
+    if (!boxNumber || boxNumber.length > 80) return res.status(400).json({ error: "Enter a pole-box number." });
     const reason = cleanText(req.body.reason);
     if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > 512)) return res.status(400).json({ error: "Capacity must be between 1 and 512." });
     if (!["active", "maintenance", "retired"].includes(status)) return res.status(400).json({ error: "Choose a valid pole-box status." });
@@ -254,27 +256,121 @@ poleBoxesRouter.patch(
         await client.query("ROLLBACK");
         return res.status(404).json({ error: "Pole box not found." });
       }
+      const actorName = `${employee.firstName} ${employee.lastName}`;
+      const renamed = boxNumber !== current.box_number;
+      if (renamed && boxNumber.toUpperCase() !== current.normalized_box_number) {
+        const clash = await client.query(
+          `SELECT 1 FROM public.pole_boxes WHERE normalized_box_number = UPPER($1) AND pole_box_id <> $2;`,
+          [boxNumber, poleBoxId]
+        );
+        if (clash.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: `Pole box ${boxNumber} already exists.` });
+        }
+      }
       const result = await client.query(
         `
         UPDATE public.pole_boxes SET
-          location_description = NULLIF($1, ''), capacity = $2, status = $3,
-          notes = NULLIF($4, ''), updated_at = CURRENT_TIMESTAMP
-        WHERE pole_box_id = $5 RETURNING *;
+          box_number = $1, location_description = NULLIF($2, ''), capacity = $3, status = $4,
+          notes = NULLIF($5, ''), updated_at = CURRENT_TIMESTAMP
+        WHERE pole_box_id = $6 RETURNING *;
         `,
-        [cleanText(req.body.locationDescription), capacity, status, cleanText(req.body.notes), poleBoxId]
+        [boxNumber, cleanText(req.body.locationDescription), capacity, status, cleanText(req.body.notes), poleBoxId]
       );
+
+      // Customers, tickets, and applications reference a box by its number
+      // (not its ID), so a rename has to carry every existing link with it.
+      if (renamed) {
+        const movedCustomers = await client.query(
+          `UPDATE public.customers SET pole_box_number = $1
+           WHERE UPPER(TRIM(pole_box_number)) = $2
+           RETURNING customer_id;`,
+          [boxNumber, current.normalized_box_number]
+        );
+        await client.query(
+          `UPDATE public.service_tickets SET pole_box_number = $1 WHERE UPPER(TRIM(pole_box_number)) = $2;`,
+          [boxNumber, current.normalized_box_number]
+        );
+        await client.query(
+          `UPDATE public.applications SET pole_box_number = $1 WHERE UPPER(TRIM(pole_box_number)) = $2;`,
+          [boxNumber, current.normalized_box_number]
+        );
+        if (movedCustomers.rowCount) {
+          await client.query(
+            `INSERT INTO public.audit_logs
+              (employee_id, actor_name, action, entity_type, entity_id, field_name, old_value, new_value, reason, occurred_at)
+             SELECT $1, $2, 'Pole box renamed', 'customer', customer_id::TEXT, 'pole_box_number', $3, $4, $5, CURRENT_TIMESTAMP
+             FROM UNNEST($6::BIGINT[]) AS customer_id;`,
+            [employee.employeeId, actorName, current.box_number, boxNumber, reason, movedCustomers.rows.map((row) => row.customer_id)]
+          );
+        }
+      }
+
       await client.query(
         `INSERT INTO public.audit_logs
           (employee_id, actor_name, action, entity_type, entity_id, field_name, old_value, new_value, reason, occurred_at)
          VALUES ($1, $2, 'Updated pole box', 'pole_box', $3, 'metadata', $4, $5, $6, CURRENT_TIMESTAMP);`,
-        [employee.employeeId, `${employee.firstName} ${employee.lastName}`, String(poleBoxId), JSON.stringify({ capacity: current.capacity, status: current.status }), JSON.stringify({ capacity, status }), reason]
+        [employee.employeeId, actorName, String(poleBoxId), JSON.stringify({ boxNumber: current.box_number, capacity: current.capacity, status: current.status }), JSON.stringify({ boxNumber, capacity, status }), reason]
       );
       await client.query("COMMIT");
       res.json({ poleBox: result.rows[0] });
-    } catch (error) {
+    } catch (error: any) {
       await client.query("ROLLBACK");
+      if (error?.code === "23505") return res.status(409).json({ error: `Pole box ${boxNumber} already exists.` });
       console.error("Could not update pole box:", error);
       res.status(500).json({ error: "Could not update pole box." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// Deleting only removes the inventory record. Boxes that still have customers
+// are refused so nobody is left pointing at a box that no longer exists.
+poleBoxesRouter.delete(
+  "/pole-boxes/:poleBoxId",
+  requireAuth,
+  requireManager,
+  async (req, res) => {
+    const poleBoxId = parsePositiveId(req.params.poleBoxId);
+    if (poleBoxId === null) return res.status(400).json({ error: "Invalid pole-box ID." });
+    const employee = req.session.employee!;
+    const reason = cleanText(req.body?.reason);
+    if (reason.length < 3 || reason.length > 500) return res.status(400).json({ error: "A reason of 3–500 characters is required." });
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const currentResult = await client.query(`SELECT * FROM public.pole_boxes WHERE pole_box_id = $1 FOR UPDATE;`, [poleBoxId]);
+      const current = currentResult.rows[0];
+      if (!current) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Pole box not found." });
+      }
+      const assignedResult = await client.query(
+        `SELECT COUNT(*)::INTEGER AS total FROM public.customers WHERE UPPER(TRIM(pole_box_number)) = $1;`,
+        [current.normalized_box_number]
+      );
+      const assigned = assignedResult.rows[0].total as number;
+      if (assigned > 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: `${assigned} customer${assigned === 1 ? " is" : "s are"} still assigned to ${current.box_number}. Move them to another box (or rename this one) before deleting it.`,
+        });
+      }
+      await client.query(`DELETE FROM public.pole_boxes WHERE pole_box_id = $1;`, [poleBoxId]);
+      await client.query(
+        `INSERT INTO public.audit_logs
+          (employee_id, actor_name, action, entity_type, entity_id, field_name, old_value, new_value, reason, occurred_at)
+         VALUES ($1, $2, 'Deleted pole box', 'pole_box', $3, 'box_number', $4, NULL, $5, CURRENT_TIMESTAMP);`,
+        [employee.employeeId, `${employee.firstName} ${employee.lastName}`, String(poleBoxId), JSON.stringify(current), reason]
+      );
+      await client.query("COMMIT");
+      res.json({ deleted: true, boxNumber: current.box_number });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not delete pole box:", error);
+      res.status(500).json({ error: "Could not delete pole box." });
     } finally {
       client.release();
     }
