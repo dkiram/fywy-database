@@ -19,7 +19,8 @@
     "disconnect:overdue-legacy": "tsx src/scripts/disconnectOverdueLegacyAccounts.ts",
     "reconcile:olt-disconnected": "tsx src/scripts/reconcileDisconnectedFromOlt.ts",
     "test:disconnection-calendar": "tsx --test test/jamaicaDisconnectionCalendar.test.ts",
-    "test:payment-month-charge": "tsx --test test/paymentMonthCharge.test.ts"
+    "test:payment-month-charge": "tsx --test test/paymentMonthCharge.test.ts",
+    "test:reconnection-fee-charge": "tsx --test test/reconnectionFeeCharge.test.ts"
   },
   "keywords": [],
   "author": "",

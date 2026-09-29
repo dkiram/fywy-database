@@ -38,7 +38,7 @@ import type { PoolClient } from "pg";
 export type MonthChargeRefusal = "disconnected" | "settled";
 
 export type MonthChargeOutcome =
-  | { kind: "ok"; reason: "already_charged" | "not_past" | "suspended" | "no_activation_date" | "no_rate" }
+  | { kind: "ok"; reason: "already_charged" | "not_past" | "suspended" | "no_activation_date" | "before_first_bill" | "no_rate" }
   | { kind: "overridden"; code: MonthChargeRefusal; message: string }
   | { kind: "charged"; dueDate: string; amount: string }
   | { kind: "refused"; code: MonthChargeRefusal; message: string };
@@ -130,6 +130,7 @@ export async function ensureMonthlyChargeForPayment(
       d.month_start::TEXT AS month_start,
       d.due_date::TEXT AS due_date,
       d.due_date <= d.today AS is_past,
+      d.due_date <= d.activation_date AS before_first_bill,
       EXISTS (
         SELECT 1 FROM public.account_ledger_entries ch
         WHERE ch.customer_id = d.customer_id
@@ -187,6 +188,7 @@ export async function ensureMonthlyChargeForPayment(
         month_start: string;
         due_date: string | null;
         is_past: boolean;
+        before_first_bill: boolean | null;
         has_charge: boolean;
         already_settled: boolean;
         owing_due_date: string | null;
@@ -226,6 +228,15 @@ export async function ensureMonthlyChargeForPayment(
   // No activation date means no anniversary and no generator either; nothing
   // to align the payment with. Legacy edge case, left as before.
   if (row.service_on === null || row.due_date === null) return { kind: "ok", reason: "no_activation_date" };
+
+  // The generator's first bill is the first anniversary AFTER activation;
+  // the activation day itself is never billed. A day 16-31 customer's first
+  // service month maps onto that day, and from 11-18 Sept 2026 every
+  // customer's did (the mapping was not in place yet), so an August joiner
+  // paying "August" got a charge dated on the day they were connected plus
+  // the real September one - two bills after one month of service. Keep the
+  // receipt as credit for that first real bill instead.
+  if (row.before_first_bill) return { kind: "ok", reason: "before_first_bill" };
 
   // A service month can be in the past while its mapped bill is not due yet.
   // Leave that future charge to the generator so advance payments stay credit.

@@ -9,6 +9,7 @@ import {
   resolvePendingReconnectionRequests,
 } from "./accounts.js";
 import { ensureMonthlyChargeForPayment, paymentBalanceDeduction } from "./paymentMonthCharge.js";
+import { postReconnectionFeeForPayment } from "./reconnectionFeeCharge.js";
 import type { MonthChargeRefusal } from "./paymentMonthCharge.js";
 
 const paymentsRouter = Router();
@@ -503,6 +504,18 @@ paymentsRouter.post(
         );
       }
 
+      // Must land before the ready-for-reconnection check below: the fee is
+      // part of what a disconnected customer has to clear.
+      const reconnectionFeePosted = paymentType === "Reconnection Fee" && Number(appliedAmount) > 0
+        ? await postReconnectionFeeForPayment(client, {
+            customerId,
+            paymentId,
+            amount: appliedAmount,
+            balanceBefore: allocation.rows[0].balance,
+            employeeId: employee.employeeId,
+          })
+        : null;
+
       let reconnectionPending = false;
       const billingResult = await client.query(
         `
@@ -577,6 +590,9 @@ paymentsRouter.post(
           : "",
         paymentType === "Monthly Fee"
           ? `Received J$${amountText}; applied J$${appliedAmount} to the balance. Past-month payments do not create credit.`
+          : "",
+        reconnectionFeePosted
+          ? `Posted a J$${reconnectionFeePosted} reconnection fee with this payment so it does not become credit.`
           : "",
       ].filter(Boolean).join("\n");
 
@@ -834,6 +850,28 @@ paymentsRouter.post(
           AND original.amount < 0
         ORDER BY original.account_ledger_entry_id
         LIMIT 1
+        ON CONFLICT (source_key) DO NOTHING;
+        `,
+        [paymentId, employee.employeeId, reason]
+      );
+
+      // A Reconnection Fee receipt may have posted its own fee so it could not
+      // become credit. Voiding the receipt takes that fee away with it.
+      await client.query(
+        `
+        INSERT INTO public.account_ledger_entries (
+          customer_id, entry_type, amount, effective_date, description,
+          payment_id, created_by_employee_id, reason, source_key
+        )
+        SELECT fee.customer_id, 'reconnection_fee', -fee.amount,
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+          'Voided payment: reconnection fee posted with it reversed',
+          fee.payment_id, $2, $3,
+          'payment-void:reconnection-fee:' || fee.payment_id::TEXT
+        FROM public.account_ledger_entries fee
+        WHERE fee.payment_id = $1
+          AND fee.source_key = 'reconnection-fee:payment:' || $1::TEXT
+          AND fee.amount > 0
         ON CONFLICT (source_key) DO NOTHING;
         `,
         [paymentId, employee.employeeId, reason]

@@ -10,6 +10,7 @@ type LookupRow = {
   month_start: string;
   due_date: string | null;
   is_past: boolean;
+  before_first_bill: boolean | null;
   has_charge: boolean;
   already_settled: boolean;
   owing_due_date: string | null;
@@ -39,6 +40,7 @@ const baseRow: LookupRow = {
   month_start: '2026-07-01',
   due_date: '2026-07-18',
   is_past: true,
+  before_first_bill: false,
   has_charge: false,
   // July is the oldest thing owing on this account, so it is not settled.
   already_settled: false,
@@ -184,6 +186,18 @@ test('no activation date means nothing to align with', async () => {
   const { client, inserts } = fakeClient({ ...baseRow, due_date: null, service_on: null });
   const outcome = await ensureMonthlyChargeForPayment(client, input);
   assert.deepEqual(outcome, { kind: 'ok', reason: 'no_activation_date' });
+  assert.equal(inserts.length, 0);
+});
+
+// The Sept 2026 August-joiner shape: connected 17 Aug, pays "August" in
+// September. August maps onto the activation day, which the generator never
+// bills - raising it here put two bills on one month of service.
+test('a month whose bill would fall on the activation day is never raised', async () => {
+  const { client, inserts } = fakeClient({ ...baseRow,
+    month_start: '2026-08-01', due_date: '2026-08-17', before_first_bill: true,
+  });
+  const outcome = await ensureMonthlyChargeForPayment(client, { ...input, monthPaid: '2026-08' });
+  assert.deepEqual(outcome, { kind: 'ok', reason: 'before_first_bill' });
   assert.equal(inserts.length, 0);
 });
 
