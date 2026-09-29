@@ -433,10 +433,17 @@ technicianAppRouter.get("/tech/jobs", requireTechnician, async (req, res) => {
       COALESCE(c.name, a.name) AS customer_name,
       COALESCE(c.address, a.address) AS address,
       COALESCE(c.telephone, a.telephone) AS telephone,
+      -- What the applicant signed up for, so the technician knows what they
+      -- are installing - and what to put in the van - before they leave.
+      -- Installations only: a repair customer's plan says nothing about the
+      -- fault, and would just be noise on the card.
+      ap.name AS package_name,
+      a.additional_box,
       COALESCE(notes.entries, '[]'::JSON) AS recent_notes
     FROM public.service_tickets t
     LEFT JOIN public.customers c ON c.customer_id = t.customer_id
     LEFT JOIN public.applications a ON a.application_id = t.application_id
+    LEFT JOIN public.packages ap ON ap.package_id = a.package_id
     LEFT JOIN LATERAL (
       SELECT JSON_AGG(
                recent.entry ORDER BY recent.changed_at DESC, recent.history_id DESC

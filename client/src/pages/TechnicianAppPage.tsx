@@ -48,6 +48,9 @@ type Job = {
   application_id: number | null;
   /** When the customer asked them to come back. Only meaningful while assigned. */
   rescheduled_for: string | null;
+  /** Installations only: the plan the applicant chose, and any extra cable boxes. */
+  package_name: string | null;
+  additional_box: number | null;
   issue_summary: string;
   description: string | null;
   priority: JobPriority;
@@ -707,6 +710,18 @@ function JobCard({
           <p className="mt-2 line-clamp-2 text-sm text-on-surface">
             {job.issue_summary}
           </p>
+
+          {job.job_type === "installation" && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-on-surface">
+              <span className="material-symbols-outlined text-base">router</span>
+              {job.package_name || "No package chosen — check with the office"}
+              {job.additional_box ? (
+                <span className="font-normal text-on-surface-variant">
+                  · {job.additional_box} extra box{job.additional_box === 1 ? "" : "es"}
+                </span>
+              ) : null}
+            </p>
+          )}
         </div>
 
         <span
@@ -757,8 +772,17 @@ function JobCard({
           )}
 
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <Detail label="Pole box" value={job.pole_box_number} />
-            <Detail label="Port" value={job.port_number} />
+            {job.job_type === "installation" ? (
+              <>
+                <Detail label="Package" value={job.package_name} />
+                <Detail label="Extra boxes" value={job.additional_box ? String(job.additional_box) : "None"} />
+              </>
+            ) : (
+              <>
+                <Detail label="Pole box" value={job.pole_box_number} />
+                <Detail label="Port" value={job.port_number} />
+              </>
+            )}
             <Detail label="Reported" value={formatDate(job.reported_date)} />
             <Detail label="Priority" value={job.priority} />
           </dl>
