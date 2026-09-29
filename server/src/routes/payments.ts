@@ -870,7 +870,7 @@ paymentsRouter.post(
           'payment-void:reconnection-fee:' || fee.payment_id::TEXT
         FROM public.account_ledger_entries fee
         WHERE fee.payment_id = $1
-          AND fee.source_key = 'reconnection-fee:payment:' || $1::TEXT
+          AND fee.source_key = 'reconnection-fee:payment:' || fee.payment_id::TEXT
           AND fee.amount > 0
         ON CONFLICT (source_key) DO NOTHING;
         `,

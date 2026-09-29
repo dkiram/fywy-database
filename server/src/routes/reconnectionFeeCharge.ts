@@ -111,9 +111,9 @@ export async function postReconnectionFeeForPayment(
       (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
       (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
       (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
-      'Reconnection fee', $3, $4,
+      'Reconnection fee', $3::BIGINT, $4,
       'Posted with the reconnection fee payment: no unpaid fee was on the ledger for it, so the payment would otherwise have become credit.',
-      'reconnection-fee:payment:' || $3::TEXT
+      'reconnection-fee:payment:' || $3::BIGINT::TEXT
     )
     ON CONFLICT (source_key) DO NOTHING;
     `,
