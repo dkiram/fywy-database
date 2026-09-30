@@ -19,7 +19,11 @@
  *   excess      the part of the receipt beyond the current outstanding
  *               balance - the part that would otherwise become credit.
  *
- * The posted fee is the larger of the two, never more than the receipt.
+ * The posted fee is the larger of the two, never more than the receipt -
+ * EXCEPT that an unpaid fee already on the ledger always wins: then the
+ * receipt pays that fee and nothing new is posted. 10413 (29 Sept 2026) was
+ * auto-disconnected, which posted the fee; her fee payment then saw a zero
+ * balance for a moment and the excess rule charged her a second fee.
  * Suspended accounts are left alone: their fee is posted when the
  * suspension ends, and the counter quote already nets any credit against it.
  */
@@ -50,6 +54,7 @@ export function reconnectionFeeToPost(input: {
   const packageFee = input.packageFee === null ? 0n : toCents(input.packageFee);
   const price = packageFee > 0n ? min(amount, packageFee) : amount;
   const feeNeeded = max(price - max(toCents(input.unpaidFeeOnLedger), 0n), 0n);
+  if (toCents(input.unpaidFeeOnLedger) > 0n) return fromCents(min(feeNeeded, amount));
   const excess = amount - max(toCents(input.balanceBefore), 0n);
   return fromCents(min(max(feeNeeded, excess, 0n), amount));
 }

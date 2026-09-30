@@ -18,9 +18,11 @@ test('a legacy cut-off with arrears but no fee debit gets the fee, arrears stay 
   assert.equal(fee('1500', '3000.00', '0.00'), '1500.00');
 });
 
-test('a fee debit already covered by other money still cannot produce credit', () => {
-  // Balance 0 with the fee on the ledger: monthly money already paid it.
-  assert.equal(fee('1500', '0.00', '1500.00'), '1500.00');
+test('an unpaid disconnection fee is paid, never charged again, whatever the balance', () => {
+  // 10413, 29 Sept: auto-disconnected (fee posted), then the fee payment saw
+  // a zero balance and the old excess rule charged a second fee.
+  assert.equal(fee('1500', '0.00', '1500.00'), '0.00');
+  assert.equal(fee('1500', '1500.00', '1500.00'), '0.00');
 });
 
 test('an existing credit is left as it was, not increased', () => {
