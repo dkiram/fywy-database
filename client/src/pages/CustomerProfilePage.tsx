@@ -11,6 +11,7 @@ import AccountOperationsPanel, {
 } from "../components/AccountOperationsPanel";
 import CustomerServiceHistory from "../components/CustomerServiceHistory";
 import CustomerActivityHistory from "../components/CustomerActivityHistory";
+import CustomerNotesCard from "../components/CustomerNotesCard";
 import CustomerNetworkAccessCard from "../components/CustomerNetworkAccessCard";
 import { getCustomerReturnContext } from "../hooks/useOpenCustomerProfile";
 
@@ -107,6 +108,7 @@ const [linkingAccountId, setLinkingAccountId] = useState<number | null>(null);
 const [accountLinkError, setAccountLinkError] = useState("");
 const [loading, setLoading] = useState(true);
 const [error, setError] = useState("");
+const [historyInitialFilter, setHistoryInitialFilter] = useState<"all" | "note">("all");
     const [activeTab, setActiveTab] = useState<"overview" | "payments" | "support" | "history">(
   "overview"
 );
@@ -646,7 +648,10 @@ if (error || !customer) {
 
   <button
     type="button"
-    onClick={() => setActiveTab("history")}
+    onClick={() => {
+      setHistoryInitialFilter("all");
+      setActiveTab("history");
+    }}
     className={
       activeTab === "history"
         ? "shrink-0 whitespace-nowrap border-b-2 border-primary px-4 py-3 text-sm font-medium text-primary sm:px-6"
@@ -660,9 +665,9 @@ if (error || !customer) {
       {/* Main content */}
       {activeTab === "overview" ? (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="flex flex-col gap-6 lg:col-span-8">
+        <div className="grid grid-cols-1 gap-6 lg:col-span-12 lg:grid-cols-12">
           {/* Customer information */}
-          <section className="rounded-2xl bg-surface-container-lowest p-5 shadow-sm sm:p-8">
+          <section className="min-w-0 rounded-2xl bg-surface-container-lowest p-5 shadow-sm sm:p-8 lg:col-span-8">
             <div className="mb-6 flex items-center gap-3 border-b border-surface-container pb-4">
               <span className="material-symbols-outlined text-primary">
                 contact_mail
@@ -711,6 +716,17 @@ if (error || !customer) {
             </div>
           </section>
 
+          <CustomerNotesCard
+            key={customer.customer_id}
+            customerId={customer.customer_id}
+            onSeeMore={() => {
+              setHistoryInitialFilter("note");
+              setActiveTab("history");
+            }}
+          />
+        </div>
+
+        <div className="flex flex-col gap-6 lg:col-span-8">
           {/* Smaller cards */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
@@ -1196,7 +1212,7 @@ if (error || !customer) {
  ) : activeTab === "support" ? (
   <CustomerServiceHistory customerId={customer.customer_id} />
  ) : (
-  <CustomerActivityHistory customerId={customer.customer_id} />
+  <CustomerActivityHistory key={customer.customer_id} customerId={customer.customer_id} initialFilter={historyInitialFilter} />
 )}
 
       {canManageSubscription && (

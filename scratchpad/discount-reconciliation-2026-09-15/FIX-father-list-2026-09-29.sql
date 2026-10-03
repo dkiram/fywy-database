@@ -74,7 +74,11 @@ INSERT INTO wanted VALUES
 ('Tesma Peart',                   NULL, '%tesma%',              NULL),
 ('Shameka Mahoney',               NULL, '%shameka%',         2500.00),
 ('Errol Griffith',                NULL, '%errol%griffith%',   500.00),
-('Marcia Walker-Sunset',          NULL, '%marcia%walker%',   2500.00),
+-- Pinned 2026-09-29: the name on file is "Marcia Walker- sunset" (space after
+-- the hyphen), so the exact-match failed and both Marcia Walkers came back
+-- ambiguous. 3735 is the one - active, holding exactly the 2,500 quoted.
+-- 12038 "Marcia Walker" is disconnected and OWES 10,000; not this person.
+('Marcia Walker- sunset',         3735, NULL,                2500.00),
 ('Juliet Smith',                  NULL, '%juliet%smith%',    2500.00),
 ('Sherina Williams',              5246, NULL,                2500.00),
 ('Gilbert Beckford',             12290, NULL,                 500.00),

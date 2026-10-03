@@ -76,13 +76,16 @@ const FILTERS: { value: ActivityFilter; label: string }[] = [
 
 const PAGE_SIZE = 25;
 
-function CustomerActivityHistory({ customerId }: { customerId: number | string }) {
+function CustomerActivityHistory({ customerId, initialFilter = "all" }: {
+  customerId: number | string;
+  initialFilter?: ActivityFilter;
+}) {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState<ActivityFilter>("all");
+  const [filter, setFilter] = useState<ActivityFilter>(initialFilter);
   const [addingNote, setAddingNote] = useState(false);
   const [note, setNote] = useState("");
   const [noteDate, setNoteDate] = useState(jamaicaToday());
