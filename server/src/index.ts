@@ -1471,11 +1471,23 @@ app.get("/api/customers/:customerId/activity", requireAuth, async (req, res) => 
           -- the client can say "25 of 143" without a second round trip.
           COUNT(*) OVER () AS total_count
       FROM activity
+      LEFT JOIN public.customer_notes latest_note
+        ON activity.kind = 'note'
+        AND latest_note.customer_id = $1
+        AND latest_note.customer_note_id::TEXT = activity.reference_id
       -- A NULL timestamp means the event has not happened yet (an unreviewed
       -- waiver, an unreleased hold), so it has no place on a timeline.
       WHERE occurred_at IS NOT NULL
         AND ($2::TEXT[] IS NULL OR kind = ANY($2::TEXT[]))
-      ORDER BY occurred_at DESC, kind, reference_id
+      -- The Notes folder and overview preview show the most recently added
+      -- notes, even when their selected note dates are backdated or identical.
+      -- The blended timeline continues to follow the event date.
+      ORDER BY
+          CASE WHEN $2::TEXT[] = ARRAY['note']::TEXT[]
+               THEN latest_note.created_at END DESC,
+          CASE WHEN $2::TEXT[] = ARRAY['note']::TEXT[]
+               THEN latest_note.customer_note_id END DESC,
+          occurred_at DESC, kind, latest_note.customer_note_id DESC, reference_id
       LIMIT $3 OFFSET $4;
       `,
       [customerId, kinds, limit, offset]
