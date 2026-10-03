@@ -666,7 +666,7 @@ if (error || !customer) {
       {activeTab === "overview" ? (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-8">
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,2fr)]">
+        <div className="grid grid-cols-1 gap-6 xl:has-[[data-customer-notes]]:grid-cols-[minmax(0,5fr)_minmax(0,2fr)]">
           {/* Customer information */}
           <section className="min-w-0 rounded-2xl bg-surface-container-lowest p-5 shadow-sm sm:p-8">
             <div className="mb-6 flex items-center gap-3 border-b border-surface-container pb-4">
