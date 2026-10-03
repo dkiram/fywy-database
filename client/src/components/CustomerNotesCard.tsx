@@ -41,9 +41,9 @@ export default function CustomerNotesCard({ customerId, onSeeMore }: {
   }, [customerId]);
 
   return (
-    <section aria-labelledby="customer-notes-heading" className="relative min-w-0 rounded-2xl bg-surface-container-lowest shadow-sm lg:col-span-4">
+    <section aria-labelledby="customer-notes-heading" className="relative min-w-0 rounded-2xl bg-surface-container-lowest shadow-sm">
       {/* Let the information card determine the shared desktop row height. */}
-      <div className="flex flex-col p-5 sm:p-8 lg:absolute lg:inset-0">
+      <div className="flex flex-col p-5 sm:p-8 xl:absolute xl:inset-0 xl:px-5">
         <div className="mb-6 flex shrink-0 items-center gap-3 border-b border-surface-container pb-4">
           <span className="material-symbols-outlined text-primary" aria-hidden="true">notes</span>
           <h2 id="customer-notes-heading" className="text-lg font-semibold">Notes</h2>
@@ -55,7 +55,7 @@ export default function CustomerNotesCard({ customerId, onSeeMore }: {
         ) : notes.length === 0 ? (
           <p className="text-sm text-on-surface-variant">No notes yet.</p>
         ) : (
-          <ol aria-label="Most recent notes" tabIndex={0} className="max-h-64 min-h-0 list-decimal space-y-4 overflow-y-auto pl-6 text-sm lg:max-h-none lg:flex-1">
+          <ol aria-label="Most recent notes" tabIndex={0} className="max-h-64 min-h-0 list-decimal space-y-4 overflow-y-auto pl-6 text-sm xl:max-h-none xl:flex-1">
             {notes.map((note) => (
               <li key={note.reference_id} className="pl-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{note.detail}</li>
             ))}

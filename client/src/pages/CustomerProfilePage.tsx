@@ -665,9 +665,10 @@ if (error || !customer) {
       {/* Main content */}
       {activeTab === "overview" ? (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="grid grid-cols-1 gap-6 lg:col-span-12 lg:grid-cols-12">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-8">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,2fr)]">
           {/* Customer information */}
-          <section className="min-w-0 rounded-2xl bg-surface-container-lowest p-5 shadow-sm sm:p-8 lg:col-span-8">
+          <section className="min-w-0 rounded-2xl bg-surface-container-lowest p-5 shadow-sm sm:p-8">
             <div className="mb-6 flex items-center gap-3 border-b border-surface-container pb-4">
               <span className="material-symbols-outlined text-primary">
                 contact_mail
@@ -678,7 +679,7 @@ if (error || !customer) {
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-x-5 gap-y-6 [overflow-wrap:anywhere] sm:grid-cols-2">
               <InfoItem label="Full Name" value={customer.name || "Unnamed customer"} />
 
               <InfoItem
@@ -726,7 +727,6 @@ if (error || !customer) {
           />
         </div>
 
-        <div className="flex flex-col gap-6 lg:col-span-8">
           {/* Smaller cards */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm">
