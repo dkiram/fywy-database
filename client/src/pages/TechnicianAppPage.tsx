@@ -622,12 +622,10 @@ function JobCard({
   // separate from the note draft so opening the picker never touches what
   // was already written in the box above it.
   const [picking, setPicking] = useState(false);
-  // Sending a job back takes it off this phone for good, so it asks once -
-  // and asks for the reason right there, in its own box. Pointing up at the
-  // "What happened?" box did not work: its example text is a repair note, so
-  // nobody read it as the place for "why I can't do this one".
+  // Sending a job back takes it off this phone for good, so it asks once.
+  // The reason goes in the one note box on the card, which relabels itself
+  // while this is open - a second box underneath was one too many on a phone.
   const [confirmingHandBack, setConfirmingHandBack] = useState(false);
-  const [sendBackReason, setSendBackReason] = useState("");
   const [when, setWhen] = useState("");
 
   const closed = job.status !== "assigned" && job.status !== "in_progress";
@@ -647,7 +645,7 @@ function JobCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: status ?? undefined,
-          note: handBack ? sendBackReason : draft,
+          note: draft,
           rescheduledFor: rescheduledFor ?? undefined,
           handBack: handBack || undefined,
         }),
@@ -830,14 +828,24 @@ function JobCard({
             </p>
           ) : (
             <div className="mt-4">
+              {/* While Send back is open this box becomes the reason, and says
+                  so. Its usual example text is a repair note, which is why
+                  nobody read it as the place for "why I can't do this one"
+                  when the panel only pointed up at it. */}
               <label className="block text-sm font-semibold text-on-surface">
-                What happened?
+                {confirmingHandBack ? "Why are you sending it back?" : "What happened?"}
                 <textarea
                   value={draft}
                   onChange={(event) => onDraftChange(event.target.value)}
                   rows={3}
                   maxLength={1000}
-                  placeholder={job.job_type === "installation" ? "Installed and tested, customer signed…" : "Replaced the drop cable at the pole…"}
+                  placeholder={
+                    confirmingHandBack
+                      ? "Needs a ladder, off tomorrow, wrong cable in the van…"
+                      : job.job_type === "installation"
+                        ? "Installed and tested, customer signed…"
+                        : "Replaced the drop cable at the pole…"
+                  }
                   className="mt-2 w-full rounded-xl border border-outline-variant bg-white px-3 py-3 text-base text-on-surface"
                 />
               </label>
@@ -948,32 +956,20 @@ function JobCard({
                     <p className="text-sm font-semibold text-on-surface">Send this back?</p>
                     <p className="mt-1 text-xs leading-5 text-on-surface-variant">
                       It comes off your list and goes back to the office, who will
-                      send someone else.
+                      send someone else. Write the reason in the box above.
                     </p>
-                    <label className="mt-3 block text-sm font-semibold text-on-surface">
-                      Why are you sending it back?
-                      <textarea
-                        value={sendBackReason}
-                        onChange={(event) => setSendBackReason(event.target.value)}
-                        rows={3}
-                        maxLength={1000}
-                        autoFocus
-                        placeholder="Needs a ladder, off tomorrow, wrong cable in the van…"
-                        className="mt-2 w-full rounded-xl border border-outline-variant bg-white px-3 py-3 text-base font-normal text-on-surface"
-                      />
-                    </label>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => { setConfirmingHandBack(false); setSendBackReason(""); }}
+                        onClick={() => setConfirmingHandBack(false)}
                         className="rounded-xl bg-surface-container px-4 py-3 text-sm font-semibold text-on-surface-variant"
                       >
                         Keep it
                       </button>
                       <ActionButton
                         busy={busy}
-                        disabled={sendBackReason.trim().length < 3}
+                        disabled={draft.trim().length < 3}
                         onClick={() => save(null, undefined, true)}
                         className="bg-on-surface-variant text-white"
                         icon="assignment_return"
@@ -986,7 +982,9 @@ function JobCard({
                     type="button"
                     disabled={busy}
                     onClick={() => setConfirmingHandBack(true)}
-                    className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-on-surface-variant underline-offset-2 hover:underline"
+                    // Same size and shape as Start this job above (py-[15px]
+                    // because the 1px border makes up the rest of its py-4).
+                    className="flex items-center justify-center gap-2 rounded-xl border border-on-surface-variant px-4 py-[15px] text-sm font-semibold text-on-surface-variant disabled:opacity-40"
                   >
                     <span className="material-symbols-outlined text-lg">assignment_return</span>
                     Can't do this one? Send it back
@@ -1031,9 +1029,19 @@ function ActionButton({
   /** Icon above the label, for three-across rows where side-by-side will not fit. */
   stacked?: boolean;
 }) {
-  const layout = stacked
-    ? "flex-col gap-1 px-2 py-3 text-xs"
-    : "gap-2 px-4 py-4 text-sm";
+  // Shorter top and bottom when three across, so the row reads as buttons
+  // rather than three squares.
+  const layout = stacked ? "flex-col gap-0.5 px-1 py-2" : "gap-2 px-4 py-4 text-sm";
+
+  // The lettering goes on the label, not the button. index.css has an
+  // unlayered `button { font: inherit }`, and unlayered CSS beats Tailwind's
+  // layered utilities however specific they are - so a font-size class on a
+  // <button> is silently ignored and every button renders at 16px. A <span>
+  // has no such rule. When three across, it matches the small headings on
+  // the card (Priority, Reported) exactly: 11px, semibold, uppercase,
+  // letter-spaced. UNRESOLVED is the widest at about 80px of the 90px a third
+  // of a phone leaves it.
+  const lettering = stacked ? "text-[11px] uppercase tracking-wider" : "";
 
   return (
     <button
@@ -1043,7 +1051,7 @@ function ActionButton({
       className={`flex items-center justify-center rounded-xl font-semibold disabled:opacity-40 ${layout} ${className}`}
     >
       <span className="material-symbols-outlined text-lg">{icon}</span>
-      {busy ? "Saving…" : label}
+      <span className={lettering}>{busy ? "Saving…" : label}</span>
     </button>
   );
 }
