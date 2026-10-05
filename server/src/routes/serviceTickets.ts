@@ -417,11 +417,19 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           t.service_date,
           t.resolution_notes,
           t.rescheduled_for,
+          -- Set when a technician handed the job back (migration 085), and
+          -- cleared by trigger the moment somebody is assigned again, so it
+          -- only ever shows on a job that is still waiting.
+          t.handed_back_at,
+          t.handback_reason,
+          CONCAT_WS(' ', handback.first_name, handback.last_name) AS handed_back_by_name,
           t.updated_at
         FROM public.service_tickets t
         LEFT JOIN public.customers c ON c.customer_id = t.customer_id
         LEFT JOIN public.employees assignee
           ON assignee.employee_id = t.assigned_employee_id
+        LEFT JOIN public.employees handback
+          ON handback.employee_id = t.handed_back_by_employee_id
         ${whereSql}
         ORDER BY
           ${

@@ -69,6 +69,10 @@ type ApplicationRecord = {
   install_technician_id: number | null;
   install_technician_name: string | null;
   install_rescheduled_for: string | null;
+  // A technician handed the installation back (migration 085): open again,
+  // nobody assigned, waiting for the office to send someone else.
+  install_handback_reason: string | null;
+  install_handed_back_by_name: string | null;
 };
 
 // Minimal shape of /api/customers, used by the Match Review customer picker.
@@ -1826,6 +1830,7 @@ function InstallBadge({ application }: { application: ApplicationRecord }) {
     // Solid, matching the unresolved pill on the service ticket queue, so the
     // one state that needs somebody to act reads the same in both places.
     unresolved: { label: "Couldn't install", className: "bg-stalled text-white" },
+    open: { label: "Handed back", className: "bg-surface-container-high text-on-surface" },
     completed: { label: "Installed", className: "bg-tertiary/10 text-tertiary" },
   };
 
@@ -1917,6 +1922,20 @@ function InstallationDispatchRow({
       {/* An unresolved visit is not a failure to hide - it is the reason the
           office is being asked to send somebody again, so it says what
           happened and offers the same button. */}
+      {/* Same action for the office as a failed visit - send somebody - but
+          a different reason, so it says which it was. */}
+      {status === "open" && (
+        <div className="rounded-xl bg-surface-container p-4">
+          <p className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+            <span className="material-symbols-outlined text-lg">assignment_return</span>
+            Handed back by {application.install_handed_back_by_name || "the technician"}
+          </p>
+          {application.install_handback_reason && (
+            <p className="mt-1.5 text-sm text-on-surface-variant">{application.install_handback_reason}</p>
+          )}
+        </div>
+      )}
+
       {status === "unresolved" && (
         <div className="rounded-xl bg-stalled/10 p-4">
           <p className="text-sm font-semibold text-stalled">
@@ -1934,7 +1953,7 @@ function InstallationDispatchRow({
         className="flex items-center justify-center gap-2 rounded-lg bg-primary/10 px-4 py-3 text-sm font-medium text-primary transition hover:bg-primary/20"
       >
         <span className="material-symbols-outlined">send_to_mobile</span>
-        {status === "unresolved" ? "Send to a technician again" : "Send to a technician"}
+        {status === "unresolved" || status === "open" ? "Send to a technician again" : "Send to a technician"}
       </button>
     </div>
   );

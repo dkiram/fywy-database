@@ -550,7 +550,20 @@ technicianAppRouter.patch(
     if (rescheduleRequested && requestedStatus) {
       return res.status(400).json({ error: "Reschedule it, or change its status - not both." });
     }
-    if (!requestedStatus && !note && !rescheduleRequested) {
+
+    // "I can't do this one" - out of day, needs a ladder, off sick tomorrow.
+    // Sends the job back to the office's Open pile, unassigned (migration 085).
+    const handBack = req.body?.handBack === true;
+    if (handBack && (requestedStatus || rescheduleRequested)) {
+      return res.status(400).json({ error: "Hand it back on its own." });
+    }
+    if (handBack && note.length < 3) {
+      return res.status(400).json({
+        error: "Say why you are handing it back, so the office knows who to send.",
+      });
+    }
+
+    if (!requestedStatus && !note && !rescheduleRequested && !handBack) {
       return res.status(400).json({ error: "Nothing to save." });
     }
     if (note.length > 1000) {
@@ -595,6 +608,59 @@ technicianAppRouter.patch(
               ? "This job is already signed off. Call the office to reopen it."
               : "The office has closed this job.",
         });
+      }
+
+      if (handBack) {
+        // Only a job they are actually holding. An unresolved one is already
+        // back with the office; handing that back too would say nothing new.
+        if (current.status !== "assigned" && current.status !== "in_progress") {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: "This job is already back with the office." });
+        }
+
+        // Open and unassigned is where a job waiting for a technician already
+        // lives, so the office's Open view, the cap trigger and both phone
+        // queries all understand it without being told. Any appointment goes
+        // with it: it was agreed by this technician, and whoever the office
+        // sends next will agree their own.
+        await client.query(
+          `UPDATE public.service_tickets SET
+             status = 'open',
+             assigned_employee_id = NULL,
+             rescheduled_for = NULL,
+             handed_back_at = CURRENT_TIMESTAMP,
+             handed_back_by_employee_id = $1,
+             handback_reason = $2,
+             updated_by_employee_id = $1,
+             updated_at = CURRENT_TIMESTAMP
+           WHERE service_ticket_id = $3;`,
+          [technician.employeeId, note, ticketId]
+        );
+
+        const handbackNote = `Handed back by ${technician.firstName} ${technician.lastName} — ${note}`;
+
+        await client.query(
+          `INSERT INTO public.service_ticket_history
+            (service_ticket_id, event_type, from_status, to_status, note, changed_by_employee_id)
+           VALUES ($1, 'status_changed', $2, 'open', $3, $4);`,
+          [ticketId, current.status, handbackNote, technician.employeeId]
+        );
+
+        await client.query(
+          `INSERT INTO public.audit_logs
+            (employee_id, actor_name, action, entity_type, entity_id, field_name, old_value, new_value, reason, occurred_at)
+           VALUES ($1, $2, 'Handed a job back to the office', 'service_ticket', $3, 'status', $4, 'open', $5, CURRENT_TIMESTAMP);`,
+          [
+            technician.employeeId,
+            `${technician.firstName} ${technician.lastName}`,
+            String(ticketId),
+            current.status,
+            note,
+          ]
+        );
+
+        await client.query("COMMIT");
+        return res.json({ handedBack: true });
       }
 
       // Rescheduling from in_progress goes back to assigned: they are not at

@@ -216,7 +216,11 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
 
       // The technician got there and could not do it - nobody home, no answer.
       // It needs re-sending, and until now there was no way to see it at all.
-      install_failed: `a.status = 'pending' AND ${latestInstall("a")} = 'unresolved'`,
+      // Needs somebody sent again: the visit failed, or a technician handed
+      // the job back (migration 085, which leaves it 'open' and unassigned).
+      // Both are the same action for the office, so they share the tab; the
+      // badge on each row says which it was.
+      install_failed: `a.status = 'pending' AND ${latestInstall("a")} IN ('unresolved', 'open')`,
 
       // The technician rang ahead and the applicant asked for another time.
       // Still assigned, still on the phone (migration 080) - it just has an
@@ -308,11 +312,16 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         install.assigned_employee_id AS install_technician_id,
         install.rescheduled_for AS install_rescheduled_for,
         CONCAT_WS(' ', install_tech.first_name, install_tech.last_name)
-          AS install_technician_name
+          AS install_technician_name,
+        -- A technician handed this installation back (migration 085).
+        install.handback_reason AS install_handback_reason,
+        CONCAT_WS(' ', handback_tech.first_name, handback_tech.last_name)
+          AS install_handed_back_by_name
       FROM public.applications a
       LEFT JOIN LATERAL (
         SELECT t.service_ticket_id, t.status, t.resolution_notes,
-               t.updated_at, t.assigned_employee_id, t.rescheduled_for
+               t.updated_at, t.assigned_employee_id, t.rescheduled_for,
+               t.handback_reason, t.handed_back_by_employee_id
         FROM public.service_tickets t
         WHERE t.application_id = a.application_id
           AND t.job_type = 'installation'
@@ -321,6 +330,8 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
       ) AS install ON TRUE
       LEFT JOIN public.employees install_tech
         ON install_tech.employee_id = install.assigned_employee_id
+      LEFT JOIN public.employees handback_tech
+        ON handback_tech.employee_id = install.handed_back_by_employee_id
       LEFT JOIN public.packages p
         ON a.package_id = p.package_id
       LEFT JOIN public.customers suggested
@@ -402,7 +413,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         )::INTEGER AS installed,
         COUNT(*) FILTER (
           WHERE status = 'pending'
-            AND ${latestInstall("applications")} = 'unresolved'
+            AND ${latestInstall("applications")} IN ('unresolved', 'open')
         )::INTEGER AS install_failed,
         COUNT(*) FILTER (
           WHERE status = 'pending'
@@ -2089,33 +2100,61 @@ applicationsRouter.post(
         });
       }
 
-      const ticketResult = await client.query(
-        `
-        INSERT INTO public.service_tickets (
-          application_id, job_type, issue_summary, priority, status,
-          reported_date, assigned_employee_id,
-          created_by_employee_id, updated_by_employee_id
-        ) VALUES (
-          $1, 'installation', $2, 'normal', 'assigned',
-          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE, $3, $4, $4
-        )
-        RETURNING *;
-        `,
-        [
-          Number(applicationId),
-          `Install service for ${application.name}`,
-          assignedEmployeeId,
-          employee.employeeId,
-        ]
+      // A job a technician handed back (migration 085) is still sitting there,
+      // open and unassigned. Sending it out again re-uses that ticket rather
+      // than opening a second one beside it - otherwise every hand-back would
+      // leave an orphan open installation behind, and the history of why the
+      // first technician gave it up would end up on a ticket nobody looks at.
+      const handedBackResult = await client.query(
+        `SELECT service_ticket_id FROM public.service_tickets
+         WHERE application_id = $1 AND job_type = 'installation' AND status = 'open'
+         ORDER BY service_ticket_id DESC
+         LIMIT 1
+         FOR UPDATE;`,
+        [Number(applicationId)]
       );
+      const handedBack = handedBackResult.rows[0];
+
+      const ticketResult = handedBack
+        ? await client.query(
+            // The trigger from migration 085 clears the hand-back label as
+            // soon as the ticket has a technician again.
+            `UPDATE public.service_tickets
+             SET status = 'assigned', assigned_employee_id = $1,
+                 updated_by_employee_id = $2, updated_at = CURRENT_TIMESTAMP
+             WHERE service_ticket_id = $3
+             RETURNING *;`,
+            [assignedEmployeeId, employee.employeeId, handedBack.service_ticket_id]
+          )
+        : await client.query(
+            `
+            INSERT INTO public.service_tickets (
+              application_id, job_type, issue_summary, priority, status,
+              reported_date, assigned_employee_id,
+              created_by_employee_id, updated_by_employee_id
+            ) VALUES (
+              $1, 'installation', $2, 'normal', 'assigned',
+              (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE, $3, $4, $4
+            )
+            RETURNING *;
+            `,
+            [
+              Number(applicationId),
+              `Install service for ${application.name}`,
+              assignedEmployeeId,
+              employee.employeeId,
+            ]
+          );
       const ticket = ticketResult.rows[0];
 
       await client.query(
         `INSERT INTO public.service_ticket_history
           (service_ticket_id, event_type, from_status, to_status, note, changed_by_employee_id)
-         VALUES ($1, 'created', NULL, 'assigned', $2, $3);`,
+         VALUES ($1, $2, $3, 'assigned', $4, $5);`,
         [
           ticket.service_ticket_id,
+          handedBack ? "status_changed" : "created",
+          handedBack ? "open" : null,
           `Installation sent to ${technician.first_name} ${technician.last_name}`,
           employee.employeeId,
         ]

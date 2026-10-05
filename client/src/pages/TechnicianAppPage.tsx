@@ -622,12 +622,18 @@ function JobCard({
   // separate from the note draft so opening the picker never touches what
   // was already written in the box above it.
   const [picking, setPicking] = useState(false);
+  // Handing back takes the job off this phone for good, so it asks once.
+  const [confirmingHandBack, setConfirmingHandBack] = useState(false);
   const [when, setWhen] = useState("");
 
   const closed = job.status !== "assigned" && job.status !== "in_progress";
   const rescheduled = job.status === "assigned" && !!job.rescheduled_for;
 
-  const save = async (status: JobStatus | null, rescheduledFor?: string) => {
+  const save = async (
+    status: JobStatus | null,
+    rescheduledFor?: string,
+    handBack = false
+  ) => {
     try {
       setBusy(true);
       setError("");
@@ -639,6 +645,7 @@ function JobCard({
           status: status ?? undefined,
           note: draft,
           rescheduledFor: rescheduledFor ?? undefined,
+          handBack: handBack || undefined,
         }),
       });
 
@@ -920,6 +927,49 @@ function JobCard({
                     icon="event"
                     label={rescheduled ? "Change the time" : "Reschedule"}
                   />
+                )}
+
+                {/* "I can't do this one" - out of day, needs a ladder, off sick
+                    tomorrow. Different from Unresolved, which means the
+                    customer was not there. The note box above is the reason,
+                    same as for Done and Unresolved, and it is required: the
+                    office needs to know who to send instead. */}
+                {confirmingHandBack ? (
+                  <div className="rounded-xl border border-outline-variant bg-white p-3">
+                    <p className="text-sm font-semibold text-on-surface">Hand this job back?</p>
+                    <p className="mt-1 text-xs leading-5 text-on-surface-variant">
+                      It comes off your list and goes back to the office, who will
+                      send someone else. Say why in the box above.
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setConfirmingHandBack(false)}
+                        className="rounded-xl bg-surface-container px-4 py-3 text-sm font-semibold text-on-surface-variant"
+                      >
+                        Keep it
+                      </button>
+                      <ActionButton
+                        busy={busy}
+                        disabled={draft.trim().length < 3}
+                        onClick={() => save(null, undefined, true)}
+                        className="bg-on-surface-variant text-white"
+                        icon="assignment_return"
+                        label="Hand back"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirmingHandBack(true)}
+                    className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-on-surface-variant underline-offset-2 hover:underline"
+                  >
+                    <span className="material-symbols-outlined text-lg">assignment_return</span>
+                    Can't do this one? Hand it back
+                  </button>
                 )}
               </div>
 
