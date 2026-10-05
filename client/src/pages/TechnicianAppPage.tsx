@@ -870,13 +870,18 @@ function JobCard({
                   />
                 )}
 
-                <div className="grid grid-cols-2 gap-2">
+                {/* The three ways a visit can go, side by side. Three across a
+                    phone is about 100px each, so these stack the icon over the
+                    word rather than beside it - "Unresolved" with an icon next
+                    to it does not fit in that width. */}
+                <div className="grid grid-cols-3 gap-2">
                   <ActionButton
                     busy={busy}
                     onClick={() => save("completed")}
                     className="bg-success text-white"
                     icon="check"
                     label="Done"
+                    stacked
                   />
                   <ActionButton
                     busy={busy}
@@ -884,6 +889,15 @@ function JobCard({
                     className="bg-stalled text-white"
                     icon="door_front"
                     label="Unresolved"
+                    stacked
+                  />
+                  <ActionButton
+                    busy={busy}
+                    onClick={() => setPicking((open) => !open)}
+                    className={picking ? "bg-scheduled text-white" : "bg-scheduled/15 text-scheduled"}
+                    icon="event"
+                    label={rescheduled ? "New time" : "Reschedule"}
+                    stacked
                   />
                 </div>
 
@@ -892,7 +906,7 @@ function JobCard({
                     picker is hidden behind a button because most jobs never
                     need it, and a date field sitting open on every card would
                     read as something that has to be filled in. */}
-                {picking ? (
+                {picking && (
                   <div className="rounded-xl border border-outline-variant bg-white p-3">
                     <label className="block text-sm font-semibold text-on-surface">
                       Come back on
@@ -923,14 +937,6 @@ function JobCard({
                       />
                     </div>
                   </div>
-                ) : (
-                  <ActionButton
-                    busy={busy}
-                    onClick={() => setPicking(true)}
-                    className="bg-scheduled/15 text-scheduled"
-                    icon="event"
-                    label={rescheduled ? "Change the time" : "Reschedule"}
-                  />
                 )}
 
                 {/* "I can't do this one" - out of day, needs a ladder, off sick
@@ -1014,6 +1020,7 @@ function ActionButton({
   icon,
   label,
   disabled = false,
+  stacked = false,
 }: {
   busy: boolean;
   onClick: () => void;
@@ -1021,13 +1028,19 @@ function ActionButton({
   icon: string;
   label: string;
   disabled?: boolean;
+  /** Icon above the label, for three-across rows where side-by-side will not fit. */
+  stacked?: boolean;
 }) {
+  const layout = stacked
+    ? "flex-col gap-1 px-2 py-3 text-xs"
+    : "gap-2 px-4 py-4 text-sm";
+
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={busy || disabled}
-      className={`flex items-center justify-center gap-2 rounded-xl px-4 py-4 text-sm font-semibold disabled:opacity-40 ${className}`}
+      className={`flex items-center justify-center rounded-xl font-semibold disabled:opacity-40 ${layout} ${className}`}
     >
       <span className="material-symbols-outlined text-lg">{icon}</span>
       {busy ? "Saving…" : label}
