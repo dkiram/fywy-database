@@ -555,11 +555,11 @@ technicianAppRouter.patch(
     // Sends the job back to the office's Open pile, unassigned (migration 085).
     const handBack = req.body?.handBack === true;
     if (handBack && (requestedStatus || rescheduleRequested)) {
-      return res.status(400).json({ error: "Hand it back on its own." });
+      return res.status(400).json({ error: "Send it back on its own." });
     }
     if (handBack && note.length < 3) {
       return res.status(400).json({
-        error: "Say why you are handing it back, so the office knows who to send.",
+        error: "Say why you are sending it back, so the office knows who to send.",
       });
     }
 
@@ -637,7 +637,7 @@ technicianAppRouter.patch(
           [technician.employeeId, note, ticketId]
         );
 
-        const handbackNote = `Handed back by ${technician.firstName} ${technician.lastName} — ${note}`;
+        const handbackNote = `Sent back by ${technician.firstName} ${technician.lastName} — ${note}`;
 
         await client.query(
           `INSERT INTO public.service_ticket_history
@@ -649,7 +649,7 @@ technicianAppRouter.patch(
         await client.query(
           `INSERT INTO public.audit_logs
             (employee_id, actor_name, action, entity_type, entity_id, field_name, old_value, new_value, reason, occurred_at)
-           VALUES ($1, $2, 'Handed a job back to the office', 'service_ticket', $3, 'status', $4, 'open', $5, CURRENT_TIMESTAMP);`,
+           VALUES ($1, $2, 'Sent a job back to the office', 'service_ticket', $3, 'status', $4, 'open', $5, CURRENT_TIMESTAMP);`,
           [
             technician.employeeId,
             `${technician.firstName} ${technician.lastName}`,

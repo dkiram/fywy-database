@@ -622,8 +622,12 @@ function JobCard({
   // separate from the note draft so opening the picker never touches what
   // was already written in the box above it.
   const [picking, setPicking] = useState(false);
-  // Handing back takes the job off this phone for good, so it asks once.
+  // Sending a job back takes it off this phone for good, so it asks once -
+  // and asks for the reason right there, in its own box. Pointing up at the
+  // "What happened?" box did not work: its example text is a repair note, so
+  // nobody read it as the place for "why I can't do this one".
   const [confirmingHandBack, setConfirmingHandBack] = useState(false);
+  const [sendBackReason, setSendBackReason] = useState("");
   const [when, setWhen] = useState("");
 
   const closed = job.status !== "assigned" && job.status !== "in_progress";
@@ -643,7 +647,7 @@ function JobCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: status ?? undefined,
-          note: draft,
+          note: handBack ? sendBackReason : draft,
           rescheduledFor: rescheduledFor ?? undefined,
           handBack: handBack || undefined,
         }),
@@ -931,32 +935,43 @@ function JobCard({
 
                 {/* "I can't do this one" - out of day, needs a ladder, off sick
                     tomorrow. Different from Unresolved, which means the
-                    customer was not there. The note box above is the reason,
-                    same as for Done and Unresolved, and it is required: the
-                    office needs to know who to send instead. */}
+                    customer was not there. The reason is required: the office
+                    needs to know who to send instead. */}
                 {confirmingHandBack ? (
                   <div className="rounded-xl border border-outline-variant bg-white p-3">
-                    <p className="text-sm font-semibold text-on-surface">Hand this job back?</p>
+                    <p className="text-sm font-semibold text-on-surface">Send this back?</p>
                     <p className="mt-1 text-xs leading-5 text-on-surface-variant">
                       It comes off your list and goes back to the office, who will
-                      send someone else. Say why in the box above.
+                      send someone else.
                     </p>
+                    <label className="mt-3 block text-sm font-semibold text-on-surface">
+                      Why are you sending it back?
+                      <textarea
+                        value={sendBackReason}
+                        onChange={(event) => setSendBackReason(event.target.value)}
+                        rows={3}
+                        maxLength={1000}
+                        autoFocus
+                        placeholder="Needs a ladder, off tomorrow, wrong cable in the van…"
+                        className="mt-2 w-full rounded-xl border border-outline-variant bg-white px-3 py-3 text-base font-normal text-on-surface"
+                      />
+                    </label>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => setConfirmingHandBack(false)}
+                        onClick={() => { setConfirmingHandBack(false); setSendBackReason(""); }}
                         className="rounded-xl bg-surface-container px-4 py-3 text-sm font-semibold text-on-surface-variant"
                       >
                         Keep it
                       </button>
                       <ActionButton
                         busy={busy}
-                        disabled={draft.trim().length < 3}
+                        disabled={sendBackReason.trim().length < 3}
                         onClick={() => save(null, undefined, true)}
                         className="bg-on-surface-variant text-white"
                         icon="assignment_return"
-                        label="Hand back"
+                        label="Send back"
                       />
                     </div>
                   </div>
@@ -968,7 +983,7 @@ function JobCard({
                     className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-on-surface-variant underline-offset-2 hover:underline"
                   >
                     <span className="material-symbols-outlined text-lg">assignment_return</span>
-                    Can't do this one? Hand it back
+                    Can't do this one? Send it back
                   </button>
                 )}
               </div>

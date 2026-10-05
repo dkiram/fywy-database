@@ -1830,7 +1830,7 @@ function InstallBadge({ application }: { application: ApplicationRecord }) {
     // Solid, matching the unresolved pill on the service ticket queue, so the
     // one state that needs somebody to act reads the same in both places.
     unresolved: { label: "Couldn't install", className: "bg-stalled text-white" },
-    open: { label: "Handed back", className: "bg-surface-container-high text-on-surface" },
+    open: { label: "Sent back", className: "bg-surface-container-high text-on-surface" },
     completed: { label: "Installed", className: "bg-tertiary/10 text-tertiary" },
   };
 
@@ -1928,7 +1928,7 @@ function InstallationDispatchRow({
         <div className="rounded-xl bg-surface-container p-4">
           <p className="flex items-center gap-2 text-sm font-semibold text-on-surface">
             <span className="material-symbols-outlined text-lg">assignment_return</span>
-            Handed back by {application.install_handed_back_by_name || "the technician"}
+            Sent back by {application.install_handed_back_by_name || "the technician"}
           </p>
           {application.install_handback_reason && (
             <p className="mt-1.5 text-sm text-on-surface-variant">{application.install_handback_reason}</p>
