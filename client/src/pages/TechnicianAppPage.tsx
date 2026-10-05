@@ -828,12 +828,12 @@ function JobCard({
             </p>
           ) : (
             <div className="mt-4">
-              {/* While Send back is open this box becomes the reason, and says
+              {/* While Reassign is open this box becomes the reason, and says
                   so. Its usual example text is a repair note, which is why
                   nobody read it as the place for "why I can't do this one"
                   when the panel only pointed up at it. */}
               <label className="block text-sm font-semibold text-on-surface">
-                {confirmingHandBack ? "Why are you sending it back?" : "What happened?"}
+                {confirmingHandBack ? "Why does it need reassigning?" : "What happened?"}
                 <textarea
                   value={draft}
                   onChange={(event) => onDraftChange(event.target.value)}
@@ -953,7 +953,7 @@ function JobCard({
                     needs to know who to send instead. */}
                 {confirmingHandBack ? (
                   <div className="rounded-xl border border-outline-variant bg-white p-3">
-                    <p className="text-sm font-semibold text-on-surface">Send this back?</p>
+                    <p className="text-sm font-semibold text-on-surface">Reassign this job?</p>
                     <p className="mt-1 text-xs leading-5 text-on-surface-variant">
                       It comes off your list and goes back to the office, who will
                       send someone else. Write the reason in the box above.
@@ -973,7 +973,7 @@ function JobCard({
                         onClick={() => save(null, undefined, true)}
                         className="bg-on-surface-variant text-white"
                         icon="assignment_return"
-                        label="Send back"
+                        label="Reassign"
                       />
                     </div>
                   </div>
@@ -987,7 +987,7 @@ function JobCard({
                     className="flex items-center justify-center gap-2 rounded-xl border border-on-surface-variant px-4 py-[15px] text-sm font-semibold text-on-surface-variant disabled:opacity-40"
                   >
                     <span className="material-symbols-outlined text-lg">assignment_return</span>
-                    Can't do this one? Send it back
+                    Reassign
                   </button>
                 )}
               </div>
