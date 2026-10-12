@@ -1894,6 +1894,211 @@ app.get("/api/locations", requireAuth, async (_req, res) => {
 const EDITABLE_ROLES = ["admin", "head_office", "branch"] as const;
 type EditableRole = (typeof EDITABLE_ROLES)[number];
 
+const normalizeName = (value: unknown) =>
+  typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+
+/**
+ * The house username: first initial plus surname, lowercase — Deon Stewart
+ * becomes dstewart. Accents, apostrophes, hyphens and spaces are dropped
+ * rather than kept, so O'Brien-Hall becomes dobrienhall: something a cashier
+ * can type at the login screen without guessing at punctuation.
+ */
+function deriveUsername(firstName: string, lastName: string) {
+  const letters = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[^a-zA-Z]/g, "")
+      .toLowerCase();
+
+  return letters(firstName).slice(0, 1) + letters(lastName);
+}
+
+const USERNAME_PATTERN = /^[a-z][a-z0-9._-]{1,49}$/;
+
+/**
+ * Adds one employee: a system user with a username and starting password, or
+ * a technician with neither (migration 034 makes that split a database rule).
+ *
+ * The username defaults to deriveUsername, but the admin may override it —
+ * the default is the only thing standing between two Deon Stewarts, and the
+ * second one needs somewhere to go. A clash is reported, never auto-suffixed,
+ * so nobody ends up as dstewart2 without someone having chosen that.
+ *
+ * As with a password reset, the admin chooses the starting password and hands
+ * it over; it is not echoed back or written to the activity trail.
+ */
+app.post(
+  "/api/admin/employees",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    const actor = req.session.employee!;
+
+    const firstName = normalizeName(req.body.firstName);
+    const lastName = normalizeName(req.body.lastName);
+
+    if (firstName.length < 1 || firstName.length > 100) {
+      return res.status(400).json({
+        error: "First name must be between 1 and 100 characters.",
+      });
+    }
+    if (lastName.length < 1 || lastName.length > 100) {
+      return res.status(400).json({
+        error: "Last name must be between 1 and 100 characters.",
+      });
+    }
+    if (/[\u0000-\u001F\u007F]/.test(firstName) || /[\u0000-\u001F\u007F]/.test(lastName)) {
+      return res.status(400).json({ error: "Employee names contain invalid characters." });
+    }
+
+    const role = String(req.body.role ?? "");
+    const isTechnician = role === "technician";
+
+    if (!isTechnician && !EDITABLE_ROLES.includes(role as EditableRole)) {
+      return res.status(400).json({
+        error: `Role must be one of: ${[...EDITABLE_ROLES, "technician"].join(", ")}.`,
+      });
+    }
+
+    if (req.body.isActive !== undefined && typeof req.body.isActive !== "boolean") {
+      return res.status(400).json({ error: "isActive must be true or false." });
+    }
+    const isActive = req.body.isActive ?? true;
+
+    const locationId =
+      req.body.locationId === undefined || req.body.locationId === null
+        ? null
+        : Number(req.body.locationId);
+
+    if (locationId !== null && !Number.isInteger(locationId)) {
+      return res.status(400).json({ error: "Invalid office." });
+    }
+
+    // System users always have an office: it scopes what they see and prints
+    // on their receipts. Technicians travel, so theirs is optional.
+    if (!isTechnician && locationId === null) {
+      return res.status(400).json({ error: "Choose an office for this employee." });
+    }
+
+    let username: string | null = null;
+    let passwordHash: string | null = null;
+
+    if (!isTechnician) {
+      const requested =
+        typeof req.body.username === "string" ? req.body.username.trim().toLowerCase() : "";
+      const chosen = requested || deriveUsername(firstName, lastName);
+
+      if (!USERNAME_PATTERN.test(chosen)) {
+        return res.status(400).json({
+          error:
+            "Usernames are 2–50 characters: lowercase letters, digits, dots, dashes or underscores, starting with a letter.",
+        });
+      }
+
+      const password = String(req.body.password ?? "");
+
+      // Same rules as a reset, so a starting password is no weaker than a
+      // replacement one.
+      if (password.length < 12) {
+        return res
+          .status(400)
+          .json({ error: "The starting password must be at least 12 characters." });
+      }
+      if (Buffer.byteLength(password, "utf8") > 72) {
+        return res
+          .status(400)
+          .json({ error: "The starting password is too long. Use 72 bytes or fewer." });
+      }
+
+      username = chosen;
+      passwordHash = await bcrypt.hash(password, 12);
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      if (locationId !== null) {
+        const office = await client.query(
+          `SELECT 1 FROM public.locations WHERE location_id = $1 AND is_active = TRUE;`,
+          [locationId]
+        );
+
+        if (office.rows.length === 0) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: "That office does not exist." });
+        }
+      }
+
+      if (username !== null) {
+        const taken = await client.query(
+          `SELECT first_name, last_name FROM public.employees
+           WHERE LOWER(username) = LOWER($1);`,
+          [username]
+        );
+
+        if (taken.rows.length > 0) {
+          await client.query("ROLLBACK");
+          const holder = taken.rows[0];
+          return res.status(409).json({
+            error: `The username ${username} already belongs to ${holder.first_name} ${holder.last_name}. Choose a different one.`,
+          });
+        }
+      }
+
+      const inserted = await client.query(
+        `
+        INSERT INTO public.employees
+          (first_name, last_name, username, password_hash, role, location_id, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING employee_id, first_name, last_name, username, role, is_active, location_id;
+        `,
+        [firstName, lastName, username, passwordHash, role, locationId, isActive]
+      );
+
+      const created = inserted.rows[0];
+
+      // Never record password material — only who was added, and as what.
+      await client.query(
+        `INSERT INTO public.audit_logs
+           (employee_id, actor_name, action, entity_type, entity_id,
+            field_name, old_value, new_value, reason)
+         VALUES ($1, $2, $3, 'employee', $4, 'username', NULL, $5, $6);`,
+        [
+          actor.employeeId,
+          `${actor.firstName} ${actor.lastName}`,
+          `Added ${created.first_name} ${created.last_name} as ${role}`,
+          String(created.employee_id),
+          created.username,
+          typeof req.body.reason === "string"
+            ? req.body.reason.trim().slice(0, 500) || null
+            : null,
+        ]
+      );
+
+      await client.query("COMMIT");
+
+      res.status(201).json({ employee: created });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+
+      // Two admins adding the same person at once: the pre-check above passed
+      // for both, and the unique index caught the second.
+      if ((error as { code?: string }).code === "23505") {
+        return res.status(409).json({
+          error: `The username ${username} is already taken. Choose a different one.`,
+        });
+      }
+
+      console.error("Could not add employee:", error);
+      res.status(500).json({ error: "Could not add the employee." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 /**
  * Edits one employee's name, role, office, or active state.
  *
@@ -1933,8 +2138,6 @@ app.patch(
       return res.status(400).json({ error: "Nothing to change." });
     }
 
-    const normalizeName = (value: unknown) =>
-      typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
     const firstName = wantsFirstName ? normalizeName(req.body.firstName) : null;
     const lastName = wantsLastName ? normalizeName(req.body.lastName) : null;
 

@@ -60,6 +60,7 @@ function AdminControlsPage() {
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<Employee | null>(null);
   const [viewingSessions, setViewingSessions] = useState<Employee | null>(null);
+  const [adding, setAdding] = useState(false);
   const [phoneAccess, setPhoneAccess] = useState<Record<number, PhoneAccess>>({});
 
   const loadEmployees = async () => {
@@ -122,7 +123,19 @@ function AdminControlsPage() {
       </div>
 
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-on-surface">Employees</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-on-surface">Employees</h2>
+          <button
+            type="button"
+            onClick={() => {
+              setNotice("");
+              setAdding(true);
+            }}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary"
+          >
+            Add employee
+          </button>
+        </div>
 
         {loading && (
           <p className="mt-4 text-sm text-on-surface-variant">Loading employees...</p>
@@ -256,6 +269,18 @@ function AdminControlsPage() {
         <SessionHistoryModal
           employee={viewingSessions}
           onClose={() => setViewingSessions(null)}
+        />
+      )}
+
+      {adding && (
+        <AddEmployeeModal
+          locations={locations}
+          onClose={() => setAdding(false)}
+          onSaved={(message) => {
+            setAdding(false);
+            setNotice(message);
+            loadEmployees();
+          }}
         />
       )}
 
@@ -466,6 +491,310 @@ function formatMoment(value: string | null) {
     timeStyle: "short",
     timeZone: "America/Jamaica",
   });
+}
+
+/**
+ * The username a new login gets unless the admin types another: first
+ * initial plus surname, lowercase. Mirrors deriveUsername on the server,
+ * which is what actually applies when the field is left as suggested.
+ */
+function suggestUsername(firstName: string, lastName: string) {
+  const letters = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[^a-zA-Z]/g, "")
+      .toLowerCase();
+
+  return letters(firstName).slice(0, 1) + letters(lastName);
+}
+
+function AddEmployeeModal({
+  locations,
+  onClose,
+  onSaved,
+}: {
+  locations: Location[];
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [role, setRole] = useState("branch");
+  const [locationId, setLocationId] = useState("");
+  const [isActive, setIsActive] = useState(true);
+  const [reason, setReason] = useState("");
+
+  // The username follows the name until the admin edits it themselves, after
+  // which it is theirs and stops moving.
+  const [usernameOverride, setUsernameOverride] = useState<string | null>(null);
+  const username = usernameOverride ?? suggestUsername(firstName, lastName);
+
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState("");
+
+  const isTechnician = role === "technician";
+
+  const canSave =
+    firstName.trim() !== "" &&
+    lastName.trim() !== "" &&
+    (isTechnician ||
+      (locationId !== "" &&
+        username.trim() !== "" &&
+        password.length >= 12 &&
+        confirmPassword !== ""));
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!isTechnician && password !== confirmPassword) {
+      setModalError("The two passwords do not match.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setModalError("");
+
+      const body: Record<string, unknown> = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        role,
+        isActive,
+        locationId: locationId === "" ? null : Number(locationId),
+      };
+
+      if (!isTechnician) {
+        body.username = username.trim();
+        body.password = password;
+      }
+      if (reason.trim()) body.reason = reason.trim();
+
+      const response = await apiFetch("/api/admin/employees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not add the employee.");
+
+      const created = data.employee;
+      onSaved(
+        created.username
+          ? `Added ${created.first_name} ${created.last_name} as ${created.username}. Hand them the starting password directly.`
+          : `Added ${created.first_name} ${created.last_name} as a technician.`
+      );
+    } catch (saveError) {
+      setModalError(
+        saveError instanceof Error ? saveError.message : "Could not add the employee."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputClass =
+    "mt-1.5 w-full rounded-lg border border-outline-variant bg-white px-3 py-2.5 text-sm";
+
+  const displayName = `${firstName.trim()} ${lastName.trim()}`.trim();
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
+      <div className="my-4 w-full max-w-lg rounded-2xl bg-surface-container-lowest shadow-2xl">
+        <div className="border-b border-surface-container px-6 py-5">
+          <h3 className="text-lg font-semibold text-on-surface">
+            {displayName || "New employee"}
+          </h3>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            {isTechnician
+              ? "No login — technician"
+              : username
+                ? `Username ${username}`
+                : "Username is made from the first initial and last name"}
+          </p>
+        </div>
+
+        <form onSubmit={save} className="space-y-5 px-6 py-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm font-semibold text-on-surface">
+              First name
+              <input
+                value={firstName}
+                maxLength={100}
+                required
+                autoFocus
+                onChange={(event) => setFirstName(event.target.value)}
+                className={inputClass}
+              />
+            </label>
+
+            <label className="block text-sm font-semibold text-on-surface">
+              Last name
+              <input
+                value={lastName}
+                maxLength={100}
+                required
+                onChange={(event) => setLastName(event.target.value)}
+                className={inputClass}
+              />
+            </label>
+          </div>
+
+          <label className="block text-sm font-semibold text-on-surface">
+            Role
+            <select
+              value={role}
+              onChange={(event) => setRole(event.target.value)}
+              className={inputClass}
+            >
+              {ROLE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+              <option value="technician">Technician</option>
+            </select>
+          </label>
+
+          {isTechnician && (
+            <p className="-mt-3 text-xs text-on-surface-variant">
+              Technicians are assigned work but never log in, so they get no username or
+              password. Issue phone access from Edit once they are added.
+            </p>
+          )}
+
+          {!isTechnician && (
+            <label className="block text-sm font-semibold text-on-surface">
+              Username
+              <input
+                value={username}
+                maxLength={50}
+                onChange={(event) =>
+                  setUsernameOverride(event.target.value.toLowerCase().replace(/\s/g, ""))
+                }
+                className={`${inputClass} font-mono`}
+              />
+              <span className="mt-1 block text-xs font-normal text-on-surface-variant">
+                {usernameOverride === null
+                  ? "Made from the first initial and last name. Change it if someone already has it."
+                  : "Set by you."}
+                {usernameOverride !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setUsernameOverride(null)}
+                    className="ml-1 font-medium text-primary"
+                  >
+                    Use the suggested one
+                  </button>
+                )}
+              </span>
+            </label>
+          )}
+
+          <label className="block text-sm font-semibold text-on-surface">
+            Office
+            <select
+              value={locationId}
+              required={!isTechnician}
+              onChange={(event) => setLocationId(event.target.value)}
+              className={inputClass}
+            >
+              <option value="">{isTechnician ? "No office" : "Choose an office"}</option>
+              {locations.map((location) => (
+                <option key={location.location_id} value={location.location_id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {!isTechnician && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-semibold text-on-surface">
+                Starting password
+                <input
+                  type="text"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="At least 12 characters"
+                  autoComplete="off"
+                  className={inputClass}
+                />
+              </label>
+
+              <label className="block text-sm font-semibold text-on-surface">
+                Confirm
+                <input
+                  type="text"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="off"
+                  className={inputClass}
+                />
+              </label>
+
+              <p className="-mt-2 text-xs text-on-surface-variant sm:col-span-2">
+                You choose it and hand it over directly. It is never shown again afterwards,
+                and never written to the activity trail.
+              </p>
+            </div>
+          )}
+
+          <label className="flex items-start gap-3 text-sm font-semibold text-on-surface">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(event) => setIsActive(event.target.checked)}
+              className="mt-0.5 size-4"
+            />
+            <span>
+              Active
+              <span className="mt-0.5 block text-xs font-normal text-on-surface-variant">
+                Inactive staff cannot log in and drop out of the technician list. Their history
+                stays on old tickets and payments.
+              </span>
+            </span>
+          </label>
+
+          <label className="block text-sm font-semibold text-on-surface">
+            Reason (optional)
+            <input
+              value={reason}
+              maxLength={500}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Recorded in the activity trail"
+              className={inputClass}
+            />
+          </label>
+
+          {modalError && (
+            <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{modalError}</p>
+          )}
+
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={onClose}
+              className="rounded-lg bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !canSave}
+              className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-on-primary disabled:opacity-50"
+            >
+              {saving ? "Adding..." : "Add employee"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function EditEmployeeModal({
