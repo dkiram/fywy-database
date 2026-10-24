@@ -1,5 +1,5 @@
 /** Runs the selected operational report and renders its server-defined columns and rows. */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
@@ -108,7 +108,7 @@ function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const report = useMemo(() => availableReports.find((item) => item.key === reportKey) ?? availableReports[0], [availableReports, reportKey]);
-  const columns = technicianId ? technicianJobColumns : report.columns;
+  const columns = report.columns;
   useScrollRestoration(!loading);
 
   const loadReport = useCallback(async (signal: AbortSignal) => {
@@ -117,7 +117,6 @@ function ReportsPage() {
       const query = new URLSearchParams({ search, page: String(page) });
       if (report.dateFilters) { query.set("from", from); query.set("to", to); }
       if (sort) { query.set("sort", sort); query.set("dir", direction); }
-      if (technicianId) query.set("employee_id", technicianId);
       const response = await apiFetch(`/api/reports/${reportKey}?${query}`, { signal });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not load report.");
       if (signal.aborted) return;
@@ -125,7 +124,7 @@ function ReportsPage() {
       if (data.pagination.page !== page) updateParams({ page: String(data.pagination.page) });
     } catch (loadError) { if (signal.aborted) return; setError(loadError instanceof Error ? loadError.message : "Could not load report."); }
     finally { if (!signal.aborted) setLoading(false); }
-  }, [direction, from, page, report.dateFilters, reportKey, search, sort, technicianId, to, updateParams]);
+  }, [direction, from, page, report.dateFilters, reportKey, search, sort, to, updateParams]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -160,8 +159,12 @@ function ReportsPage() {
 
   const openRow = (row: ReportRow) => {
     if (reportKey === "technician-jobs") {
-      if (technicianId) navigate(`/service-requests?search=${encodeURIComponent(String(row.service_ticket_id))}`);
-      else updateParams({ employee_id: String(row.employee_id), technician: String(row.technician), search: null, page: null });
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set("employee_id", String(row.employee_id));
+        next.set("technician", String(row.technician));
+        return next;
+      }, { replace: true });
     }
     if (reportKey === "pending-service") navigate(`/service-requests?search=${row.service_ticket_id}`);
     if (reportKey === "delinquent-customers" && row.customer_id) openCustomer(String(row.customer_id));
@@ -178,7 +181,7 @@ function ReportsPage() {
     <div className="rounded-xl border border-warning/30 bg-warning-container p-4 text-sm text-warning"><span className="font-medium">Legacy balance note:</span> the most recent year is reconstructed from Access payments and anniversary charges. Older brought-forward amounts are clearly marked unverified on the customer account.</div>
 
     <section className="report-print-area overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-surface-container p-5 xl:flex-row xl:items-end xl:justify-between"><div><h2 className="text-lg font-semibold text-on-surface">{technicianId ? `${technicianName} — Jobs` : report.title}</h2><p className="mt-1 text-sm text-on-surface-variant">{technicianId ? "Each closing in the selected dates, plus open jobs now (regardless of date). A job may appear more than once if reopened. Current status reflects later changes." : report.description}</p>{technicianId && <button type="button" onClick={() => updateParams({ employee_id: null, technician: null, search: null, page: null })} className="mt-3 text-sm font-medium text-primary hover:underline">← All technicians</button>}</div><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Search<input value={search} onChange={(event) => updateParams({ search: event.target.value || null, page: null })} className="mt-1 block w-56 rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal normal-case tracking-normal" placeholder="Filter report..." /></label>{report.dateFilters && <><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">From<input type="date" value={from} onChange={(event) => updateParams({ from: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">To<input type="date" value={to} onChange={(event) => updateParams({ to: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label></>}<button type="button" disabled={rows.length === 0} onClick={exportCsv} className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40"><span className="material-symbols-outlined text-base">download</span>Export Page</button><button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-on-primary"><span className="material-symbols-outlined text-base">print</span>Print</button></div></div>
+      <div className="flex flex-col gap-4 border-b border-surface-container p-5 xl:flex-row xl:items-end xl:justify-between"><div><h2 className="text-lg font-semibold text-on-surface">{report.title}</h2><p className="mt-1 text-sm text-on-surface-variant">{report.description}</p></div><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Search<input value={search} onChange={(event) => updateParams({ search: event.target.value || null, page: null })} className="mt-1 block w-56 rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal normal-case tracking-normal" placeholder="Filter report..." /></label>{report.dateFilters && <><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">From<input type="date" value={from} onChange={(event) => updateParams({ from: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">To<input type="date" value={to} onChange={(event) => updateParams({ to: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label></>}<button type="button" disabled={rows.length === 0} onClick={exportCsv} className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40"><span className="material-symbols-outlined text-base">download</span>Export Page</button><button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-on-primary"><span className="material-symbols-outlined text-base">print</span>Print</button></div></div>
       {totals && <div className="flex flex-wrap gap-6 border-b border-surface-container bg-primary/5 px-5 py-3 text-sm">{"payment_count" in totals && <><span><strong>{Number(totals.payment_count || 0).toLocaleString()}</strong> payments</span><span><strong>{formatCurrency(totals.total_amount)}</strong> collected</span></>}{"delinquent_count" in totals && <span><strong>{Number(totals.delinquent_count || 0).toLocaleString()}</strong> delinquent customers</span>}{"jobs_closed" in totals && <><span><strong>{Number(totals.jobs_closed || 0).toLocaleString()}</strong> jobs closed</span><span><strong>{Number(totals.completed_count || 0).toLocaleString()}</strong> completed</span><span><strong>{Number(totals.unresolved_count || 0).toLocaleString()}</strong> unresolved</span></>}</div>}
       {error && <p className="m-5 rounded-lg bg-error/10 p-4 text-sm text-error">{error}</p>}
       <div className="overflow-x-auto"><table className="w-full min-w-[44rem] text-left md:min-w-0"><thead className="bg-surface-container-low"><tr>{columns.map((column) => {
@@ -192,10 +195,99 @@ function ReportsPage() {
               </button>
             : column.label}
         </th>;
-      })}</tr></thead><tbody className="divide-y divide-surface-container">{!loading && rows.map((row, index) => <tr key={`${reportKey}-${index}`} onClick={() => openRow(row)} className="transition hover:bg-surface-container-low/60">{columns.map((column) => <td key={column.key} className="max-w-sm px-5 py-4 text-sm text-on-surface-variant">{reportKey === "technician-jobs" && column.key === (technicianId ? "service_ticket_id" : "technician") ? <button type="button" onClick={(event) => { event.stopPropagation(); openRow(row); }} className="font-medium text-primary underline underline-offset-2">{formatCell(row[column.key], column.format)}</button> : formatCell(row[column.key], column.format)}</td>)}</tr>)}</tbody></table></div>
+      })}</tr></thead><tbody className="divide-y divide-surface-container">{!loading && rows.map((row, index) => <tr key={`${reportKey}-${index}`} onClick={() => openRow(row)} className="transition hover:bg-surface-container-low/60">{columns.map((column) => <td key={column.key} className="max-w-sm px-5 py-4 text-sm text-on-surface-variant">{reportKey === "technician-jobs" && column.key === "technician" ? <button type="button" onClick={(event) => { event.stopPropagation(); openRow(row); }} aria-haspopup="dialog" className="inline-flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 font-medium text-primary transition hover:bg-primary/20">{formatCell(row[column.key], column.format)}<span aria-hidden="true" className="material-symbols-outlined text-base">chevron_right</span></button> : formatCell(row[column.key], column.format)}</td>)}</tr>)}</tbody></table></div>
       {loading && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">Generating report...</div>}{!loading && !error && rows.length === 0 && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">No rows match these report filters.</div>}{!loading && rows.length > 0 && <div className="flex items-center justify-between border-t border-surface-container px-5 py-4 text-sm text-on-surface-variant"><span>{pagination.total.toLocaleString()} result{pagination.total === 1 ? "" : "s"}</span><div className="flex items-center gap-3"><button disabled={pagination.page <= 1} onClick={() => updateParams({ page: String(Math.max(page - 1, 1)) })} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Previous</button><span className="text-xs font-medium">Page {pagination.page} of {pagination.totalPages}</span><button disabled={pagination.page >= pagination.totalPages} onClick={() => updateParams({ page: String(Math.min(page + 1, pagination.totalPages)) })} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Next</button></div></div>}
     </section>
+    {technicianId && <TechnicianJobsModal key={technicianId} technicianId={technicianId} name={technicianName} from={from} to={to} onClose={() => {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("employee_id"); next.delete("technician");
+        return next;
+      }, { replace: true });
+    }} />}
   </div>;
+}
+
+function TechnicianJobsModal({ technicianId, name, from, to, onClose }: {
+  technicianId: string; name: string; from: string; to: string; onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [rows, setRows] = useState<ReportRow[]>([]);
+  const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const dialog = dialogRef.current!;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog.close();
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setLoading(true); setError("");
+      try {
+        const query = new URLSearchParams({ employee_id: technicianId, search, page: String(page), from, to });
+        const response = await apiFetch(`/api/reports/technician-jobs?${query}`, { signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load jobs.");
+        if (controller.signal.aborted) return;
+        setRows(data.rows); setPagination(data.pagination);
+        if (data.pagination.page !== page) setPage(data.pagination.page);
+      } catch (err) {
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Could not load jobs.");
+      } finally { if (!controller.signal.aborted) setLoading(false); }
+    }, 180);
+    return () => { window.clearTimeout(timeout); controller.abort(); };
+  }, [technicianId, from, to, search, page]);
+  const changePage = (next: number) => { setLoading(true); setPage(next); };
+  const exportJobs = () => {
+    const escape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const csv = [technicianJobColumns.map((column) => escape(column.label)).join(","), ...rows.map((row) => technicianJobColumns.map((column) => escape(row[column.key])).join(","))].join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    link.download = `technician-${technicianId}-jobs-${from}-${to}.csv`;
+    link.click(); URL.revokeObjectURL(link.href);
+  };
+  return <dialog ref={dialogRef} aria-labelledby="technician-jobs-title" onCancel={(event) => { event.preventDefault(); onClose(); }}
+    className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-5xl overflow-hidden rounded-2xl border-0 bg-surface-container-lowest p-0 text-on-surface shadow-2xl backdrop:bg-black/50 backdrop:backdrop-blur-sm">
+    <div className="flex max-h-[90dvh] flex-col">
+      <header className="flex items-start justify-between gap-4 border-b border-surface-container p-5 sm:p-6">
+        <div><p className="text-xs font-semibold uppercase tracking-wider text-primary">Technician jobs</p><h2 id="technician-jobs-title" className="mt-1 text-xl font-semibold">{name}</h2><p className="mt-2 text-sm text-on-surface-variant">{formatCell(from, "date")} – {formatCell(to, "date")} · Includes open jobs now</p></div>
+        <button type="button" autoFocus onClick={onClose} aria-label="Close technician jobs" className="rounded-full bg-surface-container p-2 hover:bg-primary/10"><span aria-hidden="true" className="material-symbols-outlined block">close</span></button>
+      </header>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-container px-5 py-4 sm:px-6">
+        <label className="flex items-center gap-2 rounded-xl bg-surface-container-low px-3 py-2"><span aria-hidden="true" className="material-symbols-outlined text-on-surface-variant">search</span><input aria-label="Search technician jobs" value={search} onChange={(event) => { setLoading(true); setSearch(event.target.value); setPage(1); }} placeholder="Search jobs, customers, status…" className="w-64 max-w-full bg-transparent text-sm outline-none" /></label>
+        <button type="button" onClick={exportJobs} disabled={loading || !!error || !rows.length} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Export page</button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6" aria-busy={loading}>
+        <p className="mb-4 text-xs leading-5 text-on-surface-variant">Closed jobs use the selected dates; open jobs show the current queue. Reopened jobs may appear more than once. Current status includes any later changes.</p>
+        {loading ? <p role="status" className="py-12 text-center text-sm">Loading jobs…</p> : error ? <p role="alert" className="rounded-xl bg-error/10 p-4 text-sm text-error">{error}</p> : !rows.length ? <p className="py-12 text-center text-sm text-on-surface-variant">No jobs match these filters.</p> : <div className="space-y-3">{rows.map((row, index) => <article key={`${row.service_ticket_id}-${row.event_id ?? index}`} className="rounded-xl border border-surface-container p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-medium text-on-surface-variant">#{String(row.service_ticket_id)} · {humanize(String(row.job_type))}</p><h3 className="mt-1 font-semibold">{String(row.customer_name || "Customer")}</h3><p className="mt-1 text-sm text-on-surface-variant">{String(row.customer_address || "Address unavailable")}</p></div><JobStatus value={row.current_status} /></div>
+          <p className="mt-3 text-sm">{String(row.issue_summary || "—")}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-on-surface-variant"><span>Outcome: <JobStatus value={row.outcome} /></span>{!!row.closed_at && <span>Closed {formatCell(row.closed_at, "datetime")}</span>}{!!row.rescheduled_for && <span>Return visit: {formatCell(row.rescheduled_for, "datetime")}</span>}</div>
+          {!!row.outcome_notes && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-surface-container-low p-3 text-sm text-on-surface-variant">{String(row.outcome_notes)}</p>}
+          <button type="button" onClick={() => navigate(`/service-requests?search=${encodeURIComponent(String(row.service_ticket_id))}`)} className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">Open service record<span aria-hidden="true" className="material-symbols-outlined text-sm">arrow_forward</span></button>
+        </article>)}</div>}
+      </div>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-surface-container px-5 py-4 text-xs text-on-surface-variant sm:px-6"><span>{loading ? "Loading…" : error ? "Jobs unavailable" : `${pagination.total.toLocaleString()} entries`}</span><div className="flex items-center gap-3"><button type="button" disabled={loading || !!error || pagination.page <= 1} onClick={() => changePage(page - 1)} className="rounded-lg bg-surface-container px-3 py-2 disabled:opacity-40">Previous</button><span>Page {pagination.page} of {pagination.totalPages}</span><button type="button" disabled={loading || !!error || pagination.page >= pagination.totalPages} onClick={() => changePage(page + 1)} className="rounded-lg bg-surface-container px-3 py-2 disabled:opacity-40">Next</button></div></footer>
+    </div>
+  </dialog>;
+}
+
+function JobStatus({ value }: { value: unknown }) {
+  const status = String(value || "unknown");
+  const color = status === "completed" ? "bg-emerald-100 text-emerald-800" : status === "unresolved" ? "bg-red-100 text-red-800" : status === "rescheduled" ? "bg-amber-100 text-amber-800" : status === "cancelled" ? "bg-surface-container text-on-surface-variant" : "bg-primary/10 text-primary";
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${color}`}>{humanize(status)}</span>;
 }
 
 function formatCell(value: unknown, format?: Column["format"]) {
