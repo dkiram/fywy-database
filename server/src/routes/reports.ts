@@ -356,7 +356,54 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           LIMIT $3 OFFSET $4;`;
         break;
 
-      case "technician-jobs":
+      case "technician-jobs": {
+        const employeeId = cleanText(req.query.employee_id);
+        if (employeeId) {
+          if (!/^\d+$/.test(employeeId) || !Number.isSafeInteger(Number(employeeId))) {
+            return res.status(400).json({ error: "Choose a valid technician." });
+          }
+          values = [search, searchPattern, from, to, employeeId];
+          // Keep each closing event so the detail reconciles with the summary,
+          // even when the same ticket was closed more than once. Open work is
+          // a separate current snapshot, outside the report date range.
+          const detailSql = `WITH jobs AS (
+            SELECT t.*, h.to_status AS outcome, h.changed_at AS closed_at,
+              h.note AS outcome_notes, h.service_ticket_history_id AS event_id
+            FROM public.service_tickets t
+            JOIN public.service_ticket_history h USING (service_ticket_id)
+            WHERE h.to_status IN ('completed', 'unresolved', 'cancelled')
+              AND h.from_status IS DISTINCT FROM h.to_status
+              AND ($3 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE >= $3::DATE)
+              AND ($4 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE <= $4::DATE)
+            UNION ALL
+            SELECT t.*, 'open_now' AS outcome, NULL AS closed_at,
+              t.resolution_notes AS outcome_notes, NULL AS event_id
+            FROM public.service_tickets t
+            WHERE t.status IN ('assigned', 'in_progress')
+          ), detail AS (
+            SELECT j.service_ticket_id, j.job_type,
+              COALESCE(c.name, a.name) AS customer_name,
+              COALESCE(c.address, a.address) AS customer_address,
+              j.issue_summary, j.outcome, j.closed_at, j.outcome_notes,
+              CASE WHEN j.status = 'assigned' AND j.rescheduled_for IS NOT NULL
+                THEN 'rescheduled' ELSE j.status END AS current_status,
+              j.rescheduled_for, j.event_id
+            FROM jobs j
+            JOIN public.employees e ON e.employee_id = j.assigned_employee_id
+            LEFT JOIN public.customers c ON c.customer_id = j.customer_id
+            LEFT JOIN public.applications a ON a.application_id = j.application_id
+            WHERE e.employee_id = $5 AND e.role = 'technician'
+              AND ($1 = '' OR COALESCE(c.name, a.name) ILIKE $2
+                OR j.service_ticket_id::TEXT ILIKE $2 OR j.issue_summary ILIKE $2
+                OR j.outcome ILIKE $2 OR j.status ILIKE $2
+                OR (j.status = 'assigned' AND j.rescheduled_for IS NOT NULL AND 'rescheduled' ILIKE $2))
+          )`;
+          countSql = `${detailSql} SELECT COUNT(*)::INTEGER AS total FROM detail;`;
+          rowsSql = `${detailSql} SELECT * FROM detail
+            ORDER BY closed_at DESC NULLS FIRST, service_ticket_id DESC, event_id DESC
+            LIMIT $6 OFFSET $7;`;
+          break;
+        }
         // One row per technician: what they closed in the report period, split
         // by how it ended, plus what is on their phone right now.
         //
@@ -504,6 +551,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             HAVING e.is_active OR COUNT(closing.to_status) > 0
           ) per_technician;`;
         break;
+      }
 
       default:
         return res.status(404).json({ error: "Report not found." });

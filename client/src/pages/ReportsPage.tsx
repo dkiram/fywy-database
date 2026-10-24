@@ -52,6 +52,19 @@ const reports: ReportDefinition[] = [
   { key: "nightly-disconnection-runs", title: "Nightly Disconnection Runs", description: "Results of each automatic overdue-customer disconnection run.", icon: "schedule", dateFilters: false, adminOnly: true, columns: [{ key: "olt_automation_run_id", label: "Run" }, { key: "billing_date", label: "Billing Date", format: "date" }, { key: "status", label: "Status", format: "status" }, { key: "candidate_count", label: "Candidates" }, { key: "selected_count", label: "Selected" }, { key: "disconnected_count", label: "Disconnected" }, { key: "skipped_count", label: "Skipped" }, { key: "failed_count", label: "Failed" }, { key: "remaining_count", label: "Remaining" }, { key: "started_at", label: "Started", format: "datetime" }, { key: "completed_at", label: "Completed", format: "datetime" }, { key: "error_message", label: "Error" }] },
 ];
 
+const technicianJobColumns: Column[] = [
+  { key: "service_ticket_id", label: "Ticket" },
+  { key: "job_type", label: "Job Type", format: "status" },
+  { key: "customer_name", label: "Customer" },
+  { key: "customer_address", label: "Address" },
+  { key: "issue_summary", label: "Job" },
+  { key: "outcome", label: "Period Outcome / Open Now", format: "status" },
+  { key: "closed_at", label: "Closed", format: "datetime" },
+  { key: "current_status", label: "Current Status", format: "status" },
+  { key: "rescheduled_for", label: "Rescheduled For", format: "datetime" },
+  { key: "outcome_notes", label: "Notes" },
+];
+
 function ReportsPage() {
   const navigate = useNavigate();
   const openCustomer = useOpenCustomerProfile();
@@ -65,6 +78,8 @@ function ReportsPage() {
     [employee?.role]
   );
   const reportKey: ReportKey = availableReports.some((item) => item.key === requestedReport) ? requestedReport! : availableReports[0].key;
+  const technicianId = reportKey === "technician-jobs" ? searchParams.get("employee_id") : null;
+  const technicianName = searchParams.get("technician") || "Technician";
   const search = searchParams.get("search") ?? "";
   const from = searchParams.get("from") || jamaicaToday();
   const to = searchParams.get("to") || jamaicaToday();
@@ -93,23 +108,30 @@ function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const report = useMemo(() => availableReports.find((item) => item.key === reportKey) ?? availableReports[0], [availableReports, reportKey]);
+  const columns = technicianId ? technicianJobColumns : report.columns;
   useScrollRestoration(!loading);
 
-  const loadReport = useCallback(async () => {
+  const loadReport = useCallback(async (signal: AbortSignal) => {
     try {
       setLoading(true); setError("");
       const query = new URLSearchParams({ search, page: String(page) });
       if (report.dateFilters) { query.set("from", from); query.set("to", to); }
       if (sort) { query.set("sort", sort); query.set("dir", direction); }
-      const response = await apiFetch(`/api/reports/${reportKey}?${query}`);
+      if (technicianId) query.set("employee_id", technicianId);
+      const response = await apiFetch(`/api/reports/${reportKey}?${query}`, { signal });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not load report.");
+      if (signal.aborted) return;
       setRows(data.rows); setTotals(data.totals || null); setPagination(data.pagination);
       if (data.pagination.page !== page) updateParams({ page: String(data.pagination.page) });
-    } catch (loadError) { setError(loadError instanceof Error ? loadError.message : "Could not load report."); }
-    finally { setLoading(false); }
-  }, [direction, from, page, report.dateFilters, reportKey, search, sort, to, updateParams]);
+    } catch (loadError) { if (signal.aborted) return; setError(loadError instanceof Error ? loadError.message : "Could not load report."); }
+    finally { if (!signal.aborted) setLoading(false); }
+  }, [direction, from, page, report.dateFilters, reportKey, search, sort, technicianId, to, updateParams]);
 
-  useEffect(() => { const timeout = window.setTimeout(loadReport, 180); return () => window.clearTimeout(timeout); }, [loadReport]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => loadReport(controller.signal), 180);
+    return () => { window.clearTimeout(timeout); controller.abort(); };
+  }, [loadReport]);
 
   const chooseReport = (key: ReportKey) => {
     setLoading(true);
@@ -132,11 +154,15 @@ function ReportsPage() {
   // Export the visible filtered page without adding a second data definition.
   const exportCsv = () => {
     const escape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-    const csv = [report.columns.map((column) => escape(column.label)).join(","), ...rows.map((row) => report.columns.map((column) => escape(row[column.key])).join(","))].join("\n");
+    const csv = [columns.map((column) => escape(column.label)).join(","), ...rows.map((row) => columns.map((column) => escape(row[column.key])).join(","))].join("\n");
     const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); link.download = `${reportKey}-${jamaicaToday()}.csv`; link.click(); URL.revokeObjectURL(link.href);
   };
 
   const openRow = (row: ReportRow) => {
+    if (reportKey === "technician-jobs") {
+      if (technicianId) navigate(`/service-requests?search=${encodeURIComponent(String(row.service_ticket_id))}`);
+      else updateParams({ employee_id: String(row.employee_id), technician: String(row.technician), search: null, page: null });
+    }
     if (reportKey === "pending-service") navigate(`/service-requests?search=${row.service_ticket_id}`);
     if (reportKey === "delinquent-customers" && row.customer_id) openCustomer(String(row.customer_id));
     if (reportKey === "disconnected-customers" && row.customer_id) openCustomer(String(row.customer_id));
@@ -152,10 +178,10 @@ function ReportsPage() {
     <div className="rounded-xl border border-warning/30 bg-warning-container p-4 text-sm text-warning"><span className="font-medium">Legacy balance note:</span> the most recent year is reconstructed from Access payments and anniversary charges. Older brought-forward amounts are clearly marked unverified on the customer account.</div>
 
     <section className="report-print-area overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-surface-container p-5 xl:flex-row xl:items-end xl:justify-between"><div><h2 className="text-lg font-semibold text-on-surface">{report.title}</h2><p className="mt-1 text-sm text-on-surface-variant">{report.description}</p></div><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Search<input value={search} onChange={(event) => updateParams({ search: event.target.value || null, page: null })} className="mt-1 block w-56 rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal normal-case tracking-normal" placeholder="Filter report..." /></label>{report.dateFilters && <><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">From<input type="date" value={from} onChange={(event) => updateParams({ from: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">To<input type="date" value={to} onChange={(event) => updateParams({ to: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label></>}<button type="button" disabled={rows.length === 0} onClick={exportCsv} className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40"><span className="material-symbols-outlined text-base">download</span>Export Page</button><button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-on-primary"><span className="material-symbols-outlined text-base">print</span>Print</button></div></div>
+      <div className="flex flex-col gap-4 border-b border-surface-container p-5 xl:flex-row xl:items-end xl:justify-between"><div><h2 className="text-lg font-semibold text-on-surface">{technicianId ? `${technicianName} — Jobs` : report.title}</h2><p className="mt-1 text-sm text-on-surface-variant">{technicianId ? "Each closing in the selected dates, plus open jobs now (regardless of date). A job may appear more than once if reopened. Current status reflects later changes." : report.description}</p>{technicianId && <button type="button" onClick={() => updateParams({ employee_id: null, technician: null, search: null, page: null })} className="mt-3 text-sm font-medium text-primary hover:underline">← All technicians</button>}</div><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Search<input value={search} onChange={(event) => updateParams({ search: event.target.value || null, page: null })} className="mt-1 block w-56 rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal normal-case tracking-normal" placeholder="Filter report..." /></label>{report.dateFilters && <><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">From<input type="date" value={from} onChange={(event) => updateParams({ from: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">To<input type="date" value={to} onChange={(event) => updateParams({ to: event.target.value, page: null })} className="mt-1 block rounded-lg bg-surface-container-low px-3 py-2 text-sm font-normal" /></label></>}<button type="button" disabled={rows.length === 0} onClick={exportCsv} className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40"><span className="material-symbols-outlined text-base">download</span>Export Page</button><button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-on-primary"><span className="material-symbols-outlined text-base">print</span>Print</button></div></div>
       {totals && <div className="flex flex-wrap gap-6 border-b border-surface-container bg-primary/5 px-5 py-3 text-sm">{"payment_count" in totals && <><span><strong>{Number(totals.payment_count || 0).toLocaleString()}</strong> payments</span><span><strong>{formatCurrency(totals.total_amount)}</strong> collected</span></>}{"delinquent_count" in totals && <span><strong>{Number(totals.delinquent_count || 0).toLocaleString()}</strong> delinquent customers</span>}{"jobs_closed" in totals && <><span><strong>{Number(totals.jobs_closed || 0).toLocaleString()}</strong> jobs closed</span><span><strong>{Number(totals.completed_count || 0).toLocaleString()}</strong> completed</span><span><strong>{Number(totals.unresolved_count || 0).toLocaleString()}</strong> unresolved</span></>}</div>}
       {error && <p className="m-5 rounded-lg bg-error/10 p-4 text-sm text-error">{error}</p>}
-      <div className="overflow-x-auto"><table className="w-full min-w-[44rem] text-left md:min-w-0"><thead className="bg-surface-container-low"><tr>{report.columns.map((column) => {
+      <div className="overflow-x-auto"><table className="w-full min-w-[44rem] text-left md:min-w-0"><thead className="bg-surface-container-low"><tr>{columns.map((column) => {
         const canSort = sortableColumns.includes(column.key);
         const active = sort === column.key;
         return <th key={column.key} aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : undefined} className="whitespace-nowrap px-5 py-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
@@ -166,7 +192,7 @@ function ReportsPage() {
               </button>
             : column.label}
         </th>;
-      })}</tr></thead><tbody className="divide-y divide-surface-container">{!loading && rows.map((row, index) => <tr key={`${reportKey}-${index}`} onClick={() => openRow(row)} className="transition hover:bg-surface-container-low/60">{report.columns.map((column) => <td key={column.key} className="max-w-sm px-5 py-4 text-sm text-on-surface-variant">{formatCell(row[column.key], column.format)}</td>)}</tr>)}</tbody></table></div>
+      })}</tr></thead><tbody className="divide-y divide-surface-container">{!loading && rows.map((row, index) => <tr key={`${reportKey}-${index}`} onClick={() => openRow(row)} className="transition hover:bg-surface-container-low/60">{columns.map((column) => <td key={column.key} className="max-w-sm px-5 py-4 text-sm text-on-surface-variant">{reportKey === "technician-jobs" && column.key === (technicianId ? "service_ticket_id" : "technician") ? <button type="button" onClick={(event) => { event.stopPropagation(); openRow(row); }} className="font-medium text-primary underline underline-offset-2">{formatCell(row[column.key], column.format)}</button> : formatCell(row[column.key], column.format)}</td>)}</tr>)}</tbody></table></div>
       {loading && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">Generating report...</div>}{!loading && !error && rows.length === 0 && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">No rows match these report filters.</div>}{!loading && rows.length > 0 && <div className="flex items-center justify-between border-t border-surface-container px-5 py-4 text-sm text-on-surface-variant"><span>{pagination.total.toLocaleString()} result{pagination.total === 1 ? "" : "s"}</span><div className="flex items-center gap-3"><button disabled={pagination.page <= 1} onClick={() => updateParams({ page: String(Math.max(page - 1, 1)) })} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Previous</button><span className="text-xs font-medium">Page {pagination.page} of {pagination.totalPages}</span><button disabled={pagination.page >= pagination.totalPages} onClick={() => updateParams({ page: String(Math.min(page + 1, pagination.totalPages)) })} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Next</button></div></div>}
     </section>
   </div>;
