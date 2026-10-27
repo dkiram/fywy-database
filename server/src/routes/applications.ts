@@ -4,11 +4,6 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { pool } from "../db.js";
 import { normalizeExactCustomerName } from "../huawei/matchOntCustomers.js";
-import {
-  isHanoverNoDescriptionPlaceholder,
-  isTemporaryHanoverWorkflow as matchesTemporaryHanoverWorkflow,
-  readWithTemporaryHanoverFallback,
-} from "../huawei/temporaryOltWorkflows.js";
 import { OltVerificationError, readOntFromOlt } from "../huawei/verifyOnt.js";
 import { insertStatusHistory } from "./accounts.js";
 import { loadReceipt } from "./payments.js";
@@ -833,9 +828,6 @@ applicationsRouter.patch(
     } | null = null;
     let oltLocation = "";
     let liveOnt: Awaited<ReturnType<typeof readOntFromOlt>> = null;
-    let isTemporaryHanoverWorkflow = false;
-    let usedHanoverUnverifiedFallback = false;
-    let liveVerificationIssue: string | null = null;
 
     const prelim = await pool.query(
       `SELECT legacy_source, status, additional_service_for_customer_id
@@ -909,9 +901,7 @@ applicationsRouter.patch(
         oltLocation =
           `${frame.value}/${slot.value}/${ponPort.value}/${ontId.value}`;
 
-        // A manual fallback is allowed only for the existing, active Hanover
-        // inventory row at its saved management IP. Merely typing "Hanover"
-        // beside another address must never enable the exception.
+        // Keep the submitted management address consistent with inventory.
         const configuredOltResult = await pool.query(
           `SELECT normalized_name, host(management_ip) AS management_ip
            FROM public.olts
@@ -928,24 +918,8 @@ applicationsRouter.patch(
             error: `${oltName} already uses management IP ${configuredOlt.management_ip}.`,
           });
         }
-        isTemporaryHanoverWorkflow = matchesTemporaryHanoverWorkflow({
-          configuredNormalizedName: configuredOlt?.normalized_name,
-          configuredManagementIp: configuredOlt?.management_ip,
-          submittedManagementIp: oltManagementIp,
-        });
         try {
-          const readResult = await readWithTemporaryHanoverFallback(
-            isTemporaryHanoverWorkflow,
-            () => readOntFromOlt(oltTarget!)
-          );
-          liveOnt = readResult.liveValue;
-          usedHanoverUnverifiedFallback =
-            readResult.usedUnverifiedFallback;
-          liveVerificationIssue =
-            readResult.issue ??
-            (readResult.usedUnverifiedFallback
-              ? `No ONT answered at ${oltLocation} during the automated read.`
-              : null);
+          liveOnt = await readOntFromOlt(oltTarget);
         } catch (error) {
           if (error instanceof OltVerificationError) {
             return res.status(error.kind === "configuration" ? 503 : 502).json({
@@ -964,13 +938,11 @@ applicationsRouter.patch(
         }
 
         if (!liveOnt) {
-          if (!usedHanoverUnverifiedFallback) {
-            return res.status(409).json({
-              error:
-                `No ONT answers at ${oltName} ${oltLocation}. ` +
-                "Enter the correct OLT location, then activate.",
-            });
-          }
+          return res.status(409).json({
+            error:
+              `No ONT answers at ${oltName} ${oltLocation}. ` +
+              "Enter the correct OLT location, then activate.",
+          });
         }
       }
     }
@@ -1034,13 +1006,11 @@ applicationsRouter.patch(
           error: "Pole box and port are required to activate a new application.",
         });
       }
-      // The pre-transaction block above either read the live OLT or accepted
-      // Hanover's explicit technician confirmation. A missing target, or a
-      // missing live result without that narrowly scoped fallback, is invalid.
+      // New service accounts require a live ONT verification at every location.
       if (
         !application.legacy_source &&
         createsServiceAccount &&
-        (!oltTarget || (!liveOnt && !usedHanoverUnverifiedFallback))
+        (!oltTarget || !liveOnt)
       ) {
         await client.query("ROLLBACK");
         return res.status(400).json({
@@ -1082,7 +1052,7 @@ applicationsRouter.patch(
             descriptionMatches: boolean | null;
             liveControlFlag: "active" | "deactivated" | null;
             liveRunState: "online" | "offline" | null;
-            verificationMethod: "live" | "hanover_unverified_fallback";
+            verificationMethod: "live";
             descriptionOverrideApplied: boolean;
           }
         | null = null;
@@ -1239,11 +1209,8 @@ applicationsRouter.patch(
           ]
         );
 
-        // A live read stores a verified mapping and serial. Hanover's temporary
-        // Hanover's temporary fallback stores the entered location as
-        // unverified with no serial, so automated ONT actions cannot use it
-        // until a later live verification succeeds.
-        if (oltTarget && (liveOnt || usedHanoverUnverifiedFallback)) {
+        // Store the live-verified mapping and serial for every location.
+        if (oltTarget && liveOnt) {
           let oltRow = await client.query(
             `SELECT olt_id, host(management_ip) AS management_ip
              FROM public.olts
@@ -1333,22 +1300,9 @@ applicationsRouter.patch(
                   normalizeExactCustomerName(liveOnt.description) ===
                   normalizeExactCustomerName(application.name)
               : null;
-          const mappingStatus = liveOnt ? "verified" : "unverified";
-          // Hanover's newer PuTTY-provisioned ONTs use this known placeholder
-          // until the U2000 link is available. Saving the exact live placeholder
-          // as the approved description lets later controls continue checking
-          // location + serial + live description instead of failing every time.
-          const approvedDescriptionOverride =
-            liveOnt &&
-            isHanoverNoDescriptionPlaceholder(
-              isTemporaryHanoverWorkflow,
-              liveOnt.description
-            )
-              ? liveOnt.description!.trim()
-              : null;
-          const descriptionOverrideReason = approvedDescriptionOverride
-            ? "Temporary Hanover ONT_NO_DESCRIPTION placeholder accepted during live application activation."
-            : null;
+          const mappingStatus = "verified";
+          const approvedDescriptionOverride = null;
+          const descriptionOverrideReason = null;
 
           await client.query(
             `INSERT INTO public.customer_ont_assignments (
@@ -1404,14 +1358,9 @@ applicationsRouter.patch(
                 liveRunState: liveOnt?.runState ?? null,
                 descriptionMatches,
                 approvedDescriptionOverride,
-                verificationMethod: liveOnt
-                  ? "live"
-                  : "hanover_unverified_fallback",
-                liveVerificationIssue,
+                verificationMethod: "live",
               }),
-              liveOnt
-                ? `Verified live during activation of application #${applicationId}`
-                : `Temporary Hanover workflow accepted ${oltLocation} during activation of application #${applicationId}; pending automated live verification`,
+              `Verified live during activation of application #${applicationId}`,
             ]
           );
 
@@ -1422,9 +1371,7 @@ applicationsRouter.patch(
             descriptionMatches,
             liveControlFlag: liveOnt?.controlFlag ?? null,
             liveRunState: liveOnt?.runState ?? null,
-            verificationMethod: liveOnt
-              ? "live"
-              : "hanover_unverified_fallback",
+            verificationMethod: "live",
             descriptionOverrideApplied: !!approvedDescriptionOverride,
           };
         }

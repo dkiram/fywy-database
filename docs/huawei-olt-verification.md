@@ -226,3 +226,22 @@ row lock, live identity verification, durable action journal, and post-command
 confirmation remain mandatory for every customer. The continuation also
 requires an explicit maximum grace-end date and includes that date in its
 confirmation phrase, preventing it from spilling beyond the confirmed group.
+
+## Hanover direct-link transition
+
+Hanover follows the standard live-verification activation flow. A failed read
+or missing ONT blocks activation; the temporary unverified fallback and
+automatic `ONT_NO_DESCRIPTION` approval have been removed. Existing unverified
+assignments still need **Verify with OLT** before automated controls can use
+them. Existing audit history and description overrides are preserved.
+
+Before retiring the `hanover-olt-bridge` VPN route, confirm the management IP
+in OLT inventory and the NAS `HUAWEI_OLT_CONNECTIONS_JSON` entry. Verify from
+the NAS/API that this address is reached over the direct office connection,
+then perform a read-only **Verify with OLT** for a known Hanover ONT. Retire
+only the Hanover bridge/subnet route and repeat the read to confirm it no
+longer depends on that bridge. The Mac-to-NAS Tailscale connection is separate
+and is still used for remote administration.
+
+The application changes alone do not remove Tailscale routes or deploy the
+new behavior to the NAS.

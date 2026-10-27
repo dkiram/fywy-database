@@ -642,14 +642,10 @@ function ApplicationsPage() {
         ? ` The ${formatCurrency(data.installationPayment.amount_paid)} installation fee is now their first payment.`
         : "";
       const oltNote = data.oltMapping
-        ? data.oltMapping.verificationMethod === "hanover_unverified_fallback"
-          ? ` Hanover ONT location ${data.oltMapping.location} was recorded as unverified and can be verified later when the direct link is available.`
-          : ` ONT location ${data.oltMapping.location} verified live on ${data.oltMapping.oltName}.` +
-            (data.oltMapping.descriptionOverrideApplied
-              ? " Hanover's no-description placeholder was accepted for this exact ONT serial and location."
-              : data.oltMapping.descriptionMatches
-              ? ""
-              : " The live ONT description does not match the customer name — check it on the OLT.")
+        ? ` ONT location ${data.oltMapping.location} verified live on ${data.oltMapping.oltName}.` +
+          (data.oltMapping.descriptionMatches
+            ? ""
+            : " The live ONT description does not match the customer name — check it on the OLT.")
         : "";
       setNotice(
         (data.additionalService
@@ -1455,11 +1451,6 @@ function ApplicationsPage() {
                   <Field label="PON port" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} min="0" step="1" type="number" value={activationOlt.ponPort} onChange={(event) => setActivationOlt((current) => ({ ...current, ponPort: event.target.value }))} className={inputClass} /></Field>
                   <Field label="Virtual port / ONT ID" required={!activeApplication.legacy_source}><input required={!activeApplication.legacy_source} min="0" step="1" type="number" value={activationOlt.ontId} onChange={(event) => setActivationOlt((current) => ({ ...current, ontId: event.target.value }))} className={inputClass} /></Field>
                 </div>
-                {activationOlt.oltName.trim().toUpperCase() === "HANOVER" && (
-                  <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
-                    Hanover is temporarily using manual OLT operations. The app will try a live check; if it cannot verify this location, activation will continue and the mapping will be clearly saved as unverified. Automated ONT actions remain blocked until it is verified later.
-                  </p>
-                )}
               </div>
             )}
             <Field label="Optional activation note"><textarea rows={3} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} className={inputClass} placeholder="Installation or activation note..." /></Field>
