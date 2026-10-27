@@ -216,7 +216,7 @@ function AccountOperationsPanel({
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [suspension, setSuspension] = useState<SuspensionStatus | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
-  const [exceptionAction, setExceptionAction] = useState<"hold" | "waiver" | "credit" | null>(null);
+  const [exceptionAction, setExceptionAction] = useState<"hold" | "waiver" | "credit" | "remove-credit" | null>(null);
   const [exceptionValue, setExceptionValue] = useState("");
   const [exceptionReason, setExceptionReason] = useState("");
   const [waiverRequests, setWaiverRequests] = useState<WaiverRequest[]>([]);
@@ -402,7 +402,9 @@ function AccountOperationsPanel({
           ? "disconnection-holds"
           : exceptionAction === "credit"
             ? "credits"
-            : "waiver-requests";
+            : exceptionAction === "remove-credit"
+              ? "credit-removals"
+              : "waiver-requests";
       const body = exceptionAction === "hold"
         ? { expiresOn: exceptionValue, reason: exceptionReason }
         : { amount: exceptionValue, reason: exceptionReason };
@@ -417,6 +419,9 @@ function AccountOperationsPanel({
         setNotice(
           `J$${Number(exceptionValue).toLocaleString()} credit applied. It is reversible from the account-credit strip below.`
         );
+      }
+      if (exceptionAction === "remove-credit") {
+        setNotice(`J$${Number(exceptionValue).toLocaleString()} credit removed.`);
       }
       setExceptionAction(null);
       setExceptionValue("");
@@ -652,6 +657,20 @@ function AccountOperationsPanel({
                   setExceptionAction("credit");
                   setExceptionValue("");
                   setExceptionReason("");
+                }}
+              />
+            )}
+            {canManage && (
+              <ActionButton
+                label="Remove Credit"
+                icon="remove_circle_outline"
+                disabled={loading || saving || !(Number(billing?.credit_balance ?? 0) > 0)}
+                title="Remove a specified amount from available account credit"
+                onClick={() => {
+                  setExceptionAction("remove-credit");
+                  setExceptionValue("");
+                  setExceptionReason("");
+                  setError("");
                 }}
               />
             )}
@@ -1005,14 +1024,16 @@ function AccountOperationsPanel({
                 ? "Postpone disconnection"
                 : exceptionAction === "credit"
                   ? "Add credit to account"
-                  : "Request balance discount"}
+                  : exceptionAction === "remove-credit" ? "Remove account credit" : "Request balance discount"}
             </h2>
             <p className="mt-2 text-sm text-on-surface-variant">
               {exceptionAction === "hold"
                 ? "A reason is required and will be recorded in Activity History."
                 : exceptionAction === "credit"
                   ? "This reduces the balance immediately. It is filed as an approved discount, so it stays reversible and is recorded in Activity History."
-                  : "Submitting this request does not change the balance. An Admin must review it and choose Approve & Apply."}
+                  : exceptionAction === "remove-credit"
+                    ? `Available credit: ${formatCurrency(billing?.credit_balance ?? "0")}. The amount is removed immediately and recorded in Activity History.`
+                    : "Submitting this request does not change the balance. An Admin must review it and choose Approve & Apply."}
             </p>
 
             <label className="mt-5 block text-sm font-semibold text-on-surface">
@@ -1020,10 +1041,11 @@ function AccountOperationsPanel({
                 ? "Hold until"
                 : exceptionAction === "credit"
                   ? "Credit amount"
-                  : "Waiver amount"}
+                  : exceptionAction === "remove-credit" ? "Amount to remove" : "Waiver amount"}
               <input
                 type={exceptionAction === "hold" ? "date" : "number"}
                 min={exceptionAction === "hold" ? jamaicaToday() : "0.01"}
+                max={exceptionAction === "remove-credit" ? Number(billing?.credit_balance ?? 0) : undefined}
                 step={exceptionAction === "hold" ? undefined : "0.01"}
                 value={exceptionValue}
                 onChange={(event) => setExceptionValue(event.target.value)}
@@ -1031,7 +1053,7 @@ function AccountOperationsPanel({
               />
             </label>
 
-            {exceptionAction !== "hold" && status === "suspended" && suspension && (
+            {(exceptionAction === "waiver" || exceptionAction === "credit") && status === "suspended" && suspension && (
               <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
                 <p className="font-semibold">
                   To end suspension today: {formatCurrency(suspension.total_due_to_reconnect)}
@@ -1073,7 +1095,7 @@ function AccountOperationsPanel({
                     ? "Why is this pass being approved?"
                     : exceptionAction === "credit"
                       ? "Why is this credit being applied?"
-                      : "Why should this customer receive a discount?"
+                      : exceptionAction === "remove-credit" ? "Why is this credit being removed?" : "Why should this customer receive a discount?"
                 }
               />
             </label>
@@ -1114,6 +1136,7 @@ function AccountOperationsPanel({
                 disabled={
                   saving ||
                   !exceptionValue ||
+                  (exceptionAction === "remove-credit" && (!Number.isFinite(Number(exceptionValue)) || Number(exceptionValue) <= 0 || Number(exceptionValue) > Number(billing?.credit_balance ?? 0))) ||
                   exceptionReason.trim().length < 3
                 }
                 onClick={submitException}
@@ -1125,7 +1148,7 @@ function AccountOperationsPanel({
                     ? "Send for Admin Approval"
                     : exceptionAction === "credit"
                       ? "Add Credit"
-                      : "Approve Pass"}
+                      : exceptionAction === "remove-credit" ? "Remove Credit" : "Approve Pass"}
               </button>
             </div>
           </div>

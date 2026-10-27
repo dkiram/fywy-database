@@ -504,6 +504,7 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
   const name = cleanText(req.body.name);
   const address = cleanText(req.body.address);
   const telephone = cleanText(req.body.telephone);
+  const email = cleanText(req.body.email);
   const packageIdText = String(req.body.packageId ?? "").trim();
   const monthlyFeeText = String(req.body.monthlyFee ?? "").trim();
   const applicationDate = cleanText(req.body.applicationDate);
@@ -517,10 +518,13 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
   const installationFeeSupplied = req.body.installationFee !== undefined;
   const installationFeeText = String(req.body.installationFee ?? "").trim();
 
-  if (!name || !address || !telephone) {
+  if (!name || !address || !telephone || !email) {
     return res.status(400).json({
-      error: "Name, address, and telephone are required.",
+      error: "Name, address, telephone, and email are required.",
     });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Enter a valid email address." });
   }
   if (
     !/^\d+$/.test(packageIdText) ||
@@ -640,7 +644,7 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
         address,
         cleanText(req.body.occupation),
         telephone,
-        cleanText(req.body.email),
+        email,
         cleanText(req.body.idType),
         cleanText(req.body.idNumber),
         Number(packageIdText),

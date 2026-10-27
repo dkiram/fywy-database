@@ -1884,6 +1884,79 @@ accountsRouter.post(
   }
 );
 
+// Remove only available credit, preserving the original payments and credits.
+accountsRouter.post(
+  "/customers/:customerId/credit-removals",
+  requireAuth,
+  requireAccountManager,
+  async (req, res) => {
+    const customerId = parseCustomerId(req, res);
+    if (customerId === null) return;
+    const amount = Number(req.body.amount);
+    const reason = cleanText(req.body.reason);
+    if (!Number.isFinite(amount) || amount <= 0 ||
+        !Number.isSafeInteger(Math.round(amount * 100)) ||
+        Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
+      return res.status(400).json({ error: "Enter a positive credit amount in whole cents." });
+    }
+    if (reason.length < 3 || reason.length > 500) {
+      return res.status(400).json({ error: "A reason between 3 and 500 characters is required." });
+    }
+    const employee = req.session.employee!;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const customer = await client.query(
+        `SELECT customer_id FROM public.customers WHERE customer_id = $1 FOR UPDATE;`,
+        [customerId]
+      );
+      if (!customer.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Customer not found." });
+      }
+      const before = await client.query(
+        `SELECT credit_balance FROM public.spcl_customer_billing_status($1);`, [customerId]
+      );
+      const available = Number(before.rows[0]?.credit_balance ?? 0);
+      if (Math.round(amount * 100) > Math.round(available * 100)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "The amount exceeds this customer's available credit. Refresh the account and try again." });
+      }
+      const result = await client.query(
+        `INSERT INTO public.account_ledger_entries (
+          customer_id, entry_type, amount, effective_date, description,
+          created_by_employee_id, reason, is_verified
+        ) VALUES ($1, 'adjustment', $2::NUMERIC,
+          (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE,
+          'Account credit removal', $3, $4, TRUE)
+        RETURNING account_ledger_entry_id, customer_id, amount, effective_date, description, reason;`,
+        [customerId, amount, employee.employeeId, reason]
+      );
+      const billing = await client.query(
+        `SELECT balance, credit_balance, outstanding_balance
+         FROM public.spcl_customer_billing_status($1);`, [customerId]
+      );
+      await client.query(
+        `INSERT INTO public.audit_logs (
+          employee_id, actor_name, action, entity_type, entity_id,
+          field_name, old_value, new_value, reason, occurred_at
+        ) VALUES ($1, $2, 'Removed account credit', 'customer', $3,
+          'account_credit', $4, $5, $6, CURRENT_TIMESTAMP);`,
+        [employee.employeeId, `${employee.firstName} ${employee.lastName}`,
+          String(customerId), String(available), String(billing.rows[0].credit_balance), reason]
+      );
+      await client.query("COMMIT");
+      return res.status(201).json({ removal: result.rows[0], billing: billing.rows[0] });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Could not remove account credit:", error);
+      return res.status(500).json({ error: "Could not remove account credit." });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // Admin-only queue used by the approval panel on Account Operations.
 accountsRouter.get("/waiver-requests", requireAuth, requireAdmin, async (_req, res) => {
   try {

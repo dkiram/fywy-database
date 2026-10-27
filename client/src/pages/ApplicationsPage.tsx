@@ -1115,7 +1115,7 @@ function ApplicationsPage() {
               <Field label="Full name" required><input required value={newForm.name} onChange={(event) => setNewForm({ ...newForm, name: event.target.value })} className={inputClass} /></Field>
               <Field label="Alias"><input value={newForm.alias} onChange={(event) => setNewForm({ ...newForm, alias: event.target.value })} className={inputClass} /></Field>
               <Field label="Telephone" required><input required value={newForm.telephone} onChange={(event) => setNewForm({ ...newForm, telephone: event.target.value })} className={inputClass} /></Field>
-              <Field label="Email"><input type="email" value={newForm.email} onChange={(event) => setNewForm({ ...newForm, email: event.target.value })} className={inputClass} /></Field>
+              <Field label="Email *"><input required type="email" value={newForm.email} onChange={(event) => setNewForm({ ...newForm, email: event.target.value })} className={inputClass} /></Field>
               <div className="sm:col-span-2"><Field label="Service address" required><textarea required rows={2} value={newForm.address} onChange={(event) => setNewForm({ ...newForm, address: event.target.value })} className={inputClass} /></Field></div>
               <Field label="Occupation"><input value={newForm.occupation} onChange={(event) => setNewForm({ ...newForm, occupation: event.target.value })} className={inputClass} /></Field>
               <Field label="Application date"><input type="date" value={newForm.applicationDate} onChange={(event) => setNewForm({ ...newForm, applicationDate: event.target.value })} className={inputClass} /></Field>
