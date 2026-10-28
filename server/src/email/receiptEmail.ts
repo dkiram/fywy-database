@@ -26,6 +26,7 @@ export type EmailedReceipt = {
   customer_id: number | null;
   application_id: number | null;
   customer_name: string | null;
+  current_balance: string | null;
 };
 
 export async function sendReceiptEmail(
@@ -45,7 +46,7 @@ export async function sendReceiptEmail(
   });
 }
 
-function buildPlainText(receipt: EmailedReceipt) {
+export function buildPlainText(receipt: EmailedReceipt) {
   const reference = receipt.customer_id !== null
     ? `Customer #${receipt.customer_id}`
     : `Application #${receipt.application_id ?? "-"}`;
@@ -61,6 +62,7 @@ function buildPlainText(receipt: EmailedReceipt) {
     `Payment type: ${receipt.payment_type}`,
     `Month paid for: ${formatMonth(receipt.month_paid)}`,
     `Amount received: ${formatCurrency(receipt.amount_paid)}`,
+    ...(receipt.current_balance == null ? [] : [receiptBalanceText(receipt.current_balance)]),
     `Cashier: ${firstName(receipt.cashier_name)}`,
     `Location: ${receipt.location || "-"}`,
     `Recorded: ${formatDateTime(receipt.recorded_at)}`,
@@ -72,7 +74,7 @@ function buildPlainText(receipt: EmailedReceipt) {
   ].join("\n");
 }
 
-function buildHtml(receipt: EmailedReceipt) {
+export function buildHtml(receipt: EmailedReceipt) {
   const referenceLabel = receipt.customer_id !== null ? "Customer ID" : "Application";
   const referenceValue = receipt.customer_id !== null
     ? String(receipt.customer_id)
@@ -101,6 +103,7 @@ function buildHtml(receipt: EmailedReceipt) {
             <div style="font-size:11px;letter-spacing:1.5px;color:#176b50;font-weight:700">AMOUNT RECEIVED</div>
             <div style="margin-top:7px;font-size:34px;color:#176b50;font-weight:700">${escapeHtml(formatCurrency(receipt.amount_paid))}</div>
           </div>
+          ${receipt.current_balance == null ? "" : `<p style="margin:12px 0 0;text-align:center;font-size:14px;font-weight:600">${escapeHtml(receiptBalanceText(receipt.current_balance))}</p>`}
           <div style="margin-top:22px;padding-top:16px;border-top:1px solid #dde2de;text-align:center;color:#66706a;font-size:12px">
             Recorded ${escapeHtml(formatDateTime(receipt.recorded_at))} · Payment #${receipt.payment_id}<br>
             Please keep this email as proof of payment.
@@ -202,4 +205,8 @@ function formatDateTime(value: string | Date) {
     timeStyle: "short",
     timeZone: "America/Jamaica",
   });
+}
+
+function receiptBalanceText(balance: string) {
+  return `${Number(balance) < 0 ? "Current account credit" : "Current balance due"}: ${formatCurrency(String(Math.abs(Number(balance))))}`;
 }

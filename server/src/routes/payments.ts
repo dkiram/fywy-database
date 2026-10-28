@@ -109,6 +109,7 @@ export async function loadReceipt(client: PoolClient, paymentId: number) {
       pay.cashier_name,
       pay.note,
       pay.receipt_delivery_method,
+      billing.balance AS current_balance,
       (pay.voided_at IS NOT NULL) AS is_voided,
       pay.voided_at,
       pay.void_reason,
@@ -128,6 +129,7 @@ export async function loadReceipt(client: PoolClient, paymentId: number) {
     FROM public.payments pay
     LEFT JOIN public.customers c
       ON pay.customer_id = c.customer_id
+    LEFT JOIN LATERAL public.spcl_customer_billing_status(c.customer_id) billing ON TRUE
     LEFT JOIN public.applications app
       ON pay.application_id = app.application_id
     LEFT JOIN public.employees voider

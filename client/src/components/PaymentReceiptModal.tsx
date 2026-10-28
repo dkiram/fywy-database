@@ -98,7 +98,9 @@ export type PaymentReceipt = {
   location: string | null;
   cashier_name: string | null;
   note: string | null;
-  customer_id: number;
+  customer_id: number | null;
+  application_id?: number | null;
+  current_balance: string | null;
   customer_name: string | null;
   customer_address: string | null;
   customer_telephone: string | null;
@@ -268,7 +270,7 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
 
           <div className="receipt-fields mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <ReceiptField label="Received from" value={displayPayment.customer_name || "Unnamed customer"} />
-            <ReceiptField label="Customer ID" value={String(displayPayment.customer_id)} />
+            <ReceiptField label={displayPayment.customer_id == null ? "Application" : "Customer ID"} value={String(displayPayment.customer_id ?? displayPayment.application_id ?? "—")} />
             <ReceiptField label="Payment type" value={displayPayment.payment_type} />
             <ReceiptField label="Month paid for" value={formatMonth(displayPayment.month_paid)} />
             <ReceiptField label="Cashier" value={firstName(displayPayment.cashier_name)} />
@@ -279,6 +281,12 @@ function PaymentReceiptModal({ payment, onClose, onVoided, onDeleted }: { paymen
             <p className="receipt-amount-label text-xs font-semibold uppercase tracking-[0.18em] text-primary">Amount received</p>
             <p className="receipt-amount-value mt-2 text-4xl font-medium text-primary">{formatCurrency(displayPayment.amount_paid)}</p>
           </div>
+
+          {displayPayment.current_balance != null && (
+            <div className="receipt-balance mt-3 text-center text-sm font-semibold">
+              {Number(displayPayment.current_balance) < 0 ? "Current account credit" : "Current balance due"}: {formatCurrency(String(Math.abs(Number(displayPayment.current_balance))))}
+            </div>
+          )}
 
           {displayPayment.note && (
             <div className="receipt-note mt-6 border-t border-surface-container pt-4">

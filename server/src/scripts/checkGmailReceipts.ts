@@ -217,6 +217,7 @@ if (useRealReceipt) {
     customer_id: 0,
     application_id: null,
     customer_name: "Receipt Email Diagnostic",
+    current_balance: "0.00",
   };
 
   try {

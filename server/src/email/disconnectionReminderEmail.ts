@@ -12,12 +12,19 @@ export type DisconnectionReminder = {
 };
 
 export async function sendDisconnectionReminderEmail(reminder: DisconnectionReminder) {
+  const logo = await readFile(new URL("./assets/fywy-email-logo.png", import.meta.url));
+  return sendAutomatedEmail({
+    ...buildDisconnectionReminderEmail(reminder),
+    inlineImages: [{ contentId: "fywy-logo", filename: "fywy-logo.png", mimeType: "image/png", content: logo }],
+  }, "reminders");
+}
+
+export function buildDisconnectionReminderEmail(reminder: DisconnectionReminder) {
   const dueDate = formatDate(reminder.dueDate);
+  const balance = `J$${Number(reminder.outstandingBalance).toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const customerFirstName = firstName(reminder.customerName);
   const greeting = customerFirstName ? `Hi ${customerFirstName}` : "Hi there";
-  const logo = await readFile(new URL("./assets/fywy-email-logo.png", import.meta.url));
-
-  return sendAutomatedEmail({
+  return {
     recipientEmail: reminder.recipientEmail,
     subject: "Payment reminder for your FYWY account",
     messageIdKey: `disconnection-5-day-${reminder.customerId}-${toIsoDate(reminder.graceEndDate)}`,
@@ -28,13 +35,15 @@ export async function sendDisconnectionReminderEmail(reminder: DisconnectionRemi
       "",
       `Payment for your FYWY bill on account #${reminder.customerId} was due on ${dueDate} and is now 5 days overdue.`,
       "",
+      `Outstanding balance: ${balance}`,
+      "",
       "We understand this might have simply been overlooked. Please arrange payment as soon as possible. If payment is not received, your service may be disconnected after 48 hours.",
       "",
       "WHERE TO PAY",
       "You’re welcome to make your payment in person at any of our offices, or pay securely online through our website:",
       "Pay your bill online: https://fywycable.com/paymentpage",
       "",
-      "Not sure how much you owe? Call or WhatsApp our office using the details below, or contact us through our website:",
+      "Questions about your balance? Call or WhatsApp our office using the details below, or contact us through our website:",
       "Contact us about your balance: https://fywycable.com/contact",
       "",
       "If payment has already been made, please disregard this reminder.",
@@ -59,6 +68,7 @@ export async function sendDisconnectionReminderEmail(reminder: DisconnectionRemi
             <h1 style="margin:0 0 18px;color:#10202b;font-size:25px;line-height:1.25">Payment Reminder</h1>
             <p style="margin:0 0 16px">${escapeHtml(greeting)},</p>
             <p style="margin:0 0 16px">Payment for your FYWY bill on account <strong>#${reminder.customerId}</strong> was due on <strong>${escapeHtml(dueDate)}</strong> and is now <strong>5 days overdue</strong>.</p>
+            <p style="margin:16px 0;padding:14px 18px;border:1px solid #dde4e1;font-size:18px"><strong>Outstanding balance: ${escapeHtml(balance)}</strong></p>
             <div style="margin:22px 0;padding:17px 18px;background:#fff7ed;border-left:4px solid #c65d1e;color:#7c2d12;font-size:14px;line-height:1.55">We understand this might have simply been overlooked. Please arrange payment as soon as possible. If payment is not received, your service may be disconnected after <strong>48 hours</strong>.</div>
             <h2 style="margin:0 0 8px;color:#10202b;font-size:17px;line-height:1.3">Where to pay</h2>
             <p style="margin:0 0 18px">You’re welcome to make your payment in person at any of our offices, or pay securely online through our website:</p>
@@ -67,7 +77,7 @@ export async function sendDisconnectionReminderEmail(reminder: DisconnectionRemi
                 <a href="https://fywycable.com/paymentpage" style="display:inline-block;padding:13px 26px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700">Pay Bill Online</a>
               </td></tr>
             </table>
-            <p style="margin:0 0 16px">Not sure how much you owe? Call or WhatsApp our office using the details below, or contact us through our website:</p>
+            <p style="margin:0 0 16px">Questions about your balance? Call or WhatsApp our office using the details below, or contact us through our website:</p>
             <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 24px">
               <tr><td style="border:2px solid #3f615d;border-radius:8px">
                 <a href="https://fywycable.com/contact" style="display:inline-block;padding:11px 20px;color:#3f615d;text-decoration:none;font-size:14px;font-weight:700">Contact Us About Your Balance</a>
@@ -88,13 +98,7 @@ export async function sendDisconnectionReminderEmail(reminder: DisconnectionRemi
     </table>
   </body>
 </html>`,
-    inlineImages: [{
-      contentId: "fywy-logo",
-      filename: "fywy-logo.png",
-      mimeType: "image/png",
-      content: logo,
-    }],
-  }, "reminders");
+  };
 }
 
 function firstName(value: string | null) {
