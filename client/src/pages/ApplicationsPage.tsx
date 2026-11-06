@@ -113,6 +113,7 @@ type ApplicationPagination = {
 };
 
 type ApplicationView =
+  | "overdue"
   | "active"
   | "review"
   | "serviced"
@@ -840,6 +841,7 @@ function ApplicationsPage() {
             {(
               [
                 ["active", "Active"],
+                ["overdue", "Over 14 Days"],
                 // Rescheduled sits where Match Review was. Match Review
                 // applications are still under Active and All, and still get
                 // their "same person as" button on the row - it was the tab
@@ -896,6 +898,12 @@ function ApplicationsPage() {
             />
           </div>
         </div>
+
+        {view === "overdue" && (
+          <p className="border-b border-surface-container px-5 py-3 text-sm text-on-surface-variant">
+            Unfinished applications more than 14 days old, oldest first. Excludes installed, serviced, and closed applications.
+          </p>
+        )}
 
         {error && <div className="m-6 rounded-lg bg-error/10 p-4 text-sm text-error">{error}</div>}
 

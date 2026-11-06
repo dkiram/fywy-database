@@ -178,6 +178,20 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           AND t.status IN ('assigned', 'in_progress'))
     `;
 
+    // Share this predicate between the tab, pagination count and summary.
+    // An installed application can still be pending activation, but is no
+    // longer unfinished installation work. NULL means no visit sent yet.
+    const overdueClause = (alias: string) => `
+      (
+        ${alias}.status IN ('pending', 'match_review')
+        OR (${alias}.status = 'legacy_unresolved'
+          AND ${alias}.legacy_source IS DISTINCT FROM 'Copy of ApplicationTBL')
+      )
+      AND ${alias}.application_date <
+        (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE - 14
+      AND ${latestInstall(alias)} IS DISTINCT FROM 'completed'
+    `;
+
     const viewClauses: Record<string, string> = {
       active: `
         (
@@ -189,6 +203,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           )
         )
       `,
+      overdue: overdueClause("a"),
       pending: "a.status = 'pending'",
       review: "a.status = 'match_review'",
       serviced: "a.status = 'serviced'",
@@ -356,15 +371,14 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           OR COALESCE(a.telephone, '') ILIKE $2
           OR COALESCE(a.address, '') ILIKE $2
         )
-      ORDER BY
-        CASE
-          WHEN a.status = 'pending' THEN 0
-          WHEN a.status = 'match_review' THEN 1
-          WHEN a.status = 'legacy_unresolved' THEN 2
-          ELSE 3
-        END,
-        a.application_date DESC,
-        a.application_id DESC
+      ORDER BY ${view === "overdue"
+        ? "a.application_date ASC, a.application_id ASC"
+        : `CASE
+            WHEN a.status = 'pending' THEN 0
+            WHEN a.status = 'match_review' THEN 1
+            WHEN a.status = 'legacy_unresolved' THEN 2
+            ELSE 3
+          END, a.application_date DESC, a.application_id DESC`}
       LIMIT $4
       OFFSET $5;
       `,
@@ -388,16 +402,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           WHERE status = 'confirmed_existing'
         )::INTEGER AS confirmed,
         COUNT(*) FILTER (
-          WHERE (
-            status = 'pending'
-            OR status = 'match_review'
-            OR (
-              status = 'legacy_unresolved'
-              AND legacy_source IS DISTINCT FROM 'Copy of ApplicationTBL'
-            )
-          )
-          AND application_date <
-            (CURRENT_TIMESTAMP AT TIME ZONE 'America/Jamaica')::DATE - 14
+          WHERE ${overdueClause("applications")}
         )::INTEGER AS overdue,
         COUNT(*) FILTER (
           WHERE ${openInstall("applications")}
