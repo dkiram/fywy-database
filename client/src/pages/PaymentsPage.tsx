@@ -6,6 +6,7 @@ import { apiFetch } from "../lib/api";
 import { useScrollRestoration } from "../hooks/useScrollRestoration";
 
 type DailySummary = {
+  refund_amount: string;
   payment_count: number;
   total_amount: string;
   average_amount: string;
@@ -138,7 +139,7 @@ function PaymentsPage() {
     }
   };
 
-  const summary = data?.summary ?? { payment_count: 0, total_amount: "0", average_amount: "0" };
+  const summary = data?.summary ?? { payment_count: 0, total_amount: "0", average_amount: "0", refund_amount: "0" };
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
@@ -174,9 +175,9 @@ function PaymentsPage() {
 
       {/* Summary totals include both imported and newly recorded payments for the date. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Total Collected" value={formatCurrency(summary.total_amount)} icon="payments" primary />
-        <SummaryCard label="Payments Recorded" value={summary.payment_count.toLocaleString()} icon="receipt_long" />
-        <SummaryCard label="Average Payment" value={formatCurrency(summary.average_amount)} icon="calculate" />
+        <SummaryCard label="Net Collected" value={formatCurrency(summary.total_amount)} icon="payments" primary />
+        <SummaryCard label="Transactions Recorded" value={summary.payment_count.toLocaleString()} icon="receipt_long" />
+        <SummaryCard label="Refunds" value={formatCurrency(summary.refund_amount)} icon="undo" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -281,7 +282,7 @@ function SummaryCard({ label, value, icon, primary = false }: { label: string; v
 }
 
 function BreakdownCard({ title, icon, rows, labelKey, empty }: { title: string; icon: string; rows: PaymentBreakdown[]; labelKey: "payment_type" | "location"; empty: string }) {
-  return <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm"><div className="mb-5 flex items-center gap-3 border-b border-surface-container pb-4"><span className="material-symbols-outlined text-primary">{icon}</span><h2 className="font-semibold text-on-surface">{title}</h2></div>{rows.length > 0 ? <div className="space-y-4">{rows.map((row) => <div key={row[labelKey] || "Unknown"} className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-on-surface">{row[labelKey] || "Unknown"}</p><p className="mt-1 text-xs text-on-surface-variant">{row.payment_count} payment{row.payment_count === 1 ? "" : "s"}</p></div><p className="num font-semibold text-on-surface">{formatCurrency(row.total_amount)}</p></div>)}</div> : <p className="text-sm text-on-surface-variant">{empty}</p>}</section>;
+  return <section className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm"><div className="mb-5 flex items-center gap-3 border-b border-surface-container pb-4"><span className="material-symbols-outlined text-primary">{icon}</span><h2 className="font-semibold text-on-surface">{title}</h2></div>{rows.length > 0 ? <div className="space-y-4">{rows.map((row) => <div key={row[labelKey] || "Unknown"} className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-on-surface">{row[labelKey] || "Unknown"}</p><p className="mt-1 text-xs text-on-surface-variant">{row.payment_count} transaction{row.payment_count === 1 ? "" : "s"}</p></div><p className="num font-semibold text-on-surface">{formatCurrency(row.total_amount)}</p></div>)}</div> : <p className="text-sm text-on-surface-variant">{empty}</p>}</section>;
 }
 
 function TableHeading({ children }: { children: React.ReactNode }) {

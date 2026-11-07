@@ -209,6 +209,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           )
         )
       `,
+      refunds: "EXISTS (SELECT 1 FROM public.application_refunds r WHERE r.application_id = a.application_id AND r.status = 'pending')",
       engineers: `a.status = 'pending' AND ${engineerReturn("a")}`,
       overdue: overdueClause("a"),
       pending: "a.status = 'pending'",
@@ -312,6 +313,8 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         linked.name AS linked_customer_name,
         CONCAT_WS(' ', confirmer.first_name, confirmer.last_name)
           AS match_confirmed_by_name,
+        (SELECT r.status FROM public.application_refunds r WHERE r.application_id = a.application_id
+          ORDER BY r.application_refund_id DESC LIMIT 1) AS refund_status,
         fee.payment_id AS installation_payment_id,
         fee.amount_paid AS installation_amount,
         fee.receipt_number AS installation_receipt_number,
@@ -368,7 +371,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
       LEFT JOIN LATERAL (
         SELECT payment_id, amount_paid, receipt_number, voided_at
         FROM public.payments
-        WHERE application_id = a.application_id
+        WHERE application_id = a.application_id AND application_refund_id IS NULL
         ORDER BY voided_at NULLS FIRST, payment_id
         LIMIT 1
       ) fee ON TRUE
@@ -980,6 +983,11 @@ applicationsRouter.patch(
         await client.query("ROLLBACK");
         return res.status(404).json({ error: "Application not found." });
       }
+      const pendingRefund = await client.query("SELECT 1 FROM public.application_refunds WHERE application_id = $1 AND status = 'pending'", [applicationId]);
+      if (pendingRefund.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Review the pending refund before changing this application." });
+      }
       if (!isImportedDecisionAllowed(application)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -1576,6 +1584,11 @@ applicationsRouter.patch(
         await client.query("ROLLBACK");
         return res.status(404).json({ error: "Application not found." });
       }
+      const pendingRefund = await client.query("SELECT 1 FROM public.application_refunds WHERE application_id = $1 AND status = 'pending'", [applicationId]);
+      if (pendingRefund.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Review the pending refund before changing this application." });
+      }
       if (!isImportedDecisionAllowed(application)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -1861,6 +1874,11 @@ applicationsRouter.patch(
         await client.query("ROLLBACK");
         return res.status(404).json({ error: "Application not found." });
       }
+      const pendingRefund = await client.query("SELECT 1 FROM public.application_refunds WHERE application_id = $1 AND status = 'pending'", [applicationId]);
+      if (pendingRefund.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Review the pending refund before changing this application." });
+      }
       if (!isImportedDecisionAllowed(application)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -1872,6 +1890,13 @@ applicationsRouter.patch(
         return res.status(409).json({
           error: "This application has already been decided.",
         });
+      }
+
+      const collected = await client.query(`SELECT 1 FROM public.payments WHERE application_id = $1
+        AND voided_at IS NULL AND amount_paid > 0 AND application_refund_id IS NULL FOR UPDATE`, [applicationId]);
+      if (collected.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "This application has a collected payment. Request a refund instead of closing it." });
       }
 
       await client.query(
@@ -1887,52 +1912,6 @@ applicationsRouter.patch(
         `,
         [status, reason, employee.employeeId, applicationId]
       );
-
-      // An application that never becomes an account cannot keep the money it
-      // took. Voiding is the same reversal an admin would apply by hand: the
-      // receipt survives as evidence, stamped VOIDED, and the amount drops out
-      // of the day's takings and every report. No ledger reversal is needed
-      // because installation never posted a credit in the first place.
-      //
-      // The office still has to hand the cash back at the counter. This records
-      // that the collection is no longer good, not that a refund happened.
-      const voidReason =
-        `Application #${applicationId} ${status}` +
-        (reason ? `: ${reason}` : "; installation fee no longer collected");
-      const voidedResult = await client.query(
-        `
-        UPDATE public.payments
-        SET
-          voided_at = CURRENT_TIMESTAMP,
-          voided_by_employee_id = $1,
-          void_reason = $2
-        WHERE application_id = $3
-          AND voided_at IS NULL
-        RETURNING payment_id, amount_paid, receipt_number;
-        `,
-        [employee.employeeId, voidReason, applicationId]
-      );
-      const voidedPayment = voidedResult.rows[0] ?? null;
-
-      if (voidedPayment) {
-        await client.query(
-          `
-          INSERT INTO public.audit_logs (
-            employee_id, actor_name, action, entity_type, entity_id,
-            field_name, old_value, new_value, reason, occurred_at
-          )
-          VALUES ($1, $2, 'Voided installation fee with closed application',
-            'payment', $3, 'payment_status', 'active', 'voided', $4,
-            CURRENT_TIMESTAMP);
-          `,
-          [
-            employee.employeeId,
-            `${employee.firstName} ${employee.lastName}`,
-            String(voidedPayment.payment_id),
-            voidReason,
-          ]
-        );
-      }
 
       await client.query(
         `
@@ -1955,7 +1934,7 @@ applicationsRouter.patch(
       );
 
       await client.query("COMMIT");
-      res.json({ applicationId, status, voidedPayment });
+      res.json({ applicationId, status });
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Could not close application:", error);
@@ -2020,6 +1999,11 @@ applicationsRouter.post(
       // Only something still waiting to be installed can be sent out. A
       // serviced application already has a customer; a declined or cancelled
       // one should not have anybody driving to it.
+      const pendingRefund = await client.query("SELECT 1 FROM public.application_refunds WHERE application_id = $1 AND status = 'pending'", [applicationId]);
+      if (pendingRefund.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Review the pending refund before dispatching this application." });
+      }
       if (application.status !== "pending") {
         await client.query("ROLLBACK");
         return res.status(409).json({

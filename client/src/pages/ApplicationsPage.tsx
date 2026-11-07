@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
+import ApplicationRefundPanel from "../components/ApplicationRefundPanel";
 import PaymentReceiptModal, { type PaymentReceipt } from "../components/PaymentReceiptModal";
 import { apiFetch } from "../lib/api";
 import { useOpenCustomerProfile } from "../hooks/useOpenCustomerProfile";
@@ -52,7 +53,8 @@ type ApplicationRecord = {
   match_confirmed_by_name: string | null;
   // The installation fee collected when this application was taken, if any.
   // It follows the application: activation moves it onto the new customer's
-  // record, closing the application voids it.
+  // record; approved refunds preserve it and post a separate cash outflow.
+  refund_status: "pending" | "approved" | "rejected" | null;
   installation_payment_id: number | null;
   installation_amount: string | null;
   installation_receipt_number: string | null;
@@ -114,6 +116,7 @@ type ApplicationPagination = {
 };
 
 type ApplicationView =
+  | "refunds"
   | "engineers"
   | "overdue"
   | "active"
@@ -856,6 +859,7 @@ function ApplicationsPage() {
                 ["out_for_install", "Out for Install"],
                 ["sent_back", "Sent Back"],
                 ["engineers", "Engineers"],
+                ["refunds", "Refund Requests"],
                 ["serviced", "Serviced"],
                 ["closed", "Closed"],
                 // No tab for confirmed_existing. It is an artefact of the
@@ -1181,7 +1185,7 @@ function ApplicationsPage() {
               </Field>
               <div className="self-end rounded-lg bg-surface-container-low px-4 py-3 text-xs text-on-surface-variant">
                 {Number(newForm.installationFee) > 0
-                  ? "Recorded as a payment today with a printable receipt. It becomes this customer's first payment on activation, and is voided if the application is cancelled."
+                  ? "Recorded as a payment today with a printable receipt. It becomes this customer's first payment on activation. If money is returned, request a refund on the application for head office approval."
                   : "Nothing is recorded. Clear this only when the applicant has not paid yet."}
               </div>
             </FormSection>
@@ -1219,7 +1223,7 @@ function ApplicationsPage() {
           application={activeApplication}
           onClose={() => setSelected(null)}
           footer={
-            canDecide && canTakeDecision(activeApplication) ? (
+            canDecide && activeApplication.refund_status !== "pending" && canTakeDecision(activeApplication) ? (
               <div className="flex flex-col gap-3">
                 {activeApplication.status === "match_review" && (
                   <button type="button" onClick={() => openConfirmMatch(activeApplication)} className="flex items-center justify-center gap-2 rounded-lg bg-secondary/15 px-4 py-3 text-sm font-medium text-secondary transition hover:bg-secondary/25"><span className="material-symbols-outlined">how_to_reg</span>{activeApplication.suggested_customer_id ? `Same Person as Customer #${activeApplication.suggested_customer_id}` : "Same Person as an Existing Customer"}</button>
@@ -1238,7 +1242,7 @@ function ApplicationsPage() {
                 )}
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button type="button" onClick={() => openServiceDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-tertiary px-4 py-3 text-sm font-medium text-white transition hover:bg-tertiary/90"><span className="material-symbols-outlined">check</span>Activate Customer</button>
-                  <button type="button" onClick={() => openCloseDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error transition hover:bg-error/15"><span className="material-symbols-outlined">close</span>Not Serviced</button>
+                  {(!activeApplication.installation_payment_id || activeApplication.installation_voided) && (<button type="button" onClick={() => openCloseDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error transition hover:bg-error/15"><span className="material-symbols-outlined">close</span>Not Serviced</button>)}
                 </div>
               </div>
             ) : canDecide && activeApplication.status === "confirmed_existing" ? (
@@ -1247,6 +1251,13 @@ function ApplicationsPage() {
           }
         >
           <div className="space-y-8">
+            <ApplicationRefundPanel key={activeApplication.application_id} application={activeApplication} onChanged={(refundStatus) => {
+              const updated: ApplicationRecord = { ...activeApplication, refund_status: refundStatus,
+                ...(refundStatus === "approved" ? { status: "cancelled" as const, closure_reason: "Refund" } : {}) };
+              setSelected(updated);
+              setApplications(current => current.map(item => item.application_id === updated.application_id ? updated : item));
+              void loadApplications();
+            }} />
             <button type="button" onClick={() => setEditing(activeApplication)} className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white transition hover:bg-primary/90">
               <span className="material-symbols-outlined">edit</span>Edit Application
             </button>
@@ -1292,7 +1303,7 @@ function ApplicationsPage() {
                     ? "Voided. It no longer counts towards any day's takings."
                     : activeApplication.customer_id
                       ? `Now the first payment on customer #${activeApplication.customer_id}.`
-                      : "Held against this application. It moves onto the customer record when this application is activated, and is voided if it is not."}
+                      : "Collected with this application. It moves onto the customer record on activation. Approved refunds are recorded separately and preserve this receipt."}
                 </p>
                 <button type="button" onClick={() => openInstallationReceipt(activeApplication.installation_payment_id!)} className="mt-3 text-sm font-medium text-primary underline">
                   {activeApplication.installation_voided ? "View voided receipt" : "Reprint receipt"}

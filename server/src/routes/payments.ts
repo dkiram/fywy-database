@@ -797,6 +797,14 @@ paymentsRouter.post(
         return res.status(404).json({ error: "Payment not found." });
       }
 
+      const refundLink = await client.query(`SELECT 1 FROM public.application_refunds
+        WHERE (payment_id = $1 OR application_refund_id = (SELECT application_refund_id FROM public.payments WHERE payment_id = $1))
+          AND status IN ('pending', 'approved')`, [paymentId]);
+      if (refundLink.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "This payment belongs to a pending or approved refund and cannot be voided." });
+      }
+
       // Application installation fees may not have a customer yet. PostgreSQL
       // cannot lock the nullable side of a LEFT JOIN, so lock the customer in
       // a second query only when one exists. This preserves the original race
@@ -1094,7 +1102,8 @@ paymentsRouter.get("/payments/daily-summary", requireAuth, requireAdmin, async (
       SELECT
         COUNT(*)::INTEGER AS payment_count,
         COALESCE(SUM(pay.amount_paid), 0)::NUMERIC(14,2) AS total_amount,
-        COALESCE(AVG(pay.amount_paid), 0)::NUMERIC(14,2) AS average_amount
+        COALESCE(AVG(pay.amount_paid), 0)::NUMERIC(14,2) AS average_amount,
+        COALESCE(SUM(pay.amount_paid) FILTER (WHERE pay.application_refund_id IS NOT NULL), 0)::NUMERIC(14,2) AS refund_amount
       FROM public.payments pay
       ${whereClause};
       `,

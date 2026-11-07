@@ -17,6 +17,7 @@ import {
 } from "./loginThrottle.js";
 import applicationsRouter from "./routes/applications.js";
 import paymentsRouter from "./routes/payments.js";
+import applicationRefundsRouter from "./routes/applicationRefunds.js";
 import accountsRouter from "./routes/accounts.js";
 import serviceTicketsRouter from "./routes/serviceTickets.js";
 import poleBoxesRouter from "./routes/poleBoxes.js";
@@ -223,6 +224,7 @@ app.use(
 
 app.use("/api", applicationsRouter);
 app.use("/api", paymentsRouter);
+app.use("/api", applicationRefundsRouter);
 // MVP 3 service-status queue, history, and transition endpoints.
 app.use("/api", accountsRouter);
 // MVP 4 operational workflows and the summaries built from them.

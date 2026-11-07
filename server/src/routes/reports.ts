@@ -117,6 +117,8 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           ) grouped;`;
         rowsSql = `
           SELECT payment_date, COUNT(*)::INTEGER AS payment_count,
+            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NULL), 0)::NUMERIC(14,2) AS gross_amount,
+            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NOT NULL), 0)::NUMERIC(14,2) AS refund_amount,
             COALESCE(SUM(amount_paid), 0)::NUMERIC(14,2) AS total_amount
           FROM public.payments
           WHERE ($1 = '' OR payment_date >= $1::DATE)
@@ -127,6 +129,8 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           LIMIT $3 OFFSET $4;`;
         totalsSql = `
           SELECT COUNT(*)::INTEGER AS payment_count,
+            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NULL), 0)::NUMERIC(14,2) AS gross_amount,
+            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NOT NULL), 0)::NUMERIC(14,2) AS refund_amount,
             COALESCE(SUM(amount_paid), 0)::NUMERIC(14,2) AS total_amount
           FROM public.payments
           WHERE ($1 = '' OR payment_date >= $1::DATE)
@@ -148,6 +152,8 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
         rowsSql = `
           SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown') AS location,
             COUNT(*)::INTEGER AS payment_count,
+            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NULL), 0)::NUMERIC(14,2) AS gross_amount,
+            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NOT NULL), 0)::NUMERIC(14,2) AS refund_amount,
             COALESCE(SUM(amount_paid), 0)::NUMERIC(14,2) AS total_amount
           FROM public.payments
           WHERE ($3 = '' OR payment_date >= $3::DATE)
@@ -159,6 +165,8 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
           LIMIT $5 OFFSET $6;`;
         totalsSql = `
           SELECT COUNT(*)::INTEGER AS payment_count,
+            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NULL), 0)::NUMERIC(14,2) AS gross_amount,
+            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NOT NULL), 0)::NUMERIC(14,2) AS refund_amount,
             COALESCE(SUM(amount_paid), 0)::NUMERIC(14,2) AS total_amount
           FROM public.payments
           WHERE ($3 = '' OR payment_date >= $3::DATE)
