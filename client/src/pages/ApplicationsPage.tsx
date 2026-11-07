@@ -131,6 +131,7 @@ type ApplicationView =
   | "out_for_install"
   | "installed"
   | "install_failed"
+  | "sent_back"
   // The technician agreed a time with the applicant. Still out, still on the
   // phone - it just has an appointment on it. Took the Match Review slot in
   // the tab strip; those applications are still under Active and All.
@@ -813,13 +814,14 @@ function ApplicationsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <SummaryCard label="Active Queue" value={summary.active} icon="pending_actions" />
         {/* The one the office is waiting on. An installation finished
             yesterday afternoon shows up here this morning without anybody
             reading down the table to find it. */}
         <SummaryCard label="Installed, To Activate" onClick={() => setView("installed")} selected={view === "installed"} value={summary.installed} icon="task_alt" />
         <SummaryCard label="Out For Install" value={summary.out_for_install} icon="engineering" />
+        <SummaryCard label="Unresolved" onClick={() => setView("install_failed")} selected={view === "install_failed"} value={summary.install_failed} icon="door_front" warning />
         <SummaryCard label="Over 14 Days" onClick={() => setView("overdue")} selected={view === "overdue"} value={summary.overdue} icon="schedule" warning />
       </div>
 
@@ -854,7 +856,8 @@ function ApplicationsPage() {
                 // thing that used to be found only by opening applications one
                 // at a time to look.
                 ["out_for_install", "Out for Install"],
-                ["install_failed", "Sent Back"],
+                ["install_failed", "Unresolved"],
+                ["sent_back", "Sent Back"],
                 ["engineers", "Engineers"],
                 ["serviced", "Serviced"],
                 ["closed", "Closed"],

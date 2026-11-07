@@ -278,7 +278,8 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     assigned: "t.status = 'assigned'",
     in_progress: "t.status = 'in_progress'",
     completed: "t.status = 'completed'",
-    unresolved: "t.status = 'unresolved' OR (t.status = 'open' AND t.field_return_kind = 'technician_sent_back')",
+    unresolved: "t.status = 'unresolved'",
+    sent_back: "t.status = 'open' AND t.field_return_kind = 'technician_sent_back'",
     cancelled: "t.status = 'cancelled'",
     all: "TRUE",
   };
@@ -302,7 +303,8 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     assigned: ["assigned"],
     in_progress: ["in_progress"],
     completed: ["completed"],
-    unresolved: ["unresolved", "open"],
+    unresolved: ["unresolved"],
+    sent_back: ["open"],
     cancelled: ["cancelled"],
     all: ["open", "assigned", "in_progress", "completed", "unresolved", "cancelled"],
   };
@@ -320,7 +322,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   try {
     const params = [search, searchPattern, customerId, onDate];
     const whereSql = `
-      WHERE (${onDate && !["rescheduled", "engineers", "unresolved", "open"].includes(safeView) ? "TRUE" : viewClause})
+      WHERE (${onDate && !["rescheduled", "engineers", "sent_back", "open"].includes(safeView) ? "TRUE" : viewClause})
         ${listJobType === "all" ? "" : `AND t.job_type = '${listJobType === "installation" ? "installation" : "repair"}'`}
         AND ($3::INTEGER IS NULL OR t.customer_id = $3)
         -- The day a ticket moved into the status the chip names, read from the
@@ -355,7 +357,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
         AND (
           NULLIF($4, '')::DATE IS NULL
           ${
-            safeView === "engineers"
+            ["engineers", "sent_back"].includes(safeView)
               ? `OR (t.handed_back_at AT TIME ZONE 'America/Jamaica')::DATE = NULLIF($4, '')::DATE`
               : safeView === "rescheduled"
               // The Rescheduled chip's date is the appointment itself: "what
@@ -459,7 +461,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           COUNT(*) FILTER (WHERE status = 'assigned')::INTEGER AS assigned,
           COUNT(*) FILTER (WHERE status = 'in_progress')::INTEGER AS in_progress,
           COUNT(*) FILTER (WHERE status = 'completed')::INTEGER AS completed,
-          COUNT(*) FILTER (WHERE status = 'unresolved' OR (status = 'open' AND field_return_kind = 'technician_sent_back'))::INTEGER AS unresolved
+          COUNT(*) FILTER (WHERE status = 'unresolved')::INTEGER AS unresolved
         FROM public.service_tickets
         WHERE ($1::INTEGER IS NULL OR customer_id = $1)
           ${listJobType === "all" ? "" : `AND job_type = '${listJobType === "installation" ? "installation" : "repair"}'`};

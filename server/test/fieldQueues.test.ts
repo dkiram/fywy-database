@@ -27,10 +27,16 @@ test('office queues keep engineer returns separate', async t => {
       assert.match(queries[1], /t.status = 'open' AND t.field_return_kind IS NULL/);
     }
   });
-  await t.test('existing unresolved queue combines technician returns and unsuccessful visits', async () => {
+  await t.test('Unresolved remains separate from explicit returns', async () => {
     const queries = await query(tickets, '/service-tickets', 'unresolved');
-    assert.match(queries[0], /WHERE \(t.status = 'unresolved' OR \(t.status = 'open' AND t.field_return_kind = 'technician_sent_back'\)\)/);
-    assert.match(queries[2], /status = 'unresolved' OR \(status = 'open' AND field_return_kind = 'technician_sent_back'\)/);
+    assert.match(queries[0], /WHERE \(t.status = 'unresolved'\)/);
+    assert.match(queries[2], /COUNT\(\*\) FILTER \(WHERE status = 'unresolved'\)::INTEGER AS unresolved/);
+  });
+  await t.test('Sent Back contains only explicit technician returns', async () => {
+    for (const date of ['', '2026-11-07']) {
+      const queries = await query(tickets, '/service-tickets', 'sent_back', date);
+      assert.match(queries[0], /WHERE \(t.status = 'open' AND t.field_return_kind = 'technician_sent_back'\)/);
+    }
   });
   await t.test('Engineers includes both outcomes and prioritizes completion before pagination', async () => {
     const queries = await query(tickets, '/service-tickets', 'engineers');
@@ -38,8 +44,16 @@ test('office queues keep engineer returns separate', async t => {
     assert.match(queries[1], /ORDER BY\s+\(t.field_return_kind = 'engineer_completed'\) DESC NULLS LAST/);
   });
   await t.test('application Sent Back excludes engineer returns from rows and counts', async () => {
+    const queries = await query(applications, '/applications', 'sent_back');
+    for (const sql of queries.slice(0, 2)) {
+      assert.match(sql, /= 'technician_sent_back'/);
+      assert.doesNotMatch(sql, /IN \('unresolved', 'open'\)/);
+    }
+  });
+  await t.test('application Unresolved contains unsuccessful visits only', async () => {
     const queries = await query(applications, '/applications', 'install_failed');
-    for (const sql of queries) assert.match(sql, /AND NOT COALESCE\(/);
+    assert.match(queries[0], /= 'unresolved'/);
+    assert.doesNotMatch(queries[0], /= 'open'/);
   });
   await t.test('application Engineers includes both outcomes', async () => {
     const queries = await query(applications, '/applications', 'engineers');

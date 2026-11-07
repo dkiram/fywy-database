@@ -233,11 +233,13 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
 
       // The technician got there and could not do it - nobody home, no answer.
       // It needs re-sending, and until now there was no way to see it at all.
-      // Needs somebody sent again: the visit failed, or a technician handed
-      // the job back (migration 085, which leaves it 'open' and unassigned).
-      // Both are the same action for the office, so they share the tab; the
-      // badge on each row says which it was.
-      install_failed: `a.status = 'pending' AND ${latestInstall("a")} IN ('unresolved', 'open') AND NOT ${engineerReturn("a")}`,
+      // Unsuccessful visits and explicit returns have separate office queues.
+      // Engineer returns belong exclusively to Engineers.
+      install_failed: `a.status = 'pending' AND ${latestInstall("a")} = 'unresolved'`,
+      sent_back: `a.status = 'pending' AND ${latestInstall("a")} = 'open'
+        AND (SELECT t.field_return_kind FROM public.service_tickets t
+          WHERE t.application_id = a.application_id AND t.job_type = 'installation'
+          ORDER BY t.service_ticket_id DESC LIMIT 1) = 'technician_sent_back'`,
 
       // The technician rang ahead and the applicant asked for another time.
       // Still assigned, still on the phone (migration 080) - it just has an
@@ -421,8 +423,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         )::INTEGER AS installed,
         COUNT(*) FILTER (
           WHERE status = 'pending'
-            AND ${latestInstall("applications")} IN ('unresolved', 'open')
-            AND NOT ${engineerReturn("applications")}
+            AND ${latestInstall("applications")} = 'unresolved'
         )::INTEGER AS install_failed,
         COUNT(*) FILTER (
           WHERE status = 'pending'
