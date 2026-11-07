@@ -286,6 +286,7 @@ function ApplicationsPage() {
     { application: ApplicationRecord; mode: "send" | "move" | "reschedule" } | null
   >(null);
   const [selected, setSelected] = useState<ApplicationRecord | null>(null);
+  const [refundActionHost, setRefundActionHost] = useState<HTMLDivElement | null>(null);
   const [editing, setEditing] = useState<ApplicationRecord | null>(null);
   // Shown right after an installation fee is collected, and reprintable from
   // the application drawer afterwards.
@@ -1242,16 +1243,17 @@ function ApplicationsPage() {
                 )}
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button type="button" onClick={() => openServiceDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-tertiary px-4 py-3 text-sm font-medium text-white transition hover:bg-tertiary/90"><span className="material-symbols-outlined">check</span>Activate Customer</button>
+                  <div ref={setRefundActionHost} className="flex flex-1 empty:hidden" />
                   {(!activeApplication.installation_payment_id || activeApplication.installation_voided) && (<button type="button" onClick={() => openCloseDecision(activeApplication)} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error transition hover:bg-error/15"><span className="material-symbols-outlined">close</span>Not Serviced</button>)}
                 </div>
               </div>
             ) : canDecide && activeApplication.status === "confirmed_existing" ? (
               <button type="button" onClick={() => openReopenMatch(activeApplication)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-surface-container px-4 py-3 text-sm font-medium transition hover:bg-surface-container-high"><span className="material-symbols-outlined">undo</span>Reopen This Match</button>
-            ) : undefined
+            ) : <div ref={setRefundActionHost} className="flex empty:hidden" />
           }
         >
           <div className="space-y-8">
-            <ApplicationRefundPanel key={activeApplication.application_id} application={activeApplication} onChanged={(refundStatus) => {
+            <ApplicationRefundPanel key={activeApplication.application_id} requestButtonHost={refundActionHost} application={activeApplication} onChanged={(refundStatus) => {
               const updated: ApplicationRecord = { ...activeApplication, refund_status: refundStatus,
                 ...(refundStatus === "approved" ? { status: "cancelled" as const, closure_reason: "Refund" } : {}) };
               setSelected(updated);

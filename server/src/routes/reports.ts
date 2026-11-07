@@ -138,42 +138,24 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             AND voided_at IS NULL;`;
         break;
 
-      case "payments-by-location":
-        countSql = `
-          SELECT COUNT(*)::INTEGER AS total FROM (
-            SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown')
-            FROM public.payments
-            WHERE ($3 = '' OR payment_date >= $3::DATE)
-              AND ($4 = '' OR payment_date <= $4::DATE)
-              AND voided_at IS NULL
-              AND ($1 = '' OR COALESCE(location, '') ILIKE $2)
-            GROUP BY 1
-          ) grouped;`;
-        rowsSql = `
-          SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown') AS location,
-            COUNT(*)::INTEGER AS payment_count,
-            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NULL), 0)::NUMERIC(14,2) AS gross_amount,
-            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NOT NULL), 0)::NUMERIC(14,2) AS refund_amount,
-            COALESCE(SUM(amount_paid), 0)::NUMERIC(14,2) AS total_amount
-          FROM public.payments
-          WHERE ($3 = '' OR payment_date >= $3::DATE)
-            AND ($4 = '' OR payment_date <= $4::DATE)
-            AND voided_at IS NULL
-            AND ($1 = '' OR COALESCE(location, '') ILIKE $2)
-          GROUP BY 1
-          ORDER BY total_amount DESC, location
-          LIMIT $5 OFFSET $6;`;
-        totalsSql = `
-          SELECT COUNT(*)::INTEGER AS payment_count,
-            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NULL), 0)::NUMERIC(14,2) AS gross_amount,
-            COALESCE(SUM(amount_paid) FILTER (WHERE application_refund_id IS NOT NULL), 0)::NUMERIC(14,2) AS refund_amount,
-            COALESCE(SUM(amount_paid), 0)::NUMERIC(14,2) AS total_amount
-          FROM public.payments
-          WHERE ($3 = '' OR payment_date >= $3::DATE)
-            AND ($4 = '' OR payment_date <= $4::DATE)
-            AND voided_at IS NULL
-            AND ($1 = '' OR COALESCE(location, '') ILIKE $2);`;
+      case "payments-by-location": {
+        // Keep offices with only void activity clickable, without adding voided receipts to net collections.
+        const inPeriod = "(($3 = '' OR payment_date >= $3::DATE) AND ($4 = '' OR payment_date <= $4::DATE))";
+        const scoped = `FROM public.payments WHERE ($1 = '' OR COALESCE(location, '') ILIKE $2)
+          AND (${inPeriod} OR (voided_at IS NOT NULL
+            AND ($3 = '' OR (voided_at AT TIME ZONE 'America/Jamaica')::DATE >= $3::DATE)
+            AND ($4 = '' OR (voided_at AT TIME ZONE 'America/Jamaica')::DATE <= $4::DATE)))`;
+        const amounts = `COUNT(*) FILTER (WHERE ${inPeriod} AND voided_at IS NULL)::INTEGER AS payment_count,
+          COALESCE(SUM(amount_paid) FILTER (WHERE ${inPeriod} AND voided_at IS NULL AND application_refund_id IS NULL), 0)::NUMERIC(14,2) AS gross_amount,
+          COALESCE(SUM(amount_paid) FILTER (WHERE ${inPeriod} AND voided_at IS NULL AND application_refund_id IS NOT NULL), 0)::NUMERIC(14,2) AS refund_amount,
+          COALESCE(SUM(amount_paid) FILTER (WHERE ${inPeriod} AND voided_at IS NULL), 0)::NUMERIC(14,2) AS total_amount`;
+        countSql = `SELECT COUNT(*)::INTEGER AS total FROM (
+          SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown') ${scoped} GROUP BY 1) grouped`;
+        rowsSql = `SELECT COALESCE(NULLIF(TRIM(location), ''), 'Unknown') AS location, ${amounts}
+          ${scoped} GROUP BY 1 ORDER BY total_amount DESC, location LIMIT $5 OFFSET $6`;
+        totalsSql = `SELECT ${amounts} ${scoped}`;
         break;
+      }
 
       case "pending-service":
         countSql = `
@@ -584,6 +566,58 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
     console.error(`Could not load ${reportKey} report:`, error);
     res.status(500).json({ error: "Could not load report." });
   }
+});
+
+// The location name uses the same normalization as the parent report, including Unknown.
+reportsRouter.get('/reports/payments-by-location/cashiers', requireAuth, async (req, res) => {
+  if (req.session.employee!.role !== 'admin') return res.status(403).json({ error: 'Only Admin can view this report.' });
+  const location = cleanText(req.query.location);
+  const from = cleanText(req.query.from), to = cleanText(req.query.to);
+  const realDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+  if (!location || !realDate(from) || !realDate(to) || from > to) return res.status(400).json({ error: 'Choose a location and a valid date range.' });
+  try {
+    const result = await pool.query(`
+      WITH events AS (
+        -- Collections belong to the cashier who recorded them, including receipts later voided.
+        SELECT CASE WHEN p.recorded_by_employee_id IS NOT NULL THEN 'employee:' || p.recorded_by_employee_id::TEXT
+                    ELSE 'legacy:' || LOWER(COALESCE(NULLIF(TRIM(p.cashier_name), ''), 'Unknown cashier')) END AS cashier_key,
+          COALESCE(NULLIF(CONCAT_WS(' ', e.first_name, e.last_name), ''), NULLIF(TRIM(p.cashier_name), ''), 'Unknown cashier') AS cashier,
+          CASE WHEN p.application_refund_id IS NULL THEN 1 ELSE 0 END AS payment_count,
+          CASE WHEN p.application_refund_id IS NULL THEN COALESCE(p.amount_paid, 0) ELSE 0 END AS recorded_amount,
+          CASE WHEN p.voided_at IS NOT NULL THEN COALESCE(p.amount_paid, 0) ELSE 0 END AS voided_payments,
+          CASE WHEN p.application_refund_id IS NOT NULL AND p.voided_at IS NULL THEN COALESCE(p.amount_paid, 0) ELSE 0 END AS refund_amount,
+          CASE WHEN p.voided_at IS NULL THEN COALESCE(p.amount_paid, 0) ELSE 0 END AS net_amount,
+          0 AS void_count, 0::NUMERIC AS voided_by_cashier
+        FROM public.payments p LEFT JOIN public.employees e ON e.employee_id = p.recorded_by_employee_id
+        WHERE COALESCE(NULLIF(TRIM(p.location), ''), 'Unknown') = $1
+          AND p.payment_date BETWEEN $2::DATE AND $3::DATE
+        UNION ALL
+        -- A void action belongs to the person who performed it, on the date they did it.
+        SELECT CASE WHEN p.voided_by_employee_id IS NOT NULL THEN 'employee:' || p.voided_by_employee_id::TEXT ELSE 'voider:unknown' END,
+          COALESCE(NULLIF(CONCAT_WS(' ', e.first_name, e.last_name), ''), 'Unknown voiding staff'),
+          0, 0, 0, 0, 0, 1, COALESCE(p.amount_paid, 0)
+        FROM public.payments p LEFT JOIN public.employees e ON e.employee_id = p.voided_by_employee_id
+        WHERE COALESCE(NULLIF(TRIM(p.location), ''), 'Unknown') = $1 AND p.voided_at IS NOT NULL
+          AND (p.voided_at AT TIME ZONE 'America/Jamaica')::DATE BETWEEN $2::DATE AND $3::DATE
+        UNION ALL
+        -- Include today's office staff even when they recorded no transactions this period.
+        SELECT 'employee:' || e.employee_id::TEXT, CONCAT_WS(' ', e.first_name, e.last_name), 0, 0, 0, 0, 0, 0, 0
+        FROM public.employees e JOIN public.locations l ON l.location_id = e.location_id
+        WHERE e.is_active AND e.role IN ('branch', 'head_office', 'admin')
+          AND COALESCE(NULLIF(TRIM(l.name), ''), 'Unknown') = $1
+      )
+      SELECT cashier_key, MAX(cashier) AS cashier,
+        SUM(payment_count)::INTEGER AS payment_count,
+        SUM(recorded_amount)::NUMERIC(14,2) AS recorded_amount,
+        SUM(voided_payments)::NUMERIC(14,2) AS voided_payments,
+        SUM(refund_amount)::NUMERIC(14,2) AS refund_amount,
+        SUM(net_amount)::NUMERIC(14,2) AS net_amount,
+        SUM(void_count)::INTEGER AS void_count,
+        SUM(voided_by_cashier)::NUMERIC(14,2) AS voided_by_cashier
+      FROM events GROUP BY cashier_key ORDER BY net_amount DESC, cashier, cashier_key
+    `, [location, from, to]);
+    res.json({ location, from, to, rows: result.rows });
+  } catch (error) { console.error('Could not load location cashiers:', error); res.status(500).json({ error: 'Could not load cashier totals.' }); }
 });
 
 export default reportsRouter;

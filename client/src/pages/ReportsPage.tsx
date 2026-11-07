@@ -79,6 +79,7 @@ function ReportsPage() {
   );
   const reportKey: ReportKey = availableReports.some((item) => item.key === requestedReport) ? requestedReport! : availableReports[0].key;
   const technicianId = reportKey === "technician-jobs" ? searchParams.get("employee_id") : null;
+  const cashierLocation = reportKey === "payments-by-location" ? searchParams.get("location") : null;
   const technicianName = searchParams.get("technician") || "Technician";
   const search = searchParams.get("search") ?? "";
   const from = searchParams.get("from") || jamaicaToday();
@@ -158,6 +159,9 @@ function ReportsPage() {
   };
 
   const openRow = (row: ReportRow) => {
+    if (reportKey === "payments-by-location") {
+      setSearchParams(current => { const next = new URLSearchParams(current); next.set("location", String(row.location)); return next; }, { replace: true });
+    }
     if (reportKey === "technician-jobs") {
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
@@ -195,9 +199,12 @@ function ReportsPage() {
               </button>
             : column.label}
         </th>;
-      })}</tr></thead><tbody className="divide-y divide-surface-container">{!loading && rows.map((row, index) => <tr key={`${reportKey}-${index}`} onClick={() => openRow(row)} className="transition hover:bg-surface-container-low/60">{columns.map((column) => <td key={column.key} className="max-w-sm px-5 py-4 text-sm text-on-surface-variant">{reportKey === "technician-jobs" && column.key === "technician" ? <button type="button" onClick={(event) => { event.stopPropagation(); openRow(row); }} aria-haspopup="dialog" className="inline-flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 font-medium text-primary transition hover:bg-primary/20">{formatCell(row[column.key], column.format)}<span aria-hidden="true" className="material-symbols-outlined text-base">chevron_right</span></button> : formatCell(row[column.key], column.format)}</td>)}</tr>)}</tbody></table></div>
+      })}</tr></thead><tbody className="divide-y divide-surface-container">{!loading && rows.map((row, index) => <tr key={`${reportKey}-${index}`} onClick={() => openRow(row)} className="transition hover:bg-surface-container-low/60">{columns.map((column) => <td key={column.key} className="max-w-sm px-5 py-4 text-sm text-on-surface-variant">{((reportKey === "technician-jobs" && column.key === "technician") || (reportKey === "payments-by-location" && column.key === "location")) ? <button type="button" onClick={(event) => { event.stopPropagation(); openRow(row); }} aria-haspopup="dialog" className="inline-flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 font-medium text-primary transition hover:bg-primary/20">{formatCell(row[column.key], column.format)}<span aria-hidden="true" className="material-symbols-outlined text-base">chevron_right</span></button> : formatCell(row[column.key], column.format)}</td>)}</tr>)}</tbody></table></div>
       {loading && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">Generating report...</div>}{!loading && !error && rows.length === 0 && <div className="px-5 py-14 text-center text-sm text-on-surface-variant">No rows match these report filters.</div>}{!loading && rows.length > 0 && <div className="flex items-center justify-between border-t border-surface-container px-5 py-4 text-sm text-on-surface-variant"><span>{pagination.total.toLocaleString()} result{pagination.total === 1 ? "" : "s"}</span><div className="flex items-center gap-3"><button disabled={pagination.page <= 1} onClick={() => updateParams({ page: String(Math.max(page - 1, 1)) })} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Previous</button><span className="text-xs font-medium">Page {pagination.page} of {pagination.totalPages}</span><button disabled={pagination.page >= pagination.totalPages} onClick={() => updateParams({ page: String(Math.min(page + 1, pagination.totalPages)) })} className="rounded-lg bg-surface-container px-3 py-2 text-xs font-medium disabled:opacity-40">Next</button></div></div>}
     </section>
+    {cashierLocation && <LocationCashiersModal key={cashierLocation} location={cashierLocation} from={from} to={to} onClose={() => {
+      setSearchParams(current => { const next = new URLSearchParams(current); next.delete("location"); return next; }, { replace: true });
+    }} />}
     {technicianId && <TechnicianJobsModal key={technicianId} technicianId={technicianId} name={technicianName} from={from} to={to} onClose={() => {
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
@@ -206,6 +213,55 @@ function ReportsPage() {
       }, { replace: true });
     }} />}
   </div>;
+}
+
+const cashierColumns: Column[] = [
+  { key: 'cashier', label: 'Cashier / Staff' },
+  { key: 'payment_count', label: 'Payments Recorded' },
+  { key: 'recorded_amount', label: 'Recorded Amount', format: 'currency' },
+  { key: 'voided_payments', label: 'Their Payments Voided', format: 'currency' },
+  { key: 'refund_amount', label: 'Refunds', format: 'currency' },
+  { key: 'net_amount', label: 'Net Collected', format: 'currency' },
+  { key: 'void_count', label: 'Voids Performed' },
+  { key: 'voided_by_cashier', label: 'Amount They Voided', format: 'currency' },
+];
+function LocationCashiersModal({ location, from, to, onClose }: { location: string; from: string; to: string; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [rows, setRows] = useState<ReportRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const dialog = dialogRef.current!;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    dialog.showModal(); document.body.style.overflow = 'hidden';
+    return () => { dialog.close(); document.body.style.overflow = previousOverflow; if (previousFocus instanceof HTMLElement) previousFocus.focus(); };
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true); setError('');
+    void (async () => {
+      try {
+        const response = await apiFetch(`/api/reports/payments-by-location/cashiers?${new URLSearchParams({ location, from, to })}`, { signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw Error(data.error || 'Could not load cashier totals.');
+        if (!controller.signal.aborted) setRows(data.rows);
+      } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Could not load cashier totals.'); }
+      finally { if (!controller.signal.aborted) setLoading(false); }
+    })();
+    return () => controller.abort();
+  }, [location, from, to]);
+  return <dialog ref={dialogRef} aria-labelledby="location-cashiers-title" onCancel={event => { event.preventDefault(); onClose(); }} className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-7xl overflow-auto rounded-2xl border-0 bg-surface-container-lowest p-0 text-on-surface shadow-2xl backdrop:bg-black/50">
+    <header className="flex items-start justify-between gap-4 border-b border-surface-container p-5">
+      <div><p className="text-xs font-semibold uppercase tracking-wider text-primary">Cashier breakdown</p><h2 id="location-cashiers-title" className="mt-1 text-xl font-semibold">{location}</h2><p className="mt-2 text-sm">{formatCell(from, 'date')} – {formatCell(to, 'date')}</p></div>
+      <button type="button" autoFocus onClick={onClose} aria-label="Close cashier breakdown" className="rounded-full bg-surface-container p-2"><span aria-hidden="true" className="material-symbols-outlined block">close</span></button>
+    </header>
+    <div className="p-5" aria-busy={loading}>
+      <p className="mb-4 text-sm text-on-surface-variant">Recorded amounts include payments later voided. Net collected subtracts those voided payments and includes refunds. “Amount They Voided” uses the void date and the person who performed it, even if someone else originally recorded the payment.</p>
+      <p className="mb-4 text-xs text-on-surface-variant">Includes current office staff with no activity and historical cashiers with activity at this location. Voids performed by head office appear under the reviewer’s name. Imported cashier names remain separate when no employee ID is available.</p>
+      {loading ? <p role="status" className="py-10 text-center">Loading cashiers…</p> : error ? <p role="alert" className="text-error">{error}</p> : !rows.length ? <p className="py-10 text-center">No cashiers or activity found for this location.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{cashierColumns.map(column => <th key={column.key} className="whitespace-nowrap bg-surface-container-low px-4 py-3 text-xs font-semibold">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-surface-container">{rows.map(row => <tr key={String(row.cashier_key)}>{cashierColumns.map(column => <td key={column.key} className="whitespace-nowrap px-4 py-4">{formatCell(row[column.key], column.format)}</td>)}</tr>)}</tbody><tfoot><tr className="border-t border-outline-variant font-semibold">{cashierColumns.map(column => <td key={column.key} className="whitespace-nowrap px-4 py-4">{column.key === 'cashier' ? 'Total' : formatCell(rows.reduce((sum, row) => sum + Number(row[column.key] || 0), 0), column.format)}</td>)}</tr></tfoot></table></div>}
+    </div>
+  </dialog>;
 }
 
 function TechnicianJobsModal({ technicianId, name, from, to, onClose }: {
