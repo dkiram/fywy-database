@@ -815,12 +815,12 @@ function ApplicationsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label="Active Queue" value={summary.active} icon="pending_actions" />
+        <SummaryCard label="Active Queue" onClick={() => setView("active")} selected={view === "active"} value={summary.active} icon="pending_actions" />
         {/* The one the office is waiting on. An installation finished
             yesterday afternoon shows up here this morning without anybody
             reading down the table to find it. */}
         <SummaryCard label="Installed, To Activate" onClick={() => setView("installed")} selected={view === "installed"} value={summary.installed} icon="task_alt" />
-        <SummaryCard label="Out For Install" value={summary.out_for_install} icon="engineering" />
+        <SummaryCard label="Couldn’t Install" onClick={() => setView("install_failed")} selected={view === "install_failed"} value={summary.install_failed} icon="door_front" warning />
         <SummaryCard label="Over 14 Days" onClick={() => setView("overdue")} selected={view === "overdue"} value={summary.overdue} icon="schedule" warning />
       </div>
 
@@ -843,7 +843,6 @@ function ApplicationsPage() {
           <div className="flex flex-wrap gap-2">
             {(
               [
-                ["active", "Active"],
                 // Rescheduled sits where Match Review was. Match Review
                 // applications are still under Active and All, and still get
                 // their "same person as" button on the row - it was the tab
@@ -855,7 +854,6 @@ function ApplicationsPage() {
                 // thing that used to be found only by opening applications one
                 // at a time to look.
                 ["out_for_install", "Out for Install"],
-                ["install_failed", "Couldn’t Install"],
                 ["sent_back", "Sent Back"],
                 ["engineers", "Engineers"],
                 ["serviced", "Serviced"],
@@ -1632,7 +1630,7 @@ function formatCurrency(value: string | null) {
 function SummaryCard({ label, value, icon, warning = false, onClick, selected }: { label: string; value: number; icon: string; warning?: boolean; onClick?: () => void; selected?: boolean }) {
   const Tag = onClick ? "button" : "div";
   return (
-    <Tag onClick={onClick} aria-pressed={onClick ? selected : undefined} className={`min-w-0 rounded-xl border border-surface-container p-4 text-left shadow-sm ${onClick ? "cursor-pointer hover:ring-2 hover:ring-slate-400/50 focus-visible:outline-2 focus-visible:outline-slate-600" : ""} ${selected ? "ring-2 ring-slate-500 bg-slate-100 shadow-md" : "bg-surface-container-lowest"}`}>
+    <Tag onClick={onClick} aria-pressed={onClick ? selected : undefined} className={`min-w-0 rounded-xl border border-surface-container bg-surface-container-lowest p-4 text-left shadow-sm ${onClick ? "cursor-pointer hover:ring-2 hover:ring-slate-400/50 focus-visible:outline-2 focus-visible:outline-slate-600" : ""} ${selected ? "ring-2 ring-slate-500" : ""}`}>
       <div className="flex min-w-0 items-center gap-3">
         <span
           aria-hidden="true"
