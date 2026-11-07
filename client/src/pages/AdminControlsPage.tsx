@@ -535,7 +535,7 @@ function AddEmployeeModal({
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState("");
 
-  const isTechnician = role === "technician";
+  const isTechnician = ["technician", "engineer"].includes(role);
 
   const canSave =
     firstName.trim() !== "" &&
@@ -585,7 +585,7 @@ function AddEmployeeModal({
       onSaved(
         created.username
           ? `Added ${created.first_name} ${created.last_name} as ${created.username}. Hand them the starting password directly.`
-          : `Added ${created.first_name} ${created.last_name} as a technician.`
+          : `Added ${created.first_name} ${created.last_name} as ${created.role === "engineer" ? "an engineer" : "a technician"}.`
       );
     } catch (saveError) {
       setModalError(
@@ -610,7 +610,7 @@ function AddEmployeeModal({
           </h3>
           <p className="mt-1 text-sm text-on-surface-variant">
             {isTechnician
-              ? "No login — technician"
+              ? "No office login — field staff"
               : username
                 ? `Username ${username}`
                 : "Username is made from the first initial and last name"}
@@ -655,7 +655,7 @@ function AddEmployeeModal({
                   {option.label}
                 </option>
               ))}
-              <option value="technician">Technician</option>
+              <option value="technician">Technician</option><option value="engineer">Engineer</option>
             </select>
           </label>
 
@@ -814,7 +814,7 @@ function EditEmployeeModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
-  const isTechnician = employee.role === "technician";
+  const isTechnician = ["technician", "engineer"].includes(employee.role);
 
   const [firstName, setFirstName] = useState(employee.first_name);
   const [lastName, setLastName] = useState(employee.last_name);
@@ -922,7 +922,7 @@ function EditEmployeeModal({
             {employee.first_name} {employee.last_name}
           </h3>
           <p className="mt-1 text-sm text-on-surface-variant">
-            {employee.username ? `Username ${employee.username}` : "No login — technician"}
+            {employee.username ? `Username ${employee.username}` : "No office login — field staff"}
           </p>
         </div>
 
@@ -954,13 +954,13 @@ function EditEmployeeModal({
           <label className="block text-sm font-semibold text-on-surface">
             Role
             <select
-              value={isTechnician ? "technician" : role}
+              value={role}
               disabled={isTechnician || isSelf}
               onChange={(event) => setRole(event.target.value)}
               className={`${inputClass} disabled:opacity-60`}
             >
               {isTechnician ? (
-                <option value="technician">Technician</option>
+                <option value={employee.role}>{formatRole(employee.role)}</option>
               ) : (
                 ROLE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1381,6 +1381,7 @@ function formatRole(role: string) {
   if (role === "admin") return "Administrator";
   if (role === "head_office") return "Head Office";
   if (role === "branch") return "Branch Staff";
+  if (role === "engineer") return "Engineer";
   if (role === "technician") return "Technician";
   return role;
 }

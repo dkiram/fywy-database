@@ -72,6 +72,7 @@ type ApplicationRecord = {
   // A technician handed the installation back (migration 085): open again,
   // nobody assigned, waiting for the office to send someone else.
   install_handback_reason: string | null;
+  install_field_return_kind: string | null;
   install_handed_back_by_name: string | null;
 };
 
@@ -113,6 +114,7 @@ type ApplicationPagination = {
 };
 
 type ApplicationView =
+  | "engineers"
   | "overdue"
   | "active"
   | "review"
@@ -816,9 +818,9 @@ function ApplicationsPage() {
         {/* The one the office is waiting on. An installation finished
             yesterday afternoon shows up here this morning without anybody
             reading down the table to find it. */}
-        <SummaryCard label="Installed, To Activate" value={summary.installed} icon="task_alt" />
+        <SummaryCard label="Installed, To Activate" onClick={() => setView("installed")} selected={view === "installed"} value={summary.installed} icon="task_alt" />
         <SummaryCard label="Out For Install" value={summary.out_for_install} icon="engineering" />
-        <SummaryCard label="Over 14 Days" value={summary.overdue} icon="schedule" warning />
+        <SummaryCard label="Over 14 Days" onClick={() => setView("overdue")} selected={view === "overdue"} value={summary.overdue} icon="schedule" warning />
       </div>
 
       {notice && (
@@ -841,7 +843,6 @@ function ApplicationsPage() {
             {(
               [
                 ["active", "Active"],
-                ["overdue", "Over 14 Days"],
                 // Rescheduled sits where Match Review was. Match Review
                 // applications are still under Active and All, and still get
                 // their "same person as" button on the row - it was the tab
@@ -853,8 +854,8 @@ function ApplicationsPage() {
                 // thing that used to be found only by opening applications one
                 // at a time to look.
                 ["out_for_install", "Out for Install"],
-                ["installed", "Installed"],
-                ["install_failed", "Couldn't Install"],
+                ["install_failed", "Sent Back"],
+                ["engineers", "Engineers"],
                 ["serviced", "Serviced"],
                 ["closed", "Closed"],
                 // No tab for confirmed_existing. It is an artefact of the
@@ -1626,9 +1627,10 @@ function formatCurrency(value: string | null) {
   return `J$${Number(value).toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function SummaryCard({ label, value, icon, warning = false }: { label: string; value: number; icon: string; warning?: boolean }) {
+function SummaryCard({ label, value, icon, warning = false, onClick, selected }: { label: string; value: number; icon: string; warning?: boolean; onClick?: () => void; selected?: boolean }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="min-w-0 rounded-xl border border-surface-container bg-surface-container-lowest p-4 shadow-sm">
+    <Tag onClick={onClick} aria-pressed={onClick ? selected : undefined} className={`min-w-0 rounded-xl border border-surface-container p-4 text-left shadow-sm ${onClick ? "cursor-pointer hover:ring-2 hover:ring-slate-400/50 focus-visible:outline-2 focus-visible:outline-slate-600" : ""} ${selected ? "ring-2 ring-slate-500 bg-slate-100 shadow-md" : "bg-surface-container-lowest"}`}>
       <div className="flex min-w-0 items-center gap-3">
         <span
           aria-hidden="true"
@@ -1647,7 +1649,7 @@ function SummaryCard({ label, value, icon, warning = false }: { label: string; v
           </p>
         </div>
       </div>
-    </div>
+    </Tag>
   );
 }
 
@@ -1829,7 +1831,7 @@ function InstallBadge({ application }: { application: ApplicationRecord }) {
     // Solid, matching the unresolved pill on the service ticket queue, so the
     // one state that needs somebody to act reads the same in both places.
     unresolved: { label: "Couldn't install", className: "bg-stalled text-white" },
-    open: { label: "Sent back", className: "bg-surface-container-high text-on-surface" },
+    open: { label: application.install_field_return_kind === "engineer_completed" ? "Engineer Completed" : application.install_field_return_kind === "engineer_sent_back" ? "Sent back by Engineer" : "Sent back", className: application.install_field_return_kind?.startsWith("engineer_") ? "border border-[#172554] text-[#172554]" : "bg-surface-container-high text-on-surface" },
     completed: { label: "Installed", className: "bg-tertiary/10 text-tertiary" },
   };
 
@@ -1908,7 +1910,7 @@ function InstallationDispatchRow({
               onClick={onMove}
               className="rounded-lg bg-surface-container-high px-3 py-2 text-xs font-medium text-on-surface transition hover:bg-surface-container-highest"
             >
-              Change technician
+              Change assignee
             </button>
           </div>
         </div>
@@ -1927,7 +1929,7 @@ function InstallationDispatchRow({
         <div className="rounded-xl bg-surface-container p-4">
           <p className="flex items-center gap-2 text-sm font-semibold text-on-surface">
             <span className="material-symbols-outlined text-lg">assignment_return</span>
-            Sent back by {application.install_handed_back_by_name || "the technician"}
+            {application.install_field_return_kind === "engineer_completed" ? "Engineer Completed by" : application.install_field_return_kind === "engineer_sent_back" ? "Sent back by Engineer" : "Sent back by"} {application.install_handed_back_by_name || "field staff"}
           </p>
           {application.install_handback_reason && (
             <p className="mt-1.5 text-sm text-on-surface-variant">{application.install_handback_reason}</p>
@@ -1986,7 +1988,7 @@ function DispatchInstallationModal({
   );
   const [technicians, setTechnicians] = useState<
     Array<{
-      employee_id: number; first_name: string; last_name: string;
+      employee_id: number; first_name: string; last_name: string; role: string;
       open_jobs: number; job_limit: number; can_take_work: boolean;
     }>
   >([]);
@@ -2038,7 +2040,7 @@ function DispatchInstallationModal({
   const everyoneFull = technicians.length > 0 && technicians.every((t) => !t.can_take_work);
 
   return (
-    <Modal title={rescheduling ? "Reschedule the visit" : moving ? "Change technician" : "Send for installation"} onClose={() => !saving && onClose()}>
+    <Modal title={rescheduling ? "Reschedule the visit" : moving ? "Change assignee" : "Send for installation"} onClose={() => !saving && onClose()}>
       <div className="space-y-5">
         <div className="rounded-xl bg-surface-container-low p-4">
           <p className="font-medium text-on-surface">{application.name}</p>
@@ -2068,7 +2070,7 @@ function DispatchInstallationModal({
 
         <Field label={rescheduling ? "Technician (optional — leave to keep the same one)" : "Technician"} required={!rescheduling}>
           <select value={chosen} onChange={(event) => setChosen(event.target.value)} className={inputClass}>
-            <option value="">{rescheduling ? "Keep the same technician" : "Choose a technician"}</option>
+            <option value="">{rescheduling ? "Keep the same technician" : "Choose a technician or engineer"}</option>
             {technicians.map((technician) => (
               <option
                 key={technician.employee_id}
@@ -2076,7 +2078,7 @@ function DispatchInstallationModal({
                 // The one who already has it is not somebody to move it to.
                 disabled={!technician.can_take_work || (editing && technician.employee_id === application.install_technician_id)}
               >
-                {technician.first_name} {technician.last_name} —{" "}
+                {technician.first_name} {technician.last_name} ({technician.role === "engineer" ? "Engineer" : "Technician"}) —{" "}
                 {technician.can_take_work
                   ? technician.open_jobs === 0
                     ? "no installs"

@@ -1952,7 +1952,7 @@ app.post(
     }
 
     const role = String(req.body.role ?? "");
-    const isTechnician = role === "technician";
+    const isTechnician = ["technician", "engineer"].includes(role);
 
     if (!isTechnician && !EDITABLE_ROLES.includes(role as EditableRole)) {
       return res.status(400).json({
@@ -2200,7 +2200,7 @@ app.patch(
 
       // Technicians have no login, so role and active state here would mean
       // something different from what the screen implies. Office is fine.
-      if (wantsRole && current.role === "technician") {
+      if (wantsRole && ["technician", "engineer"].includes(current.role)) {
         await client.query("ROLLBACK");
         return res.status(400).json({
           error:
@@ -2633,7 +2633,7 @@ app.get(
         FROM public.employees e
         LEFT JOIN public.technician_phone_access a
           ON a.employee_id = e.employee_id
-        WHERE e.role = 'technician'
+        WHERE e.role IN ('technician', 'engineer')
         ORDER BY e.last_name, e.first_name;
       `);
 
@@ -2676,7 +2676,7 @@ app.post(
 
       // The table's composite foreign key would refuse this anyway. Checking
       // here turns a constraint violation into a sentence.
-      if (target.role !== "technician") {
+      if (!["technician", "engineer"].includes(target.role)) {
         await client.query("ROLLBACK");
         return res.status(400).json({
           error:
@@ -2752,8 +2752,8 @@ app.post(
       await client.query(
         `
         INSERT INTO public.technician_phone_access
-          (employee_id, login_code, passcode_hash, issued_by_employee_id)
-        VALUES ($1, $2, $3, $4)
+          (employee_id, login_code, passcode_hash, issued_by_employee_id, role)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (employee_id) DO UPDATE SET
           login_code = EXCLUDED.login_code,
           passcode_hash = EXCLUDED.passcode_hash,
@@ -2766,7 +2766,7 @@ app.post(
           revoked_at = NULL,
           revoked_by_employee_id = NULL;
         `,
-        [Number(employeeId), loginCode, passcodeHash, actor.employeeId]
+        [Number(employeeId), loginCode, passcodeHash, actor.employeeId, target.role]
       );
 
       // Records that it happened and to whom. Never the passcode.

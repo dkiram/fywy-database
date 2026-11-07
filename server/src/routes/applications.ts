@@ -163,6 +163,12 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         LIMIT 1)
     `;
 
+    const engineerReturn = (alias: string) => `COALESCE(
+      (SELECT t.field_return_kind FROM public.service_tickets t
+        WHERE t.application_id = ${alias}.application_id AND t.job_type = 'installation'
+        ORDER BY t.service_ticket_id DESC LIMIT 1)
+      IN ('engineer_completed', 'engineer_sent_back'), FALSE)`;
+
     const latestInstallAppointment = (alias: string) => `
       (SELECT t.rescheduled_for FROM public.service_tickets t
         WHERE t.application_id = ${alias}.application_id
@@ -203,6 +209,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           )
         )
       `,
+      engineers: `a.status = 'pending' AND ${engineerReturn("a")}`,
       overdue: overdueClause("a"),
       pending: "a.status = 'pending'",
       review: "a.status = 'match_review'",
@@ -230,7 +237,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
       // the job back (migration 085, which leaves it 'open' and unassigned).
       // Both are the same action for the office, so they share the tab; the
       // badge on each row says which it was.
-      install_failed: `a.status = 'pending' AND ${latestInstall("a")} IN ('unresolved', 'open')`,
+      install_failed: `a.status = 'pending' AND ${latestInstall("a")} IN ('unresolved', 'open') AND NOT ${engineerReturn("a")}`,
 
       // The technician rang ahead and the applicant asked for another time.
       // Still assigned, still on the phone (migration 080) - it just has an
@@ -324,6 +331,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         CONCAT_WS(' ', install_tech.first_name, install_tech.last_name)
           AS install_technician_name,
         -- A technician handed this installation back (migration 085).
+        install.field_return_kind AS install_field_return_kind,
         install.handback_reason AS install_handback_reason,
         CONCAT_WS(' ', handback_tech.first_name, handback_tech.last_name)
           AS install_handed_back_by_name
@@ -331,7 +339,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
       LEFT JOIN LATERAL (
         SELECT t.service_ticket_id, t.status, t.resolution_notes,
                t.updated_at, t.assigned_employee_id, t.rescheduled_for,
-               t.handback_reason, t.handed_back_by_employee_id
+               t.field_return_kind, t.handback_reason, t.handed_back_by_employee_id
         FROM public.service_tickets t
         WHERE t.application_id = a.application_id
           AND t.job_type = 'installation'
@@ -371,7 +379,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           OR COALESCE(a.telephone, '') ILIKE $2
           OR COALESCE(a.address, '') ILIKE $2
         )
-      ORDER BY ${view === "overdue"
+      ORDER BY (install.field_return_kind = 'engineer_completed') DESC NULLS LAST, ${view === "overdue"
         ? "a.application_date ASC, a.application_id ASC"
         : `CASE
             WHEN a.status = 'pending' THEN 0
@@ -414,6 +422,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         COUNT(*) FILTER (
           WHERE status = 'pending'
             AND ${latestInstall("applications")} IN ('unresolved', 'open')
+            AND NOT ${engineerReturn("applications")}
         )::INTEGER AS install_failed,
         COUNT(*) FILTER (
           WHERE status = 'pending'
@@ -2020,7 +2029,7 @@ applicationsRouter.post(
       const technicianResult = await client.query(
         `SELECT employee_id, first_name, last_name
          FROM public.employees
-         WHERE employee_id = $1 AND is_active = TRUE AND role = 'technician';`,
+         WHERE employee_id = $1 AND is_active = TRUE AND role IN ('technician', 'engineer');`,
         [assignedEmployeeId]
       );
       const technician = technicianResult.rows[0];
@@ -2237,7 +2246,7 @@ applicationsRouter.patch(
         const technicianResult = await client.query(
           `SELECT employee_id, first_name, last_name
            FROM public.employees
-           WHERE employee_id = $1 AND is_active = TRUE AND role = 'technician';`,
+           WHERE employee_id = $1 AND is_active = TRUE AND role IN ('technician', 'engineer');`,
           [assignedEmployeeId]
         );
         const technician = technicianResult.rows[0];

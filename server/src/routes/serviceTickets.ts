@@ -75,7 +75,7 @@ async function validateAssignee(
 
   const result = await client.query(
     `SELECT 1 FROM public.employees
-     WHERE employee_id = $1 AND is_active = TRUE AND role = 'technician';`,
+     WHERE employee_id = $1 AND is_active = TRUE AND role IN ('technician', 'engineer');`,
     [employeeId]
   );
   return result.rows.length > 0;
@@ -213,7 +213,7 @@ serviceTicketsRouter.get(
           public.technician_queue_limit() AS job_limit
         FROM public.employees e
         WHERE e.is_active = TRUE
-          AND e.role = 'technician'
+          AND e.role IN ('technician', 'engineer')
         ORDER BY e.last_name, e.first_name;
       `, [jobType]);
 
@@ -273,11 +273,12 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     // Rescheduled tab beside them it had stopped answering a question the
     // others could not.
     rescheduled: "t.status = 'assigned' AND t.rescheduled_for IS NOT NULL",
-    open: "t.status = 'open'",
+    engineers: "t.status = 'open' AND t.field_return_kind IN ('engineer_completed', 'engineer_sent_back')",
+    open: "t.status = 'open' AND t.field_return_kind IS NULL",
     assigned: "t.status = 'assigned'",
     in_progress: "t.status = 'in_progress'",
     completed: "t.status = 'completed'",
-    unresolved: "t.status = 'unresolved'",
+    unresolved: "t.status = 'unresolved' OR (t.status = 'open' AND t.field_return_kind = 'technician_sent_back')",
     cancelled: "t.status = 'cancelled'",
     all: "TRUE",
   };
@@ -296,11 +297,12 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     // "what is booked for that day". Handled below, where the date clause is
     // built; the entry here only keeps the chip a valid view name.
     rescheduled: [],
+    engineers: ["open"],
     open: ["open"],
     assigned: ["assigned"],
     in_progress: ["in_progress"],
     completed: ["completed"],
-    unresolved: ["unresolved"],
+    unresolved: ["unresolved", "open"],
     cancelled: ["cancelled"],
     all: ["open", "assigned", "in_progress", "completed", "unresolved", "cancelled"],
   };
@@ -318,7 +320,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
   try {
     const params = [search, searchPattern, customerId, onDate];
     const whereSql = `
-      WHERE ${onDate && safeView !== "rescheduled" ? "TRUE" : viewClause}
+      WHERE (${onDate && !["rescheduled", "engineers", "unresolved", "open"].includes(safeView) ? "TRUE" : viewClause})
         ${listJobType === "all" ? "" : `AND t.job_type = '${listJobType === "installation" ? "installation" : "repair"}'`}
         AND ($3::INTEGER IS NULL OR t.customer_id = $3)
         -- The day a ticket moved into the status the chip names, read from the
@@ -353,7 +355,9 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
         AND (
           NULLIF($4, '')::DATE IS NULL
           ${
-            safeView === "rescheduled"
+            safeView === "engineers"
+              ? `OR (t.handed_back_at AT TIME ZONE 'America/Jamaica')::DATE = NULLIF($4, '')::DATE`
+              : safeView === "rescheduled"
               // The Rescheduled chip's date is the appointment itself: "what
               // is booked for Tuesday", which is the question the office
               // actually asks of this tab. Every other chip's date is a move
@@ -421,6 +425,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           -- cleared by trigger the moment somebody is assigned again, so it
           -- only ever shows on a job that is still waiting.
           t.handed_back_at,
+          t.field_return_kind,
           t.handback_reason,
           CONCAT_WS(' ', handback.first_name, handback.last_name) AS handed_back_by_name,
           t.updated_at
@@ -432,6 +437,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
           ON handback.employee_id = t.handed_back_by_employee_id
         ${whereSql}
         ORDER BY
+          (t.field_return_kind = 'engineer_completed') DESC NULLS LAST,
           ${
             // Soonest appointment first on the Rescheduled tab. Priority is
             // the wrong order for a list of agreed times: the nine o'clock is
@@ -449,11 +455,11 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
         `
         SELECT
           COUNT(*) FILTER (WHERE status = 'assigned' AND rescheduled_for IS NOT NULL)::INTEGER AS rescheduled,
-          COUNT(*) FILTER (WHERE status = 'open')::INTEGER AS open,
+          COUNT(*) FILTER (WHERE status = 'open' AND field_return_kind IS NULL)::INTEGER AS open,
           COUNT(*) FILTER (WHERE status = 'assigned')::INTEGER AS assigned,
           COUNT(*) FILTER (WHERE status = 'in_progress')::INTEGER AS in_progress,
           COUNT(*) FILTER (WHERE status = 'completed')::INTEGER AS completed,
-          COUNT(*) FILTER (WHERE status = 'unresolved')::INTEGER AS unresolved
+          COUNT(*) FILTER (WHERE status = 'unresolved' OR (status = 'open' AND field_return_kind = 'technician_sent_back'))::INTEGER AS unresolved
         FROM public.service_tickets
         WHERE ($1::INTEGER IS NULL OR customer_id = $1)
           ${listJobType === "all" ? "" : `AND job_type = '${listJobType === "installation" ? "installation" : "repair"}'`};

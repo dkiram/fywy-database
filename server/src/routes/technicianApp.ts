@@ -610,10 +610,18 @@ technicianAppRouter.patch(
         });
       }
 
-      if (handBack) {
+      // Read the live role, so existing phone sessions also pick up role changes.
+      const worker = await client.query('SELECT role FROM public.employees WHERE employee_id = $1', [technician.employeeId]);
+      const isEngineer = worker.rows[0]?.role === 'engineer';
+      const engineerDone = isEngineer && requestedStatus === 'completed';
+      if (engineerDone && note.length < 3) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Say what you did before marking this done.' });
+      }
+      if (handBack || engineerDone) {
         // Only a job they are actually holding. An unresolved one is already
         // back with the office; handing that back too would say nothing new.
-        if (current.status !== "assigned" && current.status !== "in_progress") {
+        if (handBack && current.status !== "assigned" && current.status !== "in_progress") {
           await client.query("ROLLBACK");
           return res.status(409).json({ error: "This job is already back with the office." });
         }
@@ -631,13 +639,15 @@ technicianAppRouter.patch(
              handed_back_at = CURRENT_TIMESTAMP,
              handed_back_by_employee_id = $1,
              handback_reason = $2,
+             field_return_kind = $4,
+             completed_at = NULL,
              updated_by_employee_id = $1,
              updated_at = CURRENT_TIMESTAMP
            WHERE service_ticket_id = $3;`,
-          [technician.employeeId, note, ticketId]
+          [technician.employeeId, note, ticketId, engineerDone ? "engineer_completed" : isEngineer ? "engineer_sent_back" : "technician_sent_back"]
         );
 
-        const handbackNote = `Sent back by ${technician.firstName} ${technician.lastName} — ${note}`;
+        const handbackNote = `${engineerDone ? "Engineer Completed by" : isEngineer ? "Sent back by engineer" : "Sent back by"} ${technician.firstName} ${technician.lastName} — ${note}`;
 
         await client.query(
           `INSERT INTO public.service_ticket_history
@@ -660,7 +670,7 @@ technicianAppRouter.patch(
         );
 
         await client.query("COMMIT");
-        return res.json({ handedBack: true });
+        return res.json({ handedBack: true, engineerCompleted: engineerDone });
       }
 
       // Rescheduling from in_progress goes back to assigned: they are not at

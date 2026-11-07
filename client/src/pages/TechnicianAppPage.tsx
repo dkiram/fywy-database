@@ -953,7 +953,7 @@ function JobCard({
                     needs to know who to send instead. */}
                 {confirmingHandBack ? (
                   <div className="rounded-xl border border-outline-variant bg-white p-3">
-                    <p className="text-sm font-semibold text-on-surface">Reassign this job?</p>
+                    <p className="text-sm font-semibold text-on-surface">Send this job back?</p>
                     <p className="mt-1 text-xs leading-5 text-on-surface-variant">
                       It comes off your list and goes back to the office, who will
                       send someone else. Write the reason in the box above.
@@ -973,7 +973,7 @@ function JobCard({
                         onClick={() => save(null, undefined, true)}
                         className="bg-on-surface-variant text-white"
                         icon="assignment_return"
-                        label="Reassign"
+                        label="Send back"
                       />
                     </div>
                   </div>
@@ -987,7 +987,7 @@ function JobCard({
                     className="flex items-center justify-center gap-2 rounded-xl border border-on-surface-variant px-4 py-[15px] text-sm font-semibold text-on-surface-variant disabled:opacity-40"
                   >
                     <span className="material-symbols-outlined text-lg">assignment_return</span>
-                    Reassign
+                    Send back
                   </button>
                 )}
               </div>
