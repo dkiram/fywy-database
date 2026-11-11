@@ -272,7 +272,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
     // active statuses rolled together, and with a chip per status and a
     // Rescheduled tab beside them it had stopped answering a question the
     // others could not.
-    rescheduled: "t.status = 'assigned' AND t.rescheduled_for IS NOT NULL",
+    rescheduled: "t.status IN ('open', 'assigned') AND t.rescheduled_for IS NOT NULL",
     engineers: "t.status = 'open' AND t.field_return_kind IN ('engineer_completed', 'engineer_sent_back')",
     open: "t.status = 'open' AND t.field_return_kind IS NULL",
     assigned: "t.status = 'assigned'",
@@ -456,7 +456,7 @@ serviceTicketsRouter.get("/service-tickets", requireAuth, async (req, res) => {
       pool.query(
         `
         SELECT
-          COUNT(*) FILTER (WHERE status = 'assigned' AND rescheduled_for IS NOT NULL)::INTEGER AS rescheduled,
+          COUNT(*) FILTER (WHERE status IN ('open', 'assigned') AND rescheduled_for IS NOT NULL)::INTEGER AS rescheduled,
           COUNT(*) FILTER (WHERE status = 'open' AND field_return_kind IS NULL)::INTEGER AS open,
           COUNT(*) FILTER (WHERE status = 'assigned')::INTEGER AS assigned,
           COUNT(*) FILTER (WHERE status = 'in_progress')::INTEGER AS in_progress,
@@ -693,10 +693,8 @@ serviceTicketsRouter.patch(
       const resolutionNotes = req.body.resolutionNotes === undefined ? current.resolution_notes ?? "" : cleanText(req.body.resolutionNotes);
       const updateNote = cleanText(req.body.updateNote);
 
-      // The office rescheduling on the customer's behalf - they rang the desk
-      // instead of the technician. Same rules as the phone (migration 080):
-      // it is a time on an assigned ticket, not a status of its own, so the
-      // job stays on the technician's list and inside their cap.
+      // Office bookings can remain unassigned until dispatch. A field
+      // reschedule comes back open with its appointment preserved.
       const rescheduleRequested =
         req.body.rescheduledFor !== undefined && req.body.rescheduledFor !== null && req.body.rescheduledFor !== "";
       const rescheduledFor = rescheduleRequested ? parseAppointment(req.body.rescheduledFor) : null;
@@ -705,8 +703,7 @@ serviceTicketsRouter.patch(
         await client.query("ROLLBACK");
         return res.status(400).json({ error: APPOINTMENT_ERROR });
       }
-      // A rescheduled job is by definition assigned to somebody who will go.
-      if (rescheduleRequested) status = "assigned";
+      if (rescheduleRequested) status = assignedEmployeeId === null ? "open" : "assigned";
 
       if (!ticketStatuses.includes(status)) {
         await client.query("ROLLBACK");
@@ -801,6 +798,7 @@ serviceTicketsRouter.patch(
           -- one from a previous life.
           rescheduled_for = CASE
             WHEN $12::TIMESTAMPTZ IS NOT NULL THEN $12::TIMESTAMPTZ
+            WHEN status = 'open' AND $4 = 'assigned' THEN rescheduled_for
             WHEN $4 <> status THEN NULL
             ELSE rescheduled_for
           END,

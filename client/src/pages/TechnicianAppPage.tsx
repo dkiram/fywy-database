@@ -909,13 +909,10 @@ function JobCard({
                   />
                 </div>
 
-                {/* "Come back tomorrow at nine." Not an ending and not a
-                    failure - the job stays theirs with a time on it. The
-                    picker is hidden behind a button because most jobs never
-                    need it, and a date field sitting open on every card would
-                    read as something that has to be filled in. */}
+                {/* Rescheduling returns the job to the office for dispatch. */}
                 {picking && (
                   <div className="rounded-xl border border-outline-variant bg-white p-3">
+                    <p className="mb-3 text-sm text-on-surface-variant">This job will come off your list. The office will keep the appointment and assign the return visit.</p>
                     <label className="block text-sm font-semibold text-on-surface">
                       Come back on
                       <input
@@ -941,7 +938,7 @@ function JobCard({
                         onClick={() => save(null, when)}
                         className="bg-scheduled text-white"
                         icon="event"
-                        label="Set time"
+                        label="Reschedule"
                       />
                     </div>
                   </div>

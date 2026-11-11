@@ -350,7 +350,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
         const employeeId = cleanText(req.query.employee_id);
         if (employeeId) {
           if (!/^\d+$/.test(employeeId) || !Number.isSafeInteger(Number(employeeId))) {
-            return res.status(400).json({ error: "Choose a valid technician." });
+            return res.status(400).json({ error: "Choose a valid technician or engineer." });
           }
           values = [search, searchPattern, from, to, employeeId];
           // Keep each closing event so the detail reconciles with the summary,
@@ -382,7 +382,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
             JOIN public.employees e ON e.employee_id = j.assigned_employee_id
             LEFT JOIN public.customers c ON c.customer_id = j.customer_id
             LEFT JOIN public.applications a ON a.application_id = j.application_id
-            WHERE e.employee_id = $5 AND e.role = 'technician'
+            WHERE e.employee_id = $5 AND e.role IN ('technician', 'engineer')
               AND ($1 = '' OR COALESCE(c.name, a.name) ILIKE $2
                 OR j.service_ticket_id::TEXT ILIKE $2 OR j.issue_summary ILIKE $2
                 OR j.outcome ILIKE $2 OR j.status ILIKE $2
@@ -447,7 +447,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
                 AND ($3 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE >= $3::DATE)
                 AND ($4 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE <= $4::DATE)
             ) closing ON TRUE
-            WHERE e.role = 'technician'
+            WHERE e.role IN ('technician', 'engineer')
               AND ($1 = '' OR CONCAT_WS(' ', e.first_name, e.last_name) ILIKE $2)
             GROUP BY e.employee_id, e.is_active
             HAVING e.is_active OR COUNT(closing.to_status) > 0
@@ -501,7 +501,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
               AND ($3 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE >= $3::DATE)
               AND ($4 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE <= $4::DATE)
           ) closing ON TRUE
-          WHERE e.role = 'technician'
+          WHERE e.role IN ('technician', 'engineer')
             AND ($1 = '' OR CONCAT_WS(' ', e.first_name, e.last_name) ILIKE $2)
           GROUP BY e.employee_id, e.first_name, e.last_name, e.is_active
           -- An inactive technician is kept only while the period still has
@@ -535,7 +535,7 @@ reportsRouter.get("/reports/:reportKey", requireAuth, async (req, res) => {
                 AND ($3 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE >= $3::DATE)
                 AND ($4 = '' OR (h.changed_at AT TIME ZONE 'America/Jamaica')::DATE <= $4::DATE)
             ) closing ON TRUE
-            WHERE e.role = 'technician'
+            WHERE e.role IN ('technician', 'engineer')
               AND ($1 = '' OR CONCAT_WS(' ', e.first_name, e.last_name) ILIKE $2)
             GROUP BY e.employee_id, e.is_active
             HAVING e.is_active OR COUNT(closing.to_status) > 0

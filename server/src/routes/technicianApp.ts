@@ -673,19 +673,11 @@ technicianAppRouter.patch(
         return res.json({ handedBack: true, engineerCompleted: engineerDone });
       }
 
-      // Rescheduling from in_progress goes back to assigned: they are not at
-      // the address any more, and the phone should show it as waiting for its
-      // time rather than as work under way. A rescheduled job otherwise keeps
-      // whatever status it has.
-      const status = (
-        rescheduleRequested ? "assigned" : requestedStatus || current.status
-      ) as string;
+      // A field reschedule returns to the office's queue and frees the
+      // worker's slot. Keep the appointment on the open, unassigned ticket;
+      // only an explicit office assignment sends it to a phone again.
+      const status = rescheduleRequested ? "open" : requestedStatus || current.status;
       const closing = status === "completed" || status === "unresolved";
-
-      if (rescheduleRequested && !editableStatuses.includes(current.status)) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({ error: "This job cannot be rescheduled from here." });
-      }
 
       // The database refuses a completed or unresolved ticket without a reason
       // (migrations 025 and 074), so it is checked here, where the resulting
@@ -710,6 +702,8 @@ technicianAppRouter.patch(
         `
         UPDATE public.service_tickets SET
           status = $1,
+          assigned_employee_id = CASE WHEN $6::TIMESTAMPTZ IS NOT NULL
+            THEN NULL ELSE assigned_employee_id END,
           -- The note becomes the ticket's own record only when it is the
           -- reason a job ended. A running commentary belongs in the history,
           -- not in the field the office reads as "what happened here".
@@ -726,7 +720,7 @@ technicianAppRouter.patch(
             ELSE NULL
           END,
           -- Set by a reschedule; cleared by any change of status. An
-          -- appointment is only meaningful while the job is waiting for it,
+          -- appointment is retained while waiting for office dispatch,
           -- and a ticket re-opened weeks later must not arrive carrying one
           -- from a previous life.
           rescheduled_for = CASE
@@ -769,7 +763,9 @@ technicianAppRouter.patch(
         [
           technician.employeeId,
           `${technician.firstName} ${technician.lastName}`,
-          statusChanged
+          rescheduleRequested
+            ? "Rescheduled job and returned it to the office"
+            : statusChanged
             ? "Changed service ticket status from the technician app"
             : "Added a technician note",
           String(ticketId),

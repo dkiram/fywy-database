@@ -1848,7 +1848,9 @@ function InstallBadge({ application }: { application: ApplicationRecord }) {
     completed: { label: "Installed", className: "bg-tertiary/10 text-tertiary" },
   };
 
-  const badge = shown[status];
+  const badge = status === "open" && application.install_rescheduled_for
+    ? { label: `Rescheduled ${formatAppointment(application.install_rescheduled_for)}`, className: "bg-scheduled/15 text-scheduled" }
+    : shown[status];
   if (!badge) return null;
 
   return (
@@ -1938,7 +1940,12 @@ function InstallationDispatchRow({
           happened and offers the same button. */}
       {/* Same action for the office as a failed visit - send somebody - but
           a different reason, so it says which it was. */}
-      {status === "open" && (
+      {status === "open" && application.install_rescheduled_for && (
+        <div className="rounded-xl bg-scheduled/15 p-4 text-sm text-scheduled">
+          Rescheduled for {formatAppointment(application.install_rescheduled_for)}. Waiting for the office to assign the return visit.
+        </div>
+      )}
+      {status === "open" && !application.install_rescheduled_for && (
         <div className="rounded-xl bg-surface-container p-4">
           <p className="flex items-center gap-2 text-sm font-semibold text-on-surface">
             <span className="material-symbols-outlined text-lg">assignment_return</span>

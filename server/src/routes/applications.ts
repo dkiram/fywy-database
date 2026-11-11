@@ -242,12 +242,9 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
           WHERE t.application_id = a.application_id AND t.job_type = 'installation'
           ORDER BY t.service_ticket_id DESC LIMIT 1) = 'technician_sent_back'`,
 
-      // The technician rang ahead and the applicant asked for another time.
-      // Still assigned, still on the phone (migration 080) - it just has an
-      // appointment now. Took the Match Review slot in the tab strip; those
-      // applications are still in Active and All, and still get their
-      // "same person as" button on the row.
-      rescheduled: `a.status = 'pending' AND ${latestInstall("a")} = 'assigned'
+      // Field reschedules return open and unassigned for office dispatch;
+      // office-booked or re-dispatched appointments may still be assigned.
+      rescheduled: `a.status = 'pending' AND ${latestInstall("a")} IN ('open', 'assigned')
                     AND ${latestInstallAppointment("a")} IS NOT NULL`,
       // Applications confirmed to be an existing customer. Deliberately absent
       // from every other view, including 'active' and 'review', so confirming
@@ -430,7 +427,7 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
         )::INTEGER AS install_failed,
         COUNT(*) FILTER (
           WHERE status = 'pending'
-            AND ${latestInstall("applications")} = 'assigned'
+            AND ${latestInstall("applications")} IN ('open', 'assigned')
             AND ${latestInstallAppointment("applications")} IS NOT NULL
         )::INTEGER AS rescheduled
       FROM public.applications;
