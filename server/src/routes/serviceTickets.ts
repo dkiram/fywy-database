@@ -568,7 +568,7 @@ serviceTicketsRouter.post("/service-tickets", requireAuth, async (req, res) => {
   try {
     await client.query("BEGIN");
     const customerResult = await client.query(
-      `SELECT customer_id, name, pole_box_number, port_number FROM public.customers WHERE customer_id = $1;`,
+      `SELECT customer_id, name, pole_box_number, port_number FROM public.customers WHERE customer_id = $1 FOR UPDATE;`,
       [customerId]
     );
     const customer = customerResult.rows[0];
@@ -576,6 +576,26 @@ serviceTicketsRouter.post("/service-tickets", requireAuth, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Customer not found." });
     }
+    // Serialize creation for this customer with the customer-row lock above.
+    // Only completed tickets permit a new one: cancelled and unresolved
+    // tickets still need staff to update the existing record.
+    const existingResult = await client.query(
+      `SELECT service_ticket_id, status, issue_summary
+       FROM public.service_tickets
+       WHERE customer_id = $1 AND status <> 'completed'
+       ORDER BY reported_date ASC, service_ticket_id ASC
+       LIMIT 1;`,
+      [customerId]
+    );
+    const existingTicket = existingResult.rows[0];
+    if (existingTicket) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: `This customer already has ticket #${existingTicket.service_ticket_id} that is not completed. Update the existing ticket instead.`,
+        existingTicket,
+      });
+    }
+
     if (!(await validateAssignee(client, assignedEmployeeId))) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Selected technician is unavailable." });
