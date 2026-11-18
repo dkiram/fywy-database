@@ -1,5 +1,5 @@
 /** Shows the daily ledger, totals, breakdowns, and receipt access for recorded payments. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import PaymentReceiptModal, { type PaymentReceipt } from "../components/PaymentReceiptModal";
 import { apiFetch } from "../lib/api";
@@ -45,6 +45,7 @@ type PaymentPagination = {
 type DailyPaymentsResponse = {
   date: string;
   scope: string;
+  locations: { location_id: number; name: string }[];
   summary: DailySummary;
   byType: PaymentBreakdown[];
   byLocation: PaymentBreakdown[];
@@ -72,9 +73,11 @@ function jamaicaToday() {
 function PaymentsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const locationId = searchParams.get("locationId") || "";
+  const requestSequence = useRef(0);
   const date = searchParams.get("date") || jamaicaToday();
   const page = Math.max(Number.parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
-  const updateParams = useCallback((patch: Partial<Record<"date" | "page", string | null>>) => {
+  const updateParams = useCallback((patch: Partial<Record<"date" | "page" | "locationId", string | null>>) => {
     setLoading(true);
     setSearchParams(
       (current) => {
@@ -101,26 +104,30 @@ function PaymentsPage() {
   useScrollRestoration(!loading);
 
   const loadDailyPayments = useCallback(async () => {
+    const request = ++requestSequence.current;
     try {
       // Totals, breakdowns, and the ledger share one date/scope snapshot from the API.
       setLoading(true);
       setError("");
       const response = await apiFetch(
-        `/api/payments/daily-summary?date=${date}&page=${page}`
+        `/api/payments/daily-summary?${new URLSearchParams({ date, page: String(page), locationId })}`
       );
       const responseData = await response.json();
       if (!response.ok) throw new Error(responseData.error || "Could not load daily payments.");
+      if (request !== requestSequence.current) return;
       setData(responseData);
       setPagination(responseData.pagination);
       if (responseData.pagination.page !== page) {
         setPage(responseData.pagination.page);
       }
     } catch (loadError) {
+      if (request !== requestSequence.current) return;
+      setData(null);
       setError(loadError instanceof Error ? loadError.message : "Could not load daily payments.");
     } finally {
-      setLoading(false);
+      if (request === requestSequence.current) setLoading(false);
     }
-  }, [date, page, setPage]);
+  }, [date, locationId, page, setPage]);
 
   useEffect(() => {
     loadDailyPayments();
@@ -155,9 +162,11 @@ function PaymentsPage() {
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl bg-surface-container-lowest p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-wrap items-end gap-4">
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Business date</label>
+          <label htmlFor="payments-date" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Business date</label>
           <input
+            id="payments-date"
             type="date"
             value={date}
             onChange={(event) => {
@@ -165,6 +174,15 @@ function PaymentsPage() {
             }}
             className="mt-1.5 block rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm focus:border-primary"
           />
+        </div>
+        <div>
+          <label htmlFor="payments-office" className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Office / Location</label>
+          <select id="payments-office" value={locationId} onChange={event => updateParams({ locationId: event.target.value || null, page: null })}
+            className="mt-1.5 block rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm focus:border-primary">
+            <option value="">All locations</option>
+            {data?.locations.map(office => <option key={office.location_id} value={office.location_id}>{office.name}</option>)}
+          </select>
+        </div>
         </div>
         <div className="text-sm text-on-surface-variant">
           Scope: <span className="font-medium text-on-surface">{data?.scope || "Loading..."}</span>
@@ -190,7 +208,7 @@ function PaymentsPage() {
         <div className="flex items-center justify-between border-b border-surface-container px-6 py-5">
           <div>
             <h2 className="text-lg font-semibold text-on-surface">Payment ledger</h2>
-            <p className="mt-1 text-sm text-on-surface-variant">All available transactions for {formatDate(date)}.</p>
+            <p className="mt-1 text-sm text-on-surface-variant">Transactions for {formatDate(date)} · {data?.scope || "All locations"}.</p>
           </div>
           <button type="button" onClick={loadDailyPayments} className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container text-on-surface-variant transition hover:bg-surface-container-high" aria-label="Refresh daily payments">
             <span className="material-symbols-outlined">refresh</span>
@@ -268,7 +286,7 @@ function PaymentsPage() {
             </div>
           </>
         ) : (
-          <div className="px-6 py-14 text-center"><span className="material-symbols-outlined text-4xl text-outline">payments</span><p className="mt-2 text-sm font-medium text-on-surface">No payments for this date</p><p className="mt-1 text-sm text-on-surface-variant">Choose another business date to view its ledger.</p></div>
+          <div className="px-6 py-14 text-center"><span className="material-symbols-outlined text-4xl text-outline">payments</span><p className="mt-2 text-sm font-medium text-on-surface">No payments for this date</p><p className="mt-1 text-sm text-on-surface-variant">Choose another business date or office to view its ledger.</p></div>
         )}
       </section>
 

@@ -1067,10 +1067,23 @@ paymentsRouter.get("/payments/daily-summary", requireAuth, requireAdmin, async (
     });
   }
 
-  const locationId = scopedToOwnOffice ? employee.locationId : null;
-  const locationName = scopedToOwnOffice ? employee.locationName ?? "" : "";
+  const requestedLocation = cleanText(req.query.locationId);
+  if (requestedLocation && (!/^\d+$/.test(requestedLocation) || Number(requestedLocation) < 1 || Number(requestedLocation) > 32767)) {
+    return res.status(400).json({ error: "Choose a valid office." });
+  }
+  const locationId = scopedToOwnOffice ? employee.locationId : requestedLocation ? Number(requestedLocation) : null;
 
   try {
+    // Include inactive offices so historical ledgers remain filterable.
+    const officesResult = await pool.query(
+      `SELECT location_id, name FROM public.locations
+       WHERE ($1::SMALLINT IS NULL OR location_id = $1)
+       ORDER BY name, location_id;`,
+      [scopedToOwnOffice ? employee.locationId : null]
+    );
+    const selectedOffice = officesResult.rows.find(office => Number(office.location_id) === Number(locationId));
+    if (locationId !== null && !selectedOffice) return res.status(400).json({ error: "Selected office does not exist." });
+    const locationName = selectedOffice?.name ?? "";
     const dateResult = await pool.query(
       `
       SELECT COALESCE(
@@ -1181,10 +1194,8 @@ paymentsRouter.get("/payments/daily-summary", requireAuth, requireAdmin, async (
 
     res.json({
       date: selectedDate,
-      scope:
-        employee.role === "branch"
-          ? employee.locationName ?? "Assigned branch"
-          : "All locations",
+      scope: locationName || "All locations",
+      locations: officesResult.rows,
       summary: summaryResult.rows[0],
       byType: typeResult.rows,
       byLocation: locationResult.rows,
