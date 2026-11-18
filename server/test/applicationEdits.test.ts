@@ -15,8 +15,9 @@ test("application corrections", async (t) => {
       query: async (sql: string, values: unknown[] = []) => {
         calls.push({ sql, values });
         if (options.failAudit && sql.includes("audit_logs")) throw new Error("Audit unavailable");
+        if (sql.includes("FROM public.packages")) return { rows: values[0] === 999 ? [] : [{ package_id: values[0], name: "Cable", service_type: values[0] === 2 ? "internet" : "cable" }] };
         return { rows: sql.startsWith("SELECT") && options.found !== false
-          ? [{ application_id: 42, name: "Jnae", telephone: "123", status: "serviced", customer_id: 7 }]
+          ? [{ application_id: 42, name: "Jnae", telephone: "123", status: "serviced", customer_id: 7, package_id: 1, monthly_fee: "2500.00", additional_box: 0, adult_channel: false, application_date: "2026-11-01" }]
           : [] };
       },
       release: () => { released = true; },
@@ -49,6 +50,27 @@ test("application corrections", async (t) => {
     assert.equal(result.calls.at(-1)!.sql, "COMMIT");
     assert.ok(result.released);
     result.calls.forEach(({ sql }) => assert.doesNotMatch(sql, /UPDATE public.customers|payments/));
+  });
+  await t.test("edits service details with per-field audit and preserves receipts", async () => {
+    const result = await run({
+      changes: { package_id: "3", monthly_fee: "6000", additional_box: 3, adult_channel: true, application_date: "2026-11-02" },
+      original: { package_id: 1, monthly_fee: "2500.00", additional_box: 0, adult_channel: false, application_date: "2026-11-01" },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.payload.application.package_id, 3);
+    assert.equal(result.payload.application.additional_box, 3);
+    assert.equal(result.payload.application.monthly_fee, "6000.00");
+    assert.equal(result.calls.filter(call => call.sql.includes("audit_logs")).length, 5);
+    result.calls.forEach(({ sql }) => assert.doesNotMatch(sql, /UPDATE public.customers|UPDATE public.payments/));
+  });
+  await t.test("rejects invalid package, box count, money and calendar dates", async () => {
+    for (const changes of [{ additional_box: -1 }, { additional_box: 1.5 }, { monthly_fee: "12.345" }, { application_date: "2026-02-30" }, { package_id: 999 }]) {
+      const original = Object.fromEntries(Object.keys(changes).map(key => [key, key === "package_id" ? 1 : key === "additional_box" ? 0 : key === "monthly_fee" ? "2500.00" : "2026-11-01"]));
+      assert.equal((await run({ changes, original })).status, 400);
+    }
+  });
+  await t.test("internet-only packages cannot carry extra cable boxes", async () => {
+    assert.equal((await run({ changes: { package_id: 2, additional_box: 2 }, original: { package_id: 1, additional_box: 0 } })).status, 400);
   });
   await t.test("refuses unauthenticated edits", async () => {
     const result = await run(body, { authenticated: false });

@@ -1,4 +1,5 @@
 /** Implements application intake, matching, service activation, and closure decisions. */
+import { hasCable } from "../cableBoxes.js";
 import { isIP } from "node:net";
 import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
@@ -453,7 +454,8 @@ applicationsRouter.get("/applications", requireAuth, async (req, res) => {
 applicationsRouter.patch("/applications/:applicationId", requireAuth, async (req, res) => {
   const applicationId = parseApplicationId(req, res);
   if (applicationId === null) return;
-  const fields = ["name", "alias", "address", "occupation", "telephone", "email", "id_type", "id_number"] as const;
+  const fields = ["name", "alias", "address", "occupation", "telephone", "email", "id_type", "id_number",
+    "package_id", "monthly_fee", "application_date", "adult_channel", "additional_box", "pole_box_number", "port_number"] as const;
   const changes = req.body?.changes;
   const original = req.body?.original;
   if (!changes || typeof changes !== "object" || Array.isArray(changes) ||
@@ -462,13 +464,30 @@ applicationsRouter.patch("/applications/:applicationId", requireAuth, async (req
     return res.status(400).json({ error: "Enter valid application corrections." });
   }
   const keys = fields.filter((field) => Object.hasOwn(changes, field));
-  if (keys.some((field) => typeof changes[field] !== "string" ||
-      !(typeof original[field] === "string" || original[field] === null))) {
-    return res.status(400).json({ error: "Enter valid application details." });
+  const normalized: Record<string, string | number | boolean | null> = {};
+  for (const field of keys) {
+    if (!Object.hasOwn(original, field)) return res.status(400).json({ error: "Refresh the application before editing." });
+    const value = changes[field];
+    if (field === "adult_channel") {
+      if (typeof value !== "boolean") return res.status(400).json({ error: "Choose a valid adult-channel option." });
+      normalized[field] = value;
+    } else if (field === "package_id" || field === "additional_box") {
+      if (!/^\d+$/.test(String(value)) || Number(value) > 32767 || (field === "package_id" && Number(value) < 1)) {
+        return res.status(400).json({ error: "Choose a valid package and cable box count." });
+      }
+      normalized[field] = Number(value);
+    } else if (field === "monthly_fee") {
+      if (!/^\d+(\.\d{1,2})?$/.test(String(value)) || Number(value) > 999999999999) return res.status(400).json({ error: "Enter a valid monthly fee." });
+      normalized[field] = Number(value).toFixed(2);
+    } else if (field === "application_date") {
+      if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) return res.status(400).json({ error: "Enter a valid application date." });
+      normalized[field] = value;
+    } else {
+      if (typeof value !== "string" || !(typeof original[field] === "string" || original[field] === null)) return res.status(400).json({ error: "Enter valid application details." });
+      normalized[field] = cleanText(value) || null;
+    }
   }
-  if (keys.includes("name") && !cleanText(changes.name)) {
-    return res.status(400).json({ error: "Full name is required." });
-  }
+  if (keys.includes("name") && !normalized.name) return res.status(400).json({ error: "Full name is required." });
   const employee = req.session.employee!;
   const client = await pool.connect();
   try {
@@ -482,12 +501,34 @@ applicationsRouter.patch("/applications/:applicationId", requireAuth, async (req
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Application not found." });
     }
-    if (keys.some((field) => application[field] !== original[field])) {
+    const comparable = (field: string, value: unknown) => {
+      if (value == null) return null;
+      if (field === "application_date") return value instanceof Date ? value.toLocaleDateString("en-CA") : String(value).slice(0, 10);
+      if (["package_id", "additional_box", "monthly_fee"].includes(field)) return Number(value);
+      return value;
+    };
+    if (keys.some((field) => comparable(field, application[field]) !== comparable(field, original[field]))) {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "This application was edited by someone else. Close this form and refresh before trying again." });
     }
+    if (keys.includes("package_id") || keys.includes("additional_box")) {
+      const packageResult = await client.query(
+        "SELECT package_id, name, service_type FROM public.packages WHERE package_id = $1",
+        [normalized.package_id ?? application.package_id]
+      );
+      const selectedPackage = packageResult.rows[0];
+      if (!selectedPackage) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Selected package does not exist." });
+      }
+      if (!hasCable(selectedPackage.service_type) && Number(normalized.additional_box ?? application.additional_box ?? 0) > 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Cable boxes require a cable or cable-and-internet package." });
+      }
+      application.package_name = selectedPackage.name;
+    }
     for (const field of keys) {
-      const value = cleanText(changes[field]) || null;
+      const value = normalized[field];
       if (value === application[field]) continue;
       // field comes exclusively from the allowlist above.
       await client.query(
@@ -583,13 +624,18 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
     await client.query("BEGIN");
     // Validate the foreign key explicitly so users receive a useful 400 error.
     const packageResult = await client.query(
-      `SELECT package_id, installation_fee
+      `SELECT package_id, installation_fee, service_type
        FROM public.packages WHERE package_id = $1;`,
       [Number(packageIdText)]
     );
     if (packageResult.rows.length === 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Selected package does not exist." });
+    }
+
+    if (!hasCable(packageResult.rows[0].service_type) && Number(additionalBoxText) > 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Cable boxes require a cable or cable-and-internet package." });
     }
 
     if (additionalServiceForCustomerIdText) {
@@ -610,7 +656,7 @@ applicationsRouter.post("/applications", requireAuth, async (req, res) => {
     // including an explicit blank when nothing was collected.
     const feeText = installationFeeSupplied
       ? installationFeeText
-      : String(packageResult.rows[0].installation_fee ?? "").trim();
+      : (Number(packageResult.rows[0].installation_fee || 0) + Number(additionalBoxText) * 2500).toFixed(2);
     const collectingFee = feeText !== "" && Number(feeText) > 0;
 
     // A payment has to say which office took it. Branch staff without an
@@ -1044,7 +1090,7 @@ applicationsRouter.patch(
       }
 
       const packageResult = await client.query(
-        `SELECT package_id FROM public.packages WHERE package_id = $1;`,
+        `SELECT package_id, service_type FROM public.packages WHERE package_id = $1;`,
         [Number(packageIdText)]
       );
       if (packageResult.rows.length === 0) {
@@ -1163,7 +1209,7 @@ applicationsRouter.patch(
             id_type, id_number, package_id, legacy_package_id, monthly_fee,
             application_date, activation_date, status, adult_channel,
             pole_box_number, port_number, legacy_alias_notes,
-            legacy_card_number, legacy_additional_box_notes, account_group_id
+            legacy_card_number, legacy_additional_box_notes, account_group_id, additional_cable_boxes
           )
           VALUES (
             $1, $2, $3, $4, $5, $6,
@@ -1175,7 +1221,7 @@ applicationsRouter.patch(
             ),
             'active', $14, $15, $16, $17, $18,
             CASE WHEN $19::SMALLINT > 0 THEN $19::TEXT ELSE NULL END,
-            $20
+            $20, $21
           );
           `,
           [
@@ -1199,6 +1245,7 @@ applicationsRouter.patch(
             application.legacy_card_number,
             application.additional_box,
             accountGroupId,
+            hasCable(packageResult.rows[0].service_type) ? Math.max(0, Number(application.additional_box) || 0) : 0,
           ]
         );
         createdCustomer = true;

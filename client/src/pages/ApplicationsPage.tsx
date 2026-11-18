@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthContext";
 import ApplicationRefundPanel from "../components/ApplicationRefundPanel";
 import PaymentReceiptModal, { type PaymentReceipt } from "../components/PaymentReceiptModal";
+import { applicationPrice, changeApplicationBoxCount } from "../lib/applicationPricing";
 import { apiFetch } from "../lib/api";
 import { useOpenCustomerProfile } from "../hooks/useOpenCustomerProfile";
 import { useScrollRestoration } from "../hooks/useScrollRestoration";
@@ -1159,8 +1160,9 @@ function ApplicationsPage() {
                     setNewForm({
                       ...newForm,
                       packageId,
-                      monthlyFee: selectedPackage?.default_monthly_charge ?? newForm.monthlyFee,
-                      installationFee: selectedPackage?.installation_fee ?? newForm.installationFee,
+                      additionalBox: selectedPackage?.service_type === "internet" ? "0" : newForm.additionalBox,
+                      ...applicationPrice(selectedPackage?.default_monthly_charge ?? null, selectedPackage?.installation_fee ?? null,
+                        selectedPackage?.service_type === "internet" ? 0 : Number(newForm.additionalBox)),
                     });
                   }}
                   className={inputClass}
@@ -1170,7 +1172,14 @@ function ApplicationsPage() {
                 </select>
               </Field>
               <Field label="Monthly fee (J$)" required><input required min="0" step="0.01" type="number" value={newForm.monthlyFee} onChange={(event) => setNewForm({ ...newForm, monthlyFee: event.target.value })} className={inputClass} /></Field>
-              <Field label="Additional boxes"><input min="0" step="1" type="number" value={newForm.additionalBox} onChange={(event) => setNewForm({ ...newForm, additionalBox: event.target.value })} className={inputClass} /></Field>
+              {packages.some(item => String(item.package_id) === newForm.packageId && (item.service_type === "cable" || item.service_type === "cable_internet")) && <CableBoxCount count={Number(newForm.additionalBox) + 1} onChange={count => {
+                const plan = packages.find(item => String(item.package_id) === newForm.packageId)!;
+                const oldQuote = applicationPrice(plan.default_monthly_charge, plan.installation_fee, Number(newForm.additionalBox));
+                const quote = applicationPrice(plan.default_monthly_charge, plan.installation_fee, count - 1);
+                setNewForm({ ...newForm, additionalBox: String(count - 1),
+                  monthlyFee: changeApplicationBoxCount(newForm.monthlyFee, Number(newForm.additionalBox), count - 1),
+                  installationFee: Number(newForm.installationFee) === Number(oldQuote.installationFee) ? quote.installationFee : newForm.installationFee });
+              }} />}
               <label className="flex items-center gap-3 self-end rounded-lg bg-surface-container-low px-4 py-3 text-sm font-medium">
                 <input type="checkbox" checked={newForm.adultChannel} onChange={(event) => setNewForm({ ...newForm, adultChannel: event.target.checked })} className="h-4 w-4 accent-primary" />
                 Adult channel requested
@@ -1180,6 +1189,7 @@ function ApplicationsPage() {
             {/* Money taken at the counter, recorded here so it lands in today's
                 takings instead of waiting for somebody to activate the account
                 days later. Clearing the field records no payment. */}
+            {packages.some(item => String(item.package_id) === newForm.packageId && item.service_type !== "internet") && <p className="rounded-lg bg-primary/5 p-3 text-sm text-on-surface-variant">Installation total: <strong>{formatCurrency(applicationPrice(null, packages.find(item => String(item.package_id) === newForm.packageId)?.installation_fee ?? null, Number(newForm.additionalBox)).installationFee)}</strong>. Monthly total: <strong>{formatCurrency(newForm.monthlyFee)}</strong>.</p>}
             <FormSection title="Installation fee collected">
               <Field label="Amount received today (J$)">
                 <input min="0" step="0.01" type="number" value={newForm.installationFee} onChange={(event) => setNewForm({ ...newForm, installationFee: event.target.value })} className={inputClass} placeholder="0.00" />
@@ -1204,6 +1214,7 @@ function ApplicationsPage() {
       {editing && (
         <EditApplicationModal
           application={editing}
+          packages={packages}
           onClose={() => setEditing(null)}
           onSaved={(updated) => {
             const application = { ...editing, ...updated };
@@ -2140,7 +2151,16 @@ const editableApplicantFields = [
   ["id_type", "ID type"], ["id_number", "ID number"],
 ] as const;
 
-function EditApplicationModal({ application, onClose, onSaved }: {
+function CableBoxCount({ count, onChange }: { count: number; onChange: (count: number) => void }) {
+  return <div><p className="text-sm font-semibold text-on-surface">Number of cable boxes</p><div className="mt-2 flex items-center gap-3">
+    <button type="button" aria-label="Remove a cable box" disabled={count <= 1} onClick={() => onChange(count - 1)} className="rounded-lg bg-surface-container px-4 py-2 text-lg disabled:opacity-40">−</button>
+    <input aria-label="Number of cable boxes" type="number" min="1" max="32768" step="1" value={count} onChange={event => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= 1 && value <= 32768) onChange(value); }} className="w-24 rounded-lg bg-surface-container-low px-3 py-2 text-center" />
+    <button type="button" aria-label="Add a cable box" disabled={count >= 32768} onClick={() => onChange(count + 1)} className="rounded-lg bg-surface-container px-4 py-2 text-lg disabled:opacity-40">+</button>
+  </div><p className="mt-2 text-xs text-on-surface-variant">First box included in the package. Each additional box adds J$2,500 installation and J$1,500/month.</p></div>;
+}
+
+function EditApplicationModal({ application, packages, onClose, onSaved }: {
+  packages: Package[];
   application: ApplicationRecord;
   onClose: () => void;
   onSaved: (application: Partial<ApplicationRecord>) => void;
@@ -2148,6 +2168,17 @@ function EditApplicationModal({ application, onClose, onSaved }: {
   const [values, setValues] = useState(() => Object.fromEntries(
     editableApplicantFields.map(([field]) => [field, application[field] ?? ""])
   ));
+  const [service, setService] = useState({
+    package_id: String(application.package_id ?? ""),
+    monthly_fee: application.monthly_fee ?? "",
+    application_date: application.application_date.slice(0, 10),
+    adult_channel: application.adult_channel,
+    additional_box: application.additional_box ?? 0,
+    pole_box_number: application.pole_box_number ?? "",
+    port_number: application.port_number ?? "",
+  });
+  const selectedPackage = packages.find(item => String(item.package_id) === service.package_id);
+  const cable = selectedPackage?.service_type === "cable" || selectedPackage?.service_type === "cable_internet";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const save = async (event: React.FormEvent) => {
@@ -2158,13 +2189,17 @@ function EditApplicationModal({ application, onClose, onSaved }: {
       const changed = editableApplicantFields.filter(([field]) =>
         values[field].trim() !== (application[field] ?? "")
       );
+      const changes: Record<string, unknown> = Object.fromEntries(changed.map(([field]) => [field, values[field]]));
+      const original: Record<string, unknown> = Object.fromEntries(changed.map(([field]) => [field, application[field]]));
+      for (const field of Object.keys(service) as Array<keyof typeof service>) {
+        const previous = field === "application_date" ? application.application_date.slice(0, 10) : application[field];
+        if (String(service[field]) !== String(previous ?? (field === "additional_box" ? 0 : ""))) {
+          changes[field] = service[field]; original[field] = previous;
+        }
+      }
       const response = await apiFetch(`/api/applications/${application.application_id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          changes: Object.fromEntries(changed.map(([field]) => [field, values[field]])),
-          original: Object.fromEntries(changed.map(([field]) => [field, application[field]])),
-        }),
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changes, original }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save application changes.");
@@ -2194,6 +2229,26 @@ function EditApplicationModal({ application, onClose, onSaved }: {
             </Field>
           ))}
         </fieldset>
+        <fieldset disabled={saving} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Package" required><select required value={service.package_id} onChange={(event) => {
+            const chosen = packages.find(item => String(item.package_id) === event.target.value);
+            const extras = chosen?.service_type === "internet" ? 0 : service.additional_box;
+            setService({ ...service, package_id: event.target.value, additional_box: extras,
+              monthly_fee: applicationPrice(chosen?.default_monthly_charge ?? null, chosen?.installation_fee ?? null, extras).monthlyFee });
+          }} className={inputClass}>
+            <option value="">Select package</option>
+            {application.package_id && !packages.some(item => item.package_id === application.package_id) && <option value={application.package_id}>{application.package_name || "Current package"}</option>}
+            {packages.map(item => <option key={item.package_id} value={item.package_id}>{item.name}</option>)}
+          </select></Field>
+          <Field label="Monthly fee (J$)" required><input required type="number" min="0" step="0.01" value={service.monthly_fee} onChange={event => setService({ ...service, monthly_fee: event.target.value })} className={inputClass} /></Field>
+          <Field label="Application date" required><input required type="date" value={service.application_date} onChange={event => setService({ ...service, application_date: event.target.value })} className={inputClass} /></Field>
+          {cable && <CableBoxCount count={service.additional_box + 1} onChange={count => setService({ ...service, additional_box: count - 1,
+            monthly_fee: changeApplicationBoxCount(service.monthly_fee, service.additional_box, count - 1) })} />}
+          <Field label="Pole box"><input value={service.pole_box_number} onChange={event => setService({ ...service, pole_box_number: event.target.value })} className={inputClass} /></Field>
+          <Field label="Port"><input value={service.port_number} onChange={event => setService({ ...service, port_number: event.target.value })} className={inputClass} /></Field>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={service.adult_channel} onChange={event => setService({ ...service, adult_channel: event.target.checked })} />Adult channel requested</label>
+        </fieldset>
+        <p className="text-xs text-on-surface-variant">Package and rate changes update this application only. Previously collected installation payments and issued receipts are preserved.</p>
         {error && <p role="alert" className="rounded-lg bg-error/10 p-3 text-sm text-error">{error}</p>}
         <ModalActions saving={saving} primaryLabel="Save Changes" onCancel={onClose} />
       </form>
