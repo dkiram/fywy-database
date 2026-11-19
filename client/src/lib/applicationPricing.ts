@@ -1,5 +1,5 @@
-// New-application extras differ from the existing-customer box add-on.
-export const APPLICATION_EXTRA_BOX_MONTHLY = 1500;
+// Each extra cable box adds the same monthly fee as the customer-profile add-on.
+export const APPLICATION_EXTRA_BOX_MONTHLY = 1000;
 export const APPLICATION_EXTRA_BOX_INSTALLATION = 2500;
 
 export function applicationPrice(baseMonthly: string | number | null, baseInstallation: string | number | null, extraBoxes: number) {

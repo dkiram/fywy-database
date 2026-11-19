@@ -2156,7 +2156,7 @@ function CableBoxCount({ count, onChange }: { count: number; onChange: (count: n
     <button type="button" aria-label="Remove a cable box" disabled={count <= 1} onClick={() => onChange(count - 1)} className="rounded-lg bg-surface-container px-4 py-2 text-lg disabled:opacity-40">−</button>
     <input aria-label="Number of cable boxes" type="number" min="1" max="32768" step="1" value={count} onChange={event => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= 1 && value <= 32768) onChange(value); }} className="w-24 rounded-lg bg-surface-container-low px-3 py-2 text-center" />
     <button type="button" aria-label="Add a cable box" disabled={count >= 32768} onClick={() => onChange(count + 1)} className="rounded-lg bg-surface-container px-4 py-2 text-lg disabled:opacity-40">+</button>
-  </div><p className="mt-2 text-xs text-on-surface-variant">First box included in the package. Each additional box adds J$2,500 installation and J$1,500/month.</p></div>;
+  </div><p className="mt-2 text-xs text-on-surface-variant">First box included in the package. Each additional box adds J$2,500 installation and J$1,000/month.</p></div>;
 }
 
 function EditApplicationModal({ application, packages, onClose, onSaved }: {
